@@ -31,7 +31,7 @@ def test_dashboard_subscriber_on_message_invalid_json():
     callback.assert_not_called()
 
 
-@patch("paho.mqtt.client.Client")
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
 def test_dashboard_subscriber_start_stop(mock_client_class):
     mock_client = mock_client_class.return_value
     callback = MagicMock()

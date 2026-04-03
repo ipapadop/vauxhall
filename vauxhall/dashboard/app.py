@@ -1,50 +1,31 @@
-import tkinter as tk
-from tkinter import ttk
+import os
+from pyloid import Pyloid
+from vauxhall.dashboard.rpc import rpc
 
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber
-from vauxhall.dashboard.ui_components import AgentCard
+def main():
+    app = Pyloid(app_name="Vauxhall Dashboard")
+    
+    # Create window with RPC
+    window = app.create_window(
+        title="Vauxhall Agent Dashboard",
+        width=1000,
+        height=800,
+        rpc=rpc
+    )
+    
+    # Path to UI files
+    ui_dir = os.path.join(os.path.dirname(__file__), "ui")
+    index_path = os.path.join(ui_dir, "index.html")
+    
+    # Ensure UI dir exists
+    os.makedirs(ui_dir, exist_ok=True)
+    if not os.path.exists(index_path):
+        with open(index_path, "w") as f:
+            f.write("<h1>Vauxhall Loading...</h1>")
 
-
-class VauxhallApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Vauxhall Agent Dashboard")
-        self.geometry("600x800")
-
-        self.cards = {}  # (agent, workspace) -> AgentCard
-
-        self.scroll_canvas = tk.Canvas(self)
-        self.scroll_frame = ttk.Frame(self.scroll_canvas)
-        self.scrollbar = ttk.Scrollbar(
-            self, orient="vertical", command=self.scroll_canvas.yview
-        )
-        self.scroll_canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.scrollbar.pack(side="right", fill="y")
-        self.scroll_canvas.pack(side="left", fill="both", expand=True)
-        self.scroll_canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
-
-        # Ensure scrollable area updates
-        self.scroll_frame.bind(
-            "<Configure>",
-            lambda e: self.scroll_canvas.configure(
-                scrollregion=self.scroll_canvas.bbox("all")
-            ),
-        )
-
-        self.mqtt = DashboardSubscriber(self._on_telemetry)
-        self.mqtt.start()
-
-    def _on_telemetry(self, data):
-        key = (data["agent"], data["workspace"])
-        if key not in self.cards:
-            card = AgentCard(self.scroll_frame, data["agent"], data["workspace"])
-            card.pack(fill="x", padx=10, pady=5)
-            self.cards[key] = card
-
-        self.cards[key].update_data(data)
-
+    window.load_file(index_path)
+    window.show_and_focus()
+    app.run()
 
 if __name__ == "__main__":
-    app = VauxhallApp()
-    app.mainloop()
+    main()

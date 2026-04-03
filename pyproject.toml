@@ -4,6 +4,7 @@ version = "0.1.0"
 dependencies = [
     "paho-mqtt>=2.0.0",
     "pyperclip>=1.8.2",
+    "pyloid>=0.1.0",
 ]
 
 [tool.ruff]

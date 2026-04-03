@@ -20,12 +20,13 @@ Vauxhall is a Python-based dashboard that provides a real-time view of agent act
 {
   "agent": "Gemini",
   "workspace": "/home/user/project",
-  "state": "Acting", // "Thinking", "Acting", "Idle", "Waiting for Input"
+  "state": "Acting", // "Thinking", "Acting", "Idle", "Waiting for Input", "Error"
   "details": {
     "tool": "run_shell_command",
     "cmd": "tsc --noEmit",
     "tokens": 1245,
-    "prompt": "Which version should I use?" // Optional: only for "Waiting for Input" state
+    "prompt": "Which version should I use?", // Optional: only for "Waiting for Input" state
+    "error": "FatalError: Connection to tool server lost." // Optional: only for "Error" state
   }
 }
 ```

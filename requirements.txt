@@ -1,0 +1,4 @@
+paho-mqtt>=2.0.0
+pyperclip>=1.8.2
+pytest>=7.0.0
+ruff>=0.3.0

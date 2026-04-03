@@ -1,9 +1,12 @@
 import time
+import tempfile
+import os
 
 from vauxhall.hooks.client import TelemetryClient
 
 client = TelemetryClient()
-ws = "/home/user/project-alpha"
+dir_name = os.path.basename(tempfile.mktemp())
+ws = f"/tmp/{dir_name}"
 
 print("Simulating Gemini activity...")
 client.send("Gemini", ws, "Thinking")

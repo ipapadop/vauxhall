@@ -13,18 +13,19 @@ Vauxhall is a Python-based dashboard that provides a real-time view of agent act
 
 ### Topic Structure
 - `vauxhall/agents/<agent_type>/<workspace_hash>/status`: Lifecycle events.
-- `vauxhall/agents/<agent_type>/<workspace_hash>/activity`: Detailed telemetry (tool use, logs, tokens).
+- `vauxhall/agents/<agent_type>/<workspace_hash>/activity`: Detailed telemetry (tool use, logs, tokens, input prompts).
 
 ### Message Format (JSON)
 ```json
 {
   "agent": "Gemini",
   "workspace": "/home/user/project",
-  "state": "Acting",
+  "state": "Acting", // "Thinking", "Acting", "Idle", "Waiting for Input"
   "details": {
     "tool": "run_shell_command",
     "cmd": "tsc --noEmit",
-    "tokens": 1245
+    "tokens": 1245,
+    "prompt": "Which version should I use?" // Optional: only for "Waiting for Input" state
   }
 }
 ```

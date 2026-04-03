@@ -1,6 +1,6 @@
-import time
-import tempfile
 import os
+import tempfile
+import time
 
 from vauxhall.hooks.client import TelemetryClient
 

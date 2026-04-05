@@ -1,16 +1,16 @@
 import os
 from pyloid import Pyloid
-from vauxhall.dashboard.rpc import rpc
+from vauxhall.dashboard.ipc import DashboardIPC
 
 def main():
     app = Pyloid(app_name="Vauxhall Dashboard")
     
-    # Create window with RPC
+    # Create window with IPC
     window = app.create_window(
         title="Vauxhall Agent Dashboard",
         width=1000,
         height=800,
-        rpc=rpc
+        IPCs=[DashboardIPC()]
     )
     
     # Path to UI files

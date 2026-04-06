@@ -4,6 +4,7 @@
     --text-color: #c9d1d9;
     --accent-color: #58a6ff;
     --error-color: #f85149;
+    --waiting-color: #d29922;
     --border-color: #30363d;
 }
 
@@ -43,6 +44,10 @@ header {
 
 .agent-card.error {
     border-left: 4px solid var(--error-color);
+}
+
+.agent-card.waiting {
+    border-left: 4px solid var(--waiting-color);
 }
 
 .agent-header {

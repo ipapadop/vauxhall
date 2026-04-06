@@ -2,6 +2,17 @@ import pyperclip
 from pyloid.ipc import PyloidIPC, Bridge
 
 class DashboardIPC(PyloidIPC):
+    def __init__(self):
+        super().__init__()
+        self.is_ready = False
+
+    @Bridge(result=bool)
+    def set_ready(self) -> bool:
+        """Called by JS when frontend is ready to receive events."""
+        self.is_ready = True
+        print("DEBUG: Frontend is ready.")
+        return True
+
     @Bridge(str, result=bool)
     def copy_to_clipboard(self, text: str) -> bool:
         """Copies text to the system clipboard."""

@@ -34,6 +34,11 @@ function init() {
     if (pyloidEvent && pyloidEvent.listen) {
         pyloidEvent.listen('agent-update', listener);
         console.log("Using window.pyloid.event.listen");
+        
+        // Signal Python that we are ready
+        pyloidIpc.DashboardIPC.set_ready().then(success => {
+            console.log("IPC: set_ready signaled", success);
+        });
     } else {
         console.error("Could not find window.pyloid.event.listen");
     }

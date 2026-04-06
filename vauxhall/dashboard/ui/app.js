@@ -2,20 +2,19 @@ const agents = {}; // (agent, workspace) -> DOM element
 
 function init() {
     console.log("Pyloid initialized");
-    const grid = document.getElementById('agent-grid');
-    if (!grid) {
-        console.error("Could not find agent-grid element!");
-        return;
-    }
-
     const pyloidEvent = window.pyloid.event;
     const pyloidIpc = window.pyloid.ipc;
 
     console.log("Registering agent-update listener...");
 
-    // Try both .listen and .on just in case
     const listener = (data) => {
         console.log("JS received agent-update:", data);
+        const grid = document.getElementById('agent-grid');
+        if (!grid) {
+            console.error("Critical: agent-grid not found during event update!");
+            return;
+        }
+
         const key = `${data.agent}:${data.workspace}`;
         let card = agents[key];
 
@@ -32,11 +31,8 @@ function init() {
     if (pyloidEvent && pyloidEvent.listen) {
         pyloidEvent.listen('agent-update', listener);
         console.log("Using window.pyloid.event.listen");
-    } else if (window.pyloid.on) {
-        window.pyloid.on('agent-update', listener);
-        console.log("Using window.pyloid.on");
     } else {
-        console.error("Could not find a valid event listener method on window.pyloid");
+        console.error("Could not find window.pyloid.event.listen");
     }
 }
 

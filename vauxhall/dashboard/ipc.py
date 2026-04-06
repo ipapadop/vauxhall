@@ -3,15 +3,17 @@ from pyloid.ipc import PyloidIPC, Bridge
 
 
 class DashboardIPC(PyloidIPC):
-    def __init__(self):
+    def __init__(self, on_ready_callback=None):
         super().__init__()
         self.is_ready = False
+        self.on_ready_callback = on_ready_callback
 
     @Bridge(result=bool)
     def set_ready(self) -> bool:
         """Called by JS when frontend is ready to receive events."""
         self.is_ready = True
-        print("DEBUG: Frontend is ready.")
+        if self.on_ready_callback:
+            self.on_ready_callback()
         return True
 
     @Bridge(str, result=bool)

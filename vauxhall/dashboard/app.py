@@ -5,15 +5,13 @@ from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 
 from pyloid.serve import pyloid_serve
 
+
 def main():
     app = Pyloid(app_name="Vauxhall Dashboard")
     ipc = DashboardIPC()
-    
+
     window = app.create_window(
-        title="Vauxhall Agent Dashboard",
-        width=1000,
-        height=800,
-        IPCs=[ipc]
+        title="Vauxhall Agent Dashboard", width=1000, height=800, IPCs=[ipc]
     )
 
     # Queue for updates received before frontend is ready
@@ -44,6 +42,7 @@ def main():
     window.show_and_focus()
     app.run()
     mqtt.stop()
+
 
 if __name__ == "__main__":
     main()

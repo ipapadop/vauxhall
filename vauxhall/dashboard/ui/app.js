@@ -1,46 +1,44 @@
 const agents = {}; // (agent, workspace) -> DOM element
 
 function init() {
-    console.log("Pyloid initialized");
+    console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');
-    if (status) status.innerText = "JS Initialized - Waiting for data...";
     
-    const pyloidEvent = window.pyloid.event;
-    const pyloidIpc = window.pyloid.ipc;
+    try {
+        if (!window.pyloid) return;
 
-    console.log("Registering agent-update listener...");
+        const pyloidEvent = window.pyloid.event || window.pyloid.EventAPI;
+        const pyloidIpc = window.ipc;
 
-    const listener = (data) => {
-        console.log("JS received agent-update:", data);
-        const grid = document.getElementById('agent-grid');
-        if (!grid) {
-            console.error("Critical: agent-grid not found during event update!");
-            return;
+        const listener = (data) => {
+            const grid = document.getElementById('agent-grid');
+            if (!grid) return;
+
+            const key = `${data.agent}:${data.workspace}`;
+            let card = agents[key];
+
+            if (!card) {
+                card = createCard(data, pyloidIpc);
+                agents[key] = card;
+                grid.appendChild(card);
+            }
+
+            updateCard(card, data);
+        };
+
+        if (pyloidEvent && pyloidEvent.listen) {
+            pyloidEvent.listen('agent-update', listener);
         }
 
-        const key = `${data.agent}:${data.workspace}`;
-        let card = agents[key];
-
-        if (!card) {
-            console.log("Creating new card for:", key);
-            card = createCard(data, pyloidIpc);
-            agents[key] = card;
-            grid.appendChild(card);
-        }
-
-        updateCard(card, data);
-    };
-
-    if (pyloidEvent && pyloidEvent.listen) {
-        pyloidEvent.listen('agent-update', listener);
-        console.log("Using window.pyloid.event.listen");
-        
         // Signal Python that we are ready
-        pyloidIpc.DashboardIPC.set_ready().then(success => {
-            console.log("IPC: set_ready signaled", success);
-        });
-    } else {
-        console.error("Could not find window.pyloid.event.listen");
+        if (pyloidIpc && pyloidIpc.DashboardIPC) {
+            pyloidIpc.DashboardIPC.set_ready().then(() => {
+                if (status) status.innerText = "Connected to Agent Fleet";
+            });
+        }
+
+    } catch (err) {
+        console.error("Initialization error:", err);
     }
 }
 
@@ -48,6 +46,19 @@ if (window.pyloid) {
     init();
 } else {
     window.addEventListener('pyloidReady', init);
+    // Fallback: Check every 100ms for 2 seconds
+    let checks = 0;
+    const interval = setInterval(() => {
+        checks++;
+        if (window.pyloid) {
+            console.log("Pyloid found via interval check");
+            init();
+            clearInterval(interval);
+        } else if (checks > 20) {
+            clearInterval(interval);
+            console.error("Pyloid not found after 2 seconds");
+        }
+    }, 100);
 }
 
 function createCard(data, pyloidIpc) {

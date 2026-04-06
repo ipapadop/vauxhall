@@ -4,12 +4,12 @@
 **Topic:** Real-time dashboard for monitoring multiple AI agents (Gemini, Claude, Codex, etc.) across different workspaces using MQTT.
 
 ## 1. Overview
-Vauxhall is a Python-based dashboard that provides a real-time view of agent activities. It uses a producer-consumer architecture over MQTT (Mosquitto) to collect telemetry from agents via hooks and display it in a Tkinter-based GUI.
+Vauxhall is a Python-based dashboard that provides a real-time view of agent activities. It uses a producer-consumer architecture over MQTT (Mosquitto) to collect telemetry from agents via hooks and display it in a Pyloid-based web dashboard using a Modern Grid layout.
 
 ## 2. Architecture & Data Flow
 - **Producers (Hooks):** Python scripts triggered by agent events (e.g., `pre-command`, `post-command`).
 - **Broker:** Mosquitto (MQTT) for lightweight, low-latency messaging.
-- **Consumer (Dashboard):** Tkinter application subscribing to agent topics.
+- **Consumer (Dashboard):** Pyloid application subscribing to agent topics.
 
 ### Topic Structure
 - `vauxhall/agents/<agent_type>/<workspace_hash>/status`: Lifecycle events.
@@ -32,7 +32,7 @@ Vauxhall is a Python-based dashboard that provides a real-time view of agent act
 ```
 
 ## 3. Component Structure
-- **vauxhall.dashboard**: Tkinter app with a scrollable list of agent cards (Detail-First view).
+- **vauxhall.dashboard**: Pyloid-based web dashboard with a modern grid of agent cards (Detail-First view).
 - **vauxhall.hooks.client**: Common Python library for sending telemetry.
 - **vauxhall.hooks.gemini**: Specific hook scripts for the Gemini CLI.
 

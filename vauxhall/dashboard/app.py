@@ -27,6 +27,7 @@ def main():
     window.load_file(index_path)
     window.show_and_focus()
     app.run()
+    mqtt.stop()
 
 if __name__ == "__main__":
     main()

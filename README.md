@@ -17,7 +17,7 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
 1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker.
 2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
-3.  **Dashboard (Consumer)**: A Tkinter-based GUI that subscribes to agent topics and updates the UI in real-time.
+3.  **Dashboard (Consumer)**: A Pyloid-based web dashboard that subscribes to agent topics and updates the UI in real-time.
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ python3 scripts/simulate_agent.py
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Tkinter GUI application and MQTT subscriber logic.
+- `vauxhall/dashboard/`: The Pyloid-based web dashboard and MQTT subscriber logic.
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.

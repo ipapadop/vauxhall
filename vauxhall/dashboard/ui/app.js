@@ -1,24 +1,32 @@
 const grid = document.getElementById('agent-grid');
 const agents = {}; // (agent, workspace) -> DOM element
 
-// Use global pyloid object if not using modules
-const pyloidEvent = window.pyloid.event;
-const pyloidIpc = window.pyloid.ipc;
+function init() {
+    console.log("Pyloid initialized");
+    const pyloidEvent = window.pyloid.event;
+    const pyloidIpc = window.pyloid.ipc;
 
-pyloidEvent.listen('agent-update', (data) => {
-    const key = `${data.agent}:${data.workspace}`;
-    let card = agents[key];
+    pyloidEvent.listen('agent-update', (data) => {
+        const key = `${data.agent}:${data.workspace}`;
+        let card = agents[key];
 
-    if (!card) {
-        card = createCard(data);
-        agents[key] = card;
-        grid.appendChild(card);
-    }
+        if (!card) {
+            card = createCard(data, pyloidIpc);
+            agents[key] = card;
+            grid.appendChild(card);
+        }
 
-    updateCard(card, data);
-});
+        updateCard(card, data);
+    });
+}
 
-function createCard(data) {
+if (window.pyloid) {
+    init();
+} else {
+    window.addEventListener('pyloidReady', init);
+}
+
+function createCard(data, pyloidIpc) {
     const card = document.createElement('div');
     card.className = 'agent-card';
     card.innerHTML = `

@@ -1,6 +1,7 @@
 import pyperclip
 from pyloid.ipc import PyloidIPC, Bridge
 
+
 class DashboardIPC(PyloidIPC):
     def __init__(self):
         super().__init__()

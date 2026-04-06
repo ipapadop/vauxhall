@@ -103,13 +103,20 @@ function updateCard(card, data) {
     
     if (data.state === 'Error') {
         card.classList.add('error');
+        card.classList.remove('waiting');
+    } else if (data.state === 'Waiting' || data.state === 'Waiting for Input' || data.state === 'Input Required') {
+        card.classList.add('waiting');
+        card.classList.remove('error');
     } else {
         card.classList.remove('error');
+        card.classList.remove('waiting');
     }
 
     const details = data.details || {};
     if (details.tool) {
         logArea.textContent = `Running: ${details.tool}\n${details.cmd || ''}`;
+    } else if (details.prompt) {
+        logArea.textContent = `Prompt: ${details.prompt}`;
     } else {
         logArea.textContent = "Ready...";
     }

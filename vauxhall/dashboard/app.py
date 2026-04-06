@@ -13,6 +13,11 @@ def main():
         IPCs=[DashboardIPC()]
     )
 
+    # Optional: Set icon to suppress "Icon is not set" warning
+    icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
+    if os.path.exists(icon_path):
+        app.set_icon(icon_path)
+
     # Callback to emit data to JS
     def on_telemetry(data):
         print(f"DEBUG: Telemetry received: {data}")

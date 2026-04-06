@@ -21,6 +21,7 @@ class DashboardSubscriber:
     def start(self):
         self.client.connect(self.host, self.port)
         self.client.subscribe("vauxhall/agents/+/activity")
+        self.client.subscribe("vauxhall/agents/+/status")
         self.client.loop_start()
 
     def stop(self):

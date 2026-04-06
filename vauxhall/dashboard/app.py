@@ -8,14 +8,23 @@ from pyloid.serve import pyloid_serve
 
 def main():
     app = Pyloid(app_name="Vauxhall Dashboard")
-    ipc = DashboardIPC()
-
-    window = app.create_window(
-        title="Vauxhall Agent Dashboard", width=1000, height=800, IPCs=[ipc]
-    )
 
     # Queue for updates received before frontend is ready
     pending_updates = []
+
+    def drain_queue():
+        while pending_updates:
+            p = pending_updates.pop(0)
+            window.invoke("agent-update", p)
+
+    ipc = DashboardIPC(on_ready_callback=drain_queue)
+
+    window = app.create_window(
+        title="Vauxhall Agent Dashboard",
+        width=1000,
+        height=800,
+        IPCs=[ipc]
+    )
 
     # Optional: suppressed due to bug in pyloid v0.27.2
     # icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
@@ -25,12 +34,12 @@ def main():
     # Callback to emit data to JS
     def on_telemetry(data):
         if ipc.is_ready:
-            while pending_updates:
-                p = pending_updates.pop(0)
-                window.invoke("agent-update", p)
+            # Drain queue if any (just in case)
+            drain_queue()
             window.invoke("agent-update", data)
         else:
             pending_updates.append(data)
+
 
     mqtt = DashboardSubscriber(on_telemetry)
     mqtt.start()

@@ -97,5 +97,7 @@ function updateCard(card, data) {
     const details = data.details || {};
     if (details.tool) {
         logArea.textContent = `Running: ${details.tool}\n${details.cmd || ''}`;
+    } else {
+        logArea.textContent = "Ready...";
     }
 }

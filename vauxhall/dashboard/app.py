@@ -22,11 +22,10 @@ def main():
     def on_telemetry(data):
         print(f"DEBUG: Telemetry received: {data}")
         try:
-            # Try both invoke and emit
+            # window.invoke is the correct method for Pyloid v0.27.2
             window.invoke("agent-update", data)
-            window.emit("agent-update", data)
         except Exception as e:
-            print(f"DEBUG: Failed to emit telemetry: {e}")
+            print(f"DEBUG: Failed to invoke telemetry on window: {e}")
 
     mqtt = DashboardSubscriber(on_telemetry)
     mqtt.start()

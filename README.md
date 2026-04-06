@@ -1,10 +1,11 @@
 # Vauxhall Agent Dashboard
 
-Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Codex, etc.). It provides a centralized view of what your agents are doing across different workspaces, using a lightweight MQTT-based architecture.
+Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Codex, etc.). It provides a centralized, **modern grid view** of what your agents are doing across different workspaces, using a lightweight MQTT-based architecture and web technologies.
 
 ## Key Features
 
 - **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen.
+- **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously.
 - **Detailed Telemetry**: View live logs, active tools, token counts, and operation durations.
 - **Multi-Agent Support**: Track multiple agents running in different workspaces simultaneously.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access.
@@ -17,7 +18,7 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
 1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker.
 2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
-3.  **Dashboard (Consumer)**: A Pyloid-based web dashboard that subscribes to agent topics and updates the UI in real-time.
+3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a Chromium-based frontend (Vanilla HTML/CSS/JS).
 
 ## Prerequisites
 
@@ -67,7 +68,7 @@ python3 scripts/simulate_agent.py
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based web dashboard and MQTT subscriber logic.
+- `vauxhall/dashboard/`: The Pyloid-based web dashboard (Python logic + HTML/JS UI).
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.

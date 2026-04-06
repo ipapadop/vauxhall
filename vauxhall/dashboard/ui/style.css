@@ -71,6 +71,26 @@ header {
     text-transform: uppercase;
 }
 
+.secondary-btn {
+    background-color: #21262d;
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.secondary-btn:hover {
+    background-color: #30363d;
+    border-color: #8b949e;
+}
+
+.secondary-btn:active {
+    background-color: #161b22;
+}
+
 .log-area {
     background: #010409;
     padding: 8px;

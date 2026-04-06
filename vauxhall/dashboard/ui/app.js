@@ -3,6 +3,19 @@ const agents = {}; // (agent, workspace) -> DOM element
 function init() {
     console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');
+    const grid = document.getElementById('agent-grid');
+    const clearBtn = document.getElementById('clear-btn');
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            console.log("Clearing dashboard...");
+            grid.innerHTML = '';
+            // Clear the agents tracking object
+            for (const key in agents) {
+                delete agents[key];
+            }
+        });
+    }
     
     try {
         if (!window.pyloid) return;

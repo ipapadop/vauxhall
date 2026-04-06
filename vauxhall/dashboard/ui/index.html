@@ -8,8 +8,13 @@
 </head>
 <body>
     <header>
-        <h1>Vauxhall Agent Dashboard</h1>
-        <p id="js-status">Connecting...</p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Vauxhall Agent Dashboard</h1>
+                <p id="js-status">Connecting...</p>
+            </div>
+            <button id="clear-btn" class="secondary-btn">Clear Dashboard</button>
+        </div>
     </header>
     <main id="agent-grid">
         <!-- Agent cards will be injected here -->

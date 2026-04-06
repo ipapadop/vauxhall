@@ -103,13 +103,15 @@ function updateCard(card, data) {
     
     if (data.state === 'Error') {
         card.classList.add('error');
-        card.classList.remove('waiting');
+        card.classList.remove('waiting', 'working');
     } else if (data.state === 'Waiting' || data.state === 'Waiting for Input' || data.state === 'Input Required') {
         card.classList.add('waiting');
-        card.classList.remove('error');
+        card.classList.remove('error', 'working');
+    } else if (data.state === 'Acting' || data.state === 'Thinking') {
+        card.classList.add('working');
+        card.classList.remove('error', 'waiting');
     } else {
-        card.classList.remove('error');
-        card.classList.remove('waiting');
+        card.classList.remove('error', 'waiting', 'working');
     }
 
     const details = data.details || {};

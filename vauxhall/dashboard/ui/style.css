@@ -5,6 +5,7 @@
     --accent-color: #58a6ff;
     --error-color: #f85149;
     --waiting-color: #d29922;
+    --working-color: #238636;
     --border-color: #30363d;
 }
 
@@ -48,6 +49,10 @@ header {
 
 .agent-card.waiting {
     border-left: 4px solid var(--waiting-color);
+}
+
+.agent-card.working {
+    border-left: 4px solid var(--working-color);
 }
 
 .agent-header {

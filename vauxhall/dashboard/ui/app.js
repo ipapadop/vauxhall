@@ -2,6 +2,9 @@ const agents = {}; // (agent, workspace) -> DOM element
 
 function init() {
     console.log("Pyloid initialized");
+    const status = document.getElementById('js-status');
+    if (status) status.innerText = "JS Initialized - Waiting for data...";
+    
     const pyloidEvent = window.pyloid.event;
     const pyloidIpc = window.pyloid.ipc;
 

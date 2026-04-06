@@ -24,6 +24,7 @@ def main():
         try:
             # window.invoke is the correct method for Pyloid v0.27.2
             window.invoke("agent-update", data)
+            print(f"DEBUG: Sent agent-update to JS: {data['agent']}")
         except Exception as e:
             print(f"DEBUG: Failed to invoke telemetry on window: {e}")
 

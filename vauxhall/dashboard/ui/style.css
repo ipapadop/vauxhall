@@ -25,22 +25,31 @@ header {
 
 #agent-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(24%, 1fr));
+    gap: 1.5%;
+    width: 100%;
 }
 
 .agent-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    padding: 16px;
+    padding: 1rem;
     transition: transform 0.2s, border-color 0.2s;
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    height: auto;
 }
 
-.agent-card:hover {
-    border-color: var(--accent-color);
-    transform: translateY(-2px);
+.agent-card:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 800px) {
+    #agent-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .agent-card.error {

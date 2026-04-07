@@ -1,0 +1,31 @@
+<h2>Choose a Layout</h2>
+<p class="subtitle">Both options will be built with plain HTML and CSS for simplicity.</p>
+
+<div class="options">
+  <div class="option" data-choice="list" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Classic List (Original)</h3>
+      <p>Vertical list of agent cards. Best for deep logs and long workspace paths.</p>
+      <div class="mockup" style="margin-top: 10px; border: 1px solid #333; padding: 10px; background: #111;">
+        <div style="border-bottom: 1px solid #444; padding: 5px; margin-bottom: 5px;">Agent 1 @ /path/to/work...</div>
+        <div style="border-bottom: 1px solid #444; padding: 5px; margin-bottom: 5px;">Agent 2 @ /other/path...</div>
+        <div style="padding: 5px;">Agent 3 @ /short/path...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="grid" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Modern Grid</h3>
+      <p>Side-by-side cards. Best for seeing more agents at once on a wide screen.</p>
+      <div class="mockup" style="margin-top: 10px; border: 1px solid #333; padding: 10px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+        <div style="border: 1px solid #444; padding: 5px; height: 40px; font-size: 10px;">Agent 1</div>
+        <div style="border: 1px solid #444; padding: 5px; height: 40px; font-size: 10px;">Agent 2</div>
+        <div style="border: 1px solid #444; padding: 5px; height: 40px; font-size: 10px;">Agent 3</div>
+        <div style="border: 1px solid #444; padding: 5px; height: 40px; font-size: 10px;">Agent 4</div>
+      </div>
+    </div>
+  </div>
+</div>

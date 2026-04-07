@@ -1,0 +1,29 @@
+<h2>Error Handling & Resilience</h2>
+<p class="subtitle">Ensuring agent performance and UI reliability</p>
+
+<div class="mockup">
+  <div class="mockup-header">Resilience Scenarios</div>
+  <div class="mockup-body" style="padding: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 15px;">
+      <div style="background: #fff8e1; border-left: 4px solid #ffc107; padding: 10px;">
+        <b>Scenario: Broker is Offline</b><br/>
+        <p style="font-size: 0.9em; margin-top: 5px;">
+          <b>Hooks:</b> Timeout after 200ms, exit quietly. Agent continues working unaffected.<br/>
+          <b>Dashboard:</b> Show "Disconnected" status, retry every 5 seconds.
+        </p>
+      </div>
+      <div style="background: #f1f8e9; border-left: 4px solid #4caf50; padding: 10px;">
+        <b>Scenario: Agent Crashes or Exits</b><br/>
+        <p style="font-size: 0.9em; margin-top: 5px;">
+          <b>Dashboard:</b> "Stale" timer starts. After 2 minutes of silence, the agent card is grayed out.
+        </p>
+      </div>
+      <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 10px;">
+        <b>Scenario: High Network Latency</b><br/>
+        <p style="font-size: 0.9em; margin-top: 5px;">
+          <b>MQTT Thread:</b> Messages are processed in the background, keeping the Tkinter UI responsive at 60fps.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

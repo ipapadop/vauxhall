@@ -1,6 +1,8 @@
+"""Tests for Vauxhall Dashboard components."""
+
 import json
-import sys
 import unittest
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 # Mock dependencies that might not be available or should be isolated
@@ -15,30 +17,35 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
-from vauxhall.dashboard.ipc import DashboardIPC
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
+from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
 
 class TestDashboardComponents(unittest.TestCase):
-    def test_ipc_copy_to_clipboard(self):
+    """Tests for IPC and Subscriber components."""
+
+    def test_ipc_copy_to_clipboard(self) -> None:
+        """Test that the IPC bridge correctly calls pyperclip."""
         ipc = DashboardIPC()
         with patch("pyperclip.copy") as mock_copy:
             result = ipc.copy_to_clipboard("test text")
             mock_copy.assert_called_once_with("test text")
             self.assertTrue(result)
 
-    def test_ipc_copy_to_clipboard_error(self):
+    def test_ipc_copy_to_clipboard_error(self) -> None:
+        """Test that clipboard errors are handled gracefully."""
         ipc = DashboardIPC()
         with patch("pyperclip.copy", side_effect=Exception("error")):
             result = ipc.copy_to_clipboard("test text")
             self.assertFalse(result)
 
-    def test_subscriber_on_message(self):
+    def test_subscriber_on_message(self) -> None:
+        """Test that the subscriber correctly forwards MQTT messages to the callback."""
         callback = MagicMock()
         subscriber = DashboardSubscriber(callback)
 
         # Create a mock message
-        msg = MagicMock()
+        msg: Any = MagicMock()
         data = {"agent": "Gemini", "workspace": "/tmp", "state": "Running"}
         msg.payload = json.dumps(data).encode()
 
@@ -47,12 +54,13 @@ class TestDashboardComponents(unittest.TestCase):
 
         callback.assert_called_once_with(data)
 
-    def test_subscriber_on_message_invalid_json(self):
+    def test_subscriber_on_message_invalid_json(self) -> None:
+        """Test that invalid JSON messages are ignored by the subscriber."""
         callback = MagicMock()
         subscriber = DashboardSubscriber(callback)
 
         # Create a mock message with invalid JSON
-        msg = MagicMock()
+        msg: Any = MagicMock()
         msg.payload = b"invalid json"
 
         # Should not raise exception, but also not call callback

@@ -1,0 +1,1 @@
+"""Vauxhall Dashboard application logic."""

@@ -1,14 +1,12 @@
-"""Vauxhall Hook Client.
-
-This module provides formatting and telemetry client for Vauxhall Agent Dashboard.
-"""
+"""Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
 
-def format_message(agent: str, workspace: str, state: str, **details: any) -> str:
+def format_message(agent: str, workspace: str, state: str, **details: Any) -> str:
     """Format a telemetry message as a JSON string.
 
     Args:
@@ -18,7 +16,7 @@ def format_message(agent: str, workspace: str, state: str, **details: any) -> st
         **details: Additional key-value pairs for message details.
 
     Returns:
-        A JSON-formatted string containing the telemetry data.
+        str: A JSON-formatted string containing the telemetry data.
     """
     return json.dumps(
         {"agent": agent, "workspace": workspace, "state": state, "details": details}
@@ -43,7 +41,7 @@ class TelemetryClient:
         self.port = port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-    def send(self, agent: str, workspace: str, state: str, **details: any) -> None:
+    def send(self, agent: str, workspace: str, state: str, **details: Any) -> None:
         """Send a telemetry message.
 
         Formats the message and publishes it to the agent's activity topic.

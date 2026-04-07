@@ -16,7 +16,7 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 
 Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
-1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker.
+1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker. See [AGENTS.md](AGENTS.md) for integration details.
 2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
 3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a Chromium-based frontend (Vanilla HTML/CSS/JS).
 
@@ -57,8 +57,8 @@ mosquitto
 python3 -m vauxhall.dashboard.app
 ```
 
-### 3. Integrate with Agents (e.g., Gemini CLI)
-You can use the provided hooks in `vauxhall/hooks/gemini/` to monitor your Gemini CLI sessions. Add them as `pre-command` and `post-command` hooks in your Gemini configuration.
+### 3. Integrate with Agents
+Vauxhall supports multiple agents through customizable hooks. See [AGENTS.md](AGENTS.md) for detailed integration instructions for Gemini CLI and other tools.
 
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script:

@@ -1,9 +1,11 @@
+"""Tests for the telemetry hook client."""
+
 import json
 
 from vauxhall.hooks.client import format_message
 
 
-def test_format_message():
+def test_format_message() -> None:
     """Test that message formatting returns a valid JSON with expected fields."""
     msg = format_message("Gemini", "/tmp/ws", "Acting", tool="grep")
     data = json.loads(msg)
@@ -13,7 +15,7 @@ def test_format_message():
     assert data["details"]["tool"] == "grep"
 
 
-def test_telemetry_client_fail_silently():
+def test_telemetry_client_fail_silently() -> None:
     """Test that TelemetryClient.send fails silently when broker is unreachable."""
     from vauxhall.hooks.client import TelemetryClient
 

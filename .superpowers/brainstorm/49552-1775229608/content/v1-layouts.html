@@ -1,0 +1,72 @@
+<h2>Dashboard Layout Options</h2>
+<p class="subtitle">Pick the direction that best fits how you want to monitor your agents</p>
+
+<div class="options">
+  <div class="option" data-choice="compact" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Compact Grid</h3>
+      <p>High density, color-coded status cards. Best for monitoring many agents at a glance.</p>
+      <div class="mockup" style="font-size: 0.8em; padding: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div style="background: #e3f2fd; padding: 6px; border-radius: 4px; border-left: 4px solid #2196f3;">
+            <b>Gemini</b><br/><small>/work/vauxhall</small><br/><span style="color: #1976d2; font-weight: bold;">THINKING...</span>
+          </div>
+          <div style="background: #f1f8e9; padding: 6px; border-radius: 4px; border-left: 4px solid #4caf50;">
+            <b>Claude</b><br/><small>/work/vauxhall</small><br/><span style="color: #388e3c; font-weight: bold;">IDLE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="detail" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Detail-First List</h3>
+      <p>Full telemetry (logs, tokens, status) visible without extra clicks. Each agent gets a larger row.</p>
+      <div class="mockup" style="font-size: 0.8em; padding: 10px;">
+        <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; border: 1px solid #dee2e6;">
+          <div style="display: flex; justify-content: space-between;"><b>Gemini @ /work/vauxhall</b> <span style="background: #2196f3; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.8em;">ACTING</span></div>
+          <div style="font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 4px; margin-top: 5px; border-radius: 2px;">$ tsc --noEmit</div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.8em; margin-top: 5px; color: #666;"><span>Tokens: 1.2k</span> <span>Time: 42s</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="stream" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Activity Stream</h3>
+      <p>History of all agent events in a unified timeline. Good for seeing what happened while you were away.</p>
+      <div class="mockup" style="font-size: 0.8em; padding: 10px;">
+        <div style="display: flex; gap: 10px;">
+          <div style="width: 50px; background: #eee; padding: 5px; text-align: center; border-radius: 4px;"><b>3</b><br/><small>ACT</small></div>
+          <div style="flex: 1;">
+            <div style="border-bottom: 1px solid #eee; padding: 2px 0;"><span style="color: #999;">10:45</span> <b>Gemini</b> tool use</div>
+            <div style="border-bottom: 1px solid #eee; padding: 2px 0;"><span style="color: #999;">10:44</span> <b>Claude</b> finished</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>Approach 2 (Recommended)</h4>
+    <ul>
+      <li>No hidden information</li>
+      <li>Good for deep debugging</li>
+      <li>Uses vertical space well for typical workloads (1-4 agents)</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>Trade-offs</h4>
+    <ul>
+      <li>Vertical scrolling with many agents</li>
+      <li>More visual noise than the compact view</li>
+    </ul>
+  </div>
+</div>

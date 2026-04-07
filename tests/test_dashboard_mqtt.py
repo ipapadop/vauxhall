@@ -1,14 +1,18 @@
+"""MQTT subscriber tests for the Vauxhall Dashboard."""
+
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 
 
-def test_dashboard_subscriber_on_message():
+def test_dashboard_subscriber_on_message() -> None:
+    """Test that valid JSON messages trigger the callback."""
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback)
 
-    msg = MagicMock()
+    msg: Any = MagicMock()
     msg.payload = json.dumps({"agent": "test", "activity": "working"}).encode()
     msg.topic = "vauxhall/agents/test/activity"
 
@@ -17,11 +21,12 @@ def test_dashboard_subscriber_on_message():
     callback.assert_called_once_with({"agent": "test", "activity": "working"})
 
 
-def test_dashboard_subscriber_on_message_invalid_json():
+def test_dashboard_subscriber_on_message_invalid_json() -> None:
+    """Test that invalid JSON messages are handled silently."""
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback)
 
-    msg = MagicMock()
+    msg: Any = MagicMock()
     msg.payload = b"invalid json"
     msg.topic = "vauxhall/agents/test/activity"
 
@@ -32,7 +37,8 @@ def test_dashboard_subscriber_on_message_invalid_json():
 
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
-def test_dashboard_subscriber_start_stop(mock_client_class):
+def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
+    """Test the subscriber lifecycle (start and stop)."""
     mock_client = mock_client_class.return_value
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback, host="test_host", port=1234)
@@ -40,7 +46,13 @@ def test_dashboard_subscriber_start_stop(mock_client_class):
     subscriber.start()
 
     mock_client.connect.assert_called_once_with("test_host", 1234)
-    mock_client.subscribe.assert_called_once_with("vauxhall/agents/+/activity")
+    # The subscriber now subscribes to two topics
+    from unittest.mock import call
+
+    mock_client.subscribe.assert_has_calls(
+        [call("vauxhall/agents/+/activity"), call("vauxhall/agents/+/status")],
+        any_order=True,
+    )
     mock_client.loop_start.assert_called_once()
 
     subscriber.stop()

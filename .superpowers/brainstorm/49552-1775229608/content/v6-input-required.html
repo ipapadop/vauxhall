@@ -1,0 +1,28 @@
+<h2>State: Waiting for Input</h2>
+<p class="subtitle">Handling interactive pauses in agent workflows</p>
+
+<div class="mockup">
+  <div class="mockup-header">Agent Card - Input Required</div>
+  <div class="mockup-body" style="padding: 20px;">
+    <div style="background: #fff3e0; border: 2px solid #ff9800; padding: 12px; border-radius: 4px; animation: pulse 2s infinite;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <b>Gemini @ /work/vauxhall</b>
+        <span style="background: #ff9800; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold;">INPUT REQUIRED</span>
+      </div>
+      <div style="font-family: monospace; font-size: 0.85em; background: #fff; border: 1px solid #ffe0b2; padding: 10px; margin-top: 10px; border-radius: 4px; color: #e65100;">
+        <b>Prompt:</b> "Which version of the library should I use?"
+      </div>
+      <div style="font-size: 0.75em; margin-top: 10px; color: #666; font-style: italic;">
+        Agent is paused. Switch to terminal to respond.
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+}
+</style>

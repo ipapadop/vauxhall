@@ -1,0 +1,49 @@
+<h2>Proposed Design: Pyloid Grid Dashboard</h2>
+<p class="subtitle">Architecture and Component Overview</p>
+
+<div class="mockup">
+  <div class="mockup-header">vauxhall/dashboard/app.py (Pyloid Bridge)</div>
+  <div class="mockup-body">
+    <pre style="color: #4ec9b0;">
+class DashboardBridge(Bridge):
+    def copy_to_clipboard(self, text):
+        pyperclip.copy(text)
+        return True
+
+# MQTT calls bridge.emit('agent-update', data)
+    </pre>
+  </div>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Frontend (HTML/JS)</div>
+    <div class="mockup-body">
+      <ul>
+        <li><b>index.html</b>: Simple grid container</li>
+        <li><b>style.css</b>: Modern grid layout (responsive)</li>
+        <li><b>app.js</b>: Listens for 'agent-update' events</li>
+      </ul>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">Pros of this Approach</div>
+    <div class="mockup-body">
+      <ul style="color: #9cdcfe;">
+        <li>Fastest to implement</li>
+        <li>No external dependencies (npm/React)</li>
+        <li>Easy to customize with CSS</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="proceed" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>Looks good, let's proceed</h3>
+      <p>I'll start writing the full design spec.</p>
+    </div>
+  </div>
+</div>

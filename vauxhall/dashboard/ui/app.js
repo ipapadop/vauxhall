@@ -17,6 +17,20 @@ function init() {
         });
     }
 
+    const clearStaleBtn = document.getElementById('clear-stale-btn');
+    if (clearStaleBtn) {
+        clearStaleBtn.addEventListener('click', () => {
+            console.log("Clearing stale agents...");
+            for (const key in agents) {
+                const card = agents[key];
+                if (card.classList.contains('stale')) {
+                    card.remove();
+                    delete agents[key];
+                }
+            }
+        });
+    }
+
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {

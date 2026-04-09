@@ -195,6 +195,7 @@ function createCard(data, pyloidIpc) {
                     <span class="env-badge env-${env}">${env}</span>
                     <div class="agent-name">${data.agent}</div>
                     <div class="metric-badges"></div>
+                    <span class="history-icon" title="View History" style="cursor: pointer; font-size: 0.8em; margin-left: 5px;">🕒</span>
                 </div>
                 <div class="agent-workspace">${data.workspace}</div>
             </div>
@@ -202,6 +203,13 @@ function createCard(data, pyloidIpc) {
         </div>
         <div class="log-area">Ready...</div>
     `;
+    
+    // History Click
+    card.querySelector('.history-icon').addEventListener('click', (e) => {
+        e.stopPropagation(); // Don't trigger the cd copy
+        const key = `${data.agent}:${data.workspace}`;
+        openHistoryModal(key);
+    });
     
     card.addEventListener('click', () => {
         pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`);

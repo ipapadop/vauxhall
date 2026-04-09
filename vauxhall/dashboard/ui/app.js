@@ -16,6 +16,13 @@ function init() {
             }
         });
     }
+
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            filterGrid(e.target.value.toLowerCase());
+        });
+    }
     
     try {
         if (!window.pyloid) return;
@@ -41,6 +48,12 @@ function init() {
             card.classList.remove('stale');
 
             updateCard(card, data);
+
+            // Re-apply filter
+            const searchInput = document.getElementById('search-input');
+            if (searchInput && searchInput.value) {
+                filterGrid(searchInput.value.toLowerCase());
+            }
         };
 
         if (pyloidEvent && pyloidEvent.listen) {
@@ -79,6 +92,18 @@ if (window.pyloid) {
             console.error("Pyloid not found after 2 seconds");
         }
     }, 100);
+}
+
+function filterGrid(query) {
+    Object.values(agents).forEach(card => {
+        const name = card.querySelector('.agent-name').textContent.toLowerCase();
+        const workspace = card.querySelector('.agent-workspace').textContent.toLowerCase();
+        if (name.includes(query) || workspace.includes(query)) {
+            card.style.display = 'flex';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 }
 
 function createCard(data, pyloidIpc) {

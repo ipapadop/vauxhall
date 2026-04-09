@@ -150,3 +150,24 @@ header {
     background: #30363d;
     color: #8b949e;
 }
+
+.env-badge {
+    font-size: 0.65em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: bold;
+    color: white;
+    text-transform: uppercase;
+}
+
+.env-local {
+    background-color: #238636; /* Green */
+}
+
+.env-remote {
+    background-color: #1f6feb; /* Blue */
+}
+
+.env-cloud {
+    background-color: #8957e5; /* Purple */
+}

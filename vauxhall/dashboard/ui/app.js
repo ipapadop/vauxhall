@@ -23,6 +23,13 @@ function init() {
             filterGrid(e.target.value.toLowerCase());
         });
     }
+
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            sortGrid(e.target.value);
+        });
+    }
     
     try {
         if (!window.pyloid) return;
@@ -53,6 +60,12 @@ function init() {
             const searchInput = document.getElementById('search-input');
             if (searchInput && searchInput.value) {
                 filterGrid(searchInput.value.toLowerCase());
+            }
+
+            // Re-apply sort if needed (e.g., if set to recent)
+            const sortSelect = document.getElementById('sort-select');
+            if (sortSelect && sortSelect.value === 'recent') {
+                sortGrid('recent');
             }
         };
 
@@ -104,6 +117,30 @@ function filterGrid(query) {
             card.style.display = 'none';
         }
     });
+}
+
+function sortGrid(criteria) {
+    const grid = document.getElementById('agent-grid');
+    const cardsArray = Array.from(grid.children);
+
+    const sorted = cardsArray.sort((a, b) => {
+        if (criteria === 'name') {
+            const nameA = a.querySelector('.agent-name').textContent;
+            const nameB = b.querySelector('.agent-name').textContent;
+            return nameA.localeCompare(nameB);
+        } else if (criteria === 'recent') {
+            return parseInt(b.dataset.lastSeen) - parseInt(a.dataset.lastSeen);
+        } else if (criteria === 'status') {
+            const statusOrder = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+            const statusA = a.querySelector('.status-badge').textContent;
+            const statusB = b.querySelector('.status-badge').textContent;
+            return (statusOrder[statusA] ?? 9) - (statusOrder[statusB] ?? 9);
+        }
+        return 0;
+    });
+
+    grid.innerHTML = '';
+    sorted.forEach(card => grid.appendChild(card));
 }
 
 function createCard(data, pyloidIpc) {

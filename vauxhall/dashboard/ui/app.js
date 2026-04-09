@@ -87,7 +87,10 @@ function createCard(data, pyloidIpc) {
     card.innerHTML = `
         <div class="agent-header">
             <div>
-                <div class="agent-name">${data.agent}</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="agent-name">${data.agent}</div>
+                    <div class="metric-badges"></div>
+                </div>
                 <div class="agent-workspace">${data.workspace}</div>
             </div>
             <div class="status-badge">Idle</div>
@@ -105,6 +108,7 @@ function createCard(data, pyloidIpc) {
 function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
+    const metricsArea = card.querySelector('.metric-badges');
     
     statusBadge.textContent = data.state;
     
@@ -121,7 +125,19 @@ function updateCard(card, data) {
         card.classList.remove('error', 'waiting', 'working');
     }
 
+    // Update Metrics
     const details = data.details || {};
+    if (metricsArea) {
+        metricsArea.innerHTML = '';
+        if (details.tokens) {
+            const t = details.tokens > 1000 ? (details.tokens/1000).toFixed(1) + 'k' : details.tokens;
+            metricsArea.innerHTML += `<span class="metric-badge tokens">${t}</span>`;
+        }
+        if (details.duration) {
+            metricsArea.innerHTML += `<span class="metric-badge">${details.duration}s</span>`;
+        }
+    }
+
     if (details.tool) {
         logArea.textContent = `Running: ${details.tool}\n${details.cmd || ''}`;
     } else if (details.prompt) {

@@ -120,3 +120,33 @@ header {
     overflow-y: auto;
     white-space: pre-wrap;
 }
+
+.metric-badges {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.metric-badge {
+    font-size: 0.7em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #21262d;
+    color: #8b949e;
+    border: 1px solid var(--border-color);
+}
+
+.metric-badge.tokens {
+    color: var(--accent-color);
+}
+
+.agent-card.stale {
+    opacity: 0.5;
+    filter: grayscale(1);
+    pointer-events: none; /* Disable interaction for stale agents */
+}
+
+.agent-card.stale .status-badge {
+    background: #30363d;
+    color: #8b949e;
+}

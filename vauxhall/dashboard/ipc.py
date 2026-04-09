@@ -20,6 +20,15 @@ class DashboardIPC(PyloidIPC):
         self.on_ready_callback = on_ready_callback
 
     @Bridge(result=bool)
+    def ping(self) -> bool:
+        """Verify bridge health.
+
+        Returns:
+            bool: Always True if reachable.
+        """
+        return True
+
+    @Bridge(result=bool)
     def set_ready(self) -> bool:
         """Called by JavaScript when the frontend is ready to receive events.
 

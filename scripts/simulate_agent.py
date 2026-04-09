@@ -56,7 +56,11 @@ def simulate_agent(agent_idx: int) -> None:
             "agent": agent_name,
             "workspace": workspace,
             "state": op["state"],
-            "details": op["details"],
+            "details": {
+                **op["details"],
+                "tokens": random.randint(100, 5000),
+                "duration": round(random.uniform(0.5, 30.0), 1),
+            },
         }
         client.publish(topic, json.dumps(payload))
         time.sleep(2)

@@ -69,17 +69,30 @@ header {
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 12px;
+    gap: 10px;
+}
+
+.agent-info {
+    min-width: 0;
+    flex: 1;
 }
 
 .agent-name {
     font-weight: bold;
     color: var(--accent-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .agent-workspace {
     font-size: 0.8em;
     color: #8b949e;
     word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .status-badge {
@@ -88,6 +101,8 @@ header {
     border-radius: 10px;
     background: #21262d;
     text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .secondary-btn {

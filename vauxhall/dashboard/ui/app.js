@@ -190,7 +190,7 @@ function createCard(data, pyloidIpc) {
     card.className = 'agent-card';
     card.innerHTML = `
         <div class="agent-header">
-            <div>
+            <div class="agent-info">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="env-badge env-${env}">${env}</span>
                     <div class="agent-name">${data.agent}</div>

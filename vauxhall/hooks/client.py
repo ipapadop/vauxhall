@@ -6,21 +6,31 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 
-def format_message(agent: str, workspace: str, state: str, **details: Any) -> str:
+def format_message(
+    agent: str, workspace: str, state: str, env: str = None, **details: Any
+) -> str:
     """Format a telemetry message as a JSON string.
 
     Args:
         agent: The name of the agent.
         workspace: The workspace directory path.
         state: The current state of the agent.
+        env: Optional execution environment (local, remote, cloud).
         **details: Additional key-value pairs for message details.
 
     Returns:
         str: A JSON-formatted string containing the telemetry data.
     """
-    return json.dumps(
-        {"agent": agent, "workspace": workspace, "state": state, "details": details}
-    )
+    payload_dict = {
+        "agent": agent,
+        "workspace": workspace,
+        "state": state,
+        "details": details,
+    }
+    if env:
+        payload_dict["env"] = env
+
+    return json.dumps(payload_dict)
 
 
 class TelemetryClient:
@@ -41,7 +51,9 @@ class TelemetryClient:
         self.port = port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-    def send(self, agent: str, workspace: str, state: str, **details: Any) -> None:
+    def send(
+        self, agent: str, workspace: str, state: str, env: str = None, **details: Any
+    ) -> None:
         """Send a telemetry message.
 
         Formats the message and publishes it to the agent's activity topic.
@@ -51,9 +63,10 @@ class TelemetryClient:
             agent: The name of the agent.
             workspace: The workspace directory path.
             state: The current state of the agent.
+            env: Optional execution environment (local, remote, cloud).
             **details: Additional key-value pairs for message details.
         """
-        payload = format_message(agent, workspace, state, **details)
+        payload = format_message(agent, workspace, state, env, **details)
         topic = f"vauxhall/agents/{agent.lower()}/activity"
         try:
             self.client.connect(self.host, self.port, keepalive=5)

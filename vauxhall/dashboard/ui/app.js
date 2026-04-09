@@ -82,12 +82,16 @@ if (window.pyloid) {
 }
 
 function createCard(data, pyloidIpc) {
+    // Fallback detection
+    const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
+    
     const card = document.createElement('div');
     card.className = 'agent-card';
     card.innerHTML = `
         <div class="agent-header">
             <div>
                 <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="env-badge env-${env}">${env}</span>
                     <div class="agent-name">${data.agent}</div>
                     <div class="metric-badges"></div>
                 </div>

@@ -36,6 +36,10 @@ function init() {
                 grid.appendChild(card);
             }
 
+            // Track last seen time
+            card.dataset.lastSeen = Date.now();
+            card.classList.remove('stale');
+
             updateCard(card, data);
         };
 
@@ -49,6 +53,9 @@ function init() {
                 if (status) status.innerText = "Connected to Agent Fleet";
             });
         }
+
+        // Start staleness check every 10 seconds
+        setInterval(checkStaleness, 10000);
 
     } catch (err) {
         console.error("Initialization error:", err);
@@ -122,4 +129,18 @@ function updateCard(card, data) {
     } else {
         logArea.textContent = "Ready...";
     }
+}
+
+function checkStaleness() {
+    const now = Date.now();
+    const threshold = 120000; // 2 minutes
+
+    Object.values(agents).forEach(card => {
+        const lastSeen = parseInt(card.dataset.lastSeen);
+        if (now - lastSeen > threshold) {
+            card.classList.add('stale');
+            const statusBadge = card.querySelector('.status-badge');
+            if (statusBadge) statusBadge.textContent = 'STALE';
+        }
+    });
 }

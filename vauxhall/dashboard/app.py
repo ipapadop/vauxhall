@@ -36,9 +36,14 @@ def main() -> None:
         IPCs=[ipc],
     )
 
+    # Optional: suppressed due to bug in pyloid v0.27.2
+    # icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
+    # if os.path.exists(icon_path):
+    #     app.set_icon(icon_path)
+
     # Callback to emit data to JS
     def on_telemetry(data: dict[str, Any]) -> None:
-        """Handle telemetry data received from MQTT.
+        """Handle telemetry data with error boundaries.
 
         If the frontend is ready, the data is invoked immediately.
         Otherwise, it is queued until the frontend signals readiness.
@@ -46,12 +51,21 @@ def main() -> None:
         Args:
             data: The telemetry data dictionary.
         """
-        if ipc.is_ready:
-            # Drain queue if any (just in case)
-            drain_queue()
-            window.invoke("agent-update", data)
-        else:
-            pending_updates.append(data)
+        try:
+            # Basic schema validation
+            required_fields = ["agent", "workspace", "state"]
+            if not all(field in data for field in required_fields):
+                print(f"ERROR: Received malformed telemetry: {data}")
+                return
+
+            if ipc.is_ready:
+                # Drain queue if any (just in case)
+                drain_queue()
+                window.invoke("agent-update", data)
+            else:
+                pending_updates.append(data)
+        except Exception as e:
+            print(f"CRITICAL: Error in on_telemetry: {e}")
 
     mqtt = DashboardSubscriber(on_telemetry)
     mqtt.start()

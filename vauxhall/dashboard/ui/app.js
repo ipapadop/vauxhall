@@ -107,8 +107,16 @@ function init() {
 
         // Signal Python that we are ready
         if (pyloidIpc && pyloidIpc.DashboardIPC) {
-            pyloidIpc.DashboardIPC.set_ready().then(() => {
-                if (status) status.innerText = "Connected to Agent Fleet";
+            // Verify bridge health before signaling ready
+            pyloidIpc.DashboardIPC.ping().then(alive => {
+                if (alive) {
+                    pyloidIpc.DashboardIPC.set_ready().then(() => {
+                        if (status) status.innerText = "Connected to Agent Fleet";
+                    });
+                }
+            }).catch(err => {
+                console.error("IPC Health Check Failed:", err);
+                if (status) status.innerText = "IPC Connection Failed";
             });
         }
 

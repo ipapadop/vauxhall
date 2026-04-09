@@ -21,6 +21,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                     <span class="history-icon" title="View History" style="cursor: pointer; font-size: 0.8em; margin-left: 5px;">🕒</span>
                 </div>
                 <div class="agent-workspace">${data.workspace}</div>
+                <div class="last-seen-timer" style="font-size: 0.7em; color: var(--text-dim); margin-top: 2px;">just now</div>
             </div>
             <div class="status-badge">Idle</div>
         </div>
@@ -72,7 +73,7 @@ export function updateCard(card, data) {
         metricsArea.innerHTML = '';
         if (details.tokens) {
             const t = details.tokens > 1000 ? (details.tokens/1000).toFixed(1) + 'k' : details.tokens;
-            metricsArea.innerHTML += `<span class="metric-badge tokens">${t}</span>`;
+            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${details.tokens}">${t}</span>`;
         }
         if (details.duration) {
             metricsArea.innerHTML += `<span class="metric-badge">${details.duration}s</span>`;
@@ -132,6 +133,10 @@ export function sortGrid(criteria, grid) {
             const statusA = a.querySelector('.status-badge').textContent;
             const statusB = b.querySelector('.status-badge').textContent;
             return (statusOrder[statusA] ?? 9) - (statusOrder[statusB] ?? 9);
+        } else if (criteria === 'tokens') {
+            const tokensA = parseInt(a.querySelector('.metric-badge.tokens')?.dataset.value || 0);
+            const tokensB = parseInt(b.querySelector('.metric-badge.tokens')?.dataset.value || 0);
+            return tokensB - tokensA;
         }
         return 0;
     });
@@ -141,18 +146,35 @@ export function sortGrid(criteria, grid) {
 }
 
 /**
- * Checks for stale agents.
+ * Checks for stale agents and updates the last seen timer.
  */
 export function checkStaleness(agents) {
     const now = Date.now();
-    const threshold = 120000; // 2 minutes
+    const staleThreshold = 120000; // 2 minutes
 
     Object.values(agents).forEach(card => {
         const lastSeen = parseInt(card.dataset.lastSeen);
-        if (now - lastSeen > threshold) {
+        const diff = now - lastSeen;
+        
+        // Update timer text
+        const timer = card.querySelector('.last-seen-timer');
+        if (timer) {
+            if (diff < 60000) {
+                timer.textContent = 'just now';
+            } else {
+                const minutes = Math.floor(diff / 60000);
+                timer.textContent = `${minutes}m ago`;
+            }
+        }
+
+        if (diff > staleThreshold) {
             card.classList.add('stale');
             const statusBadge = card.querySelector('.status-badge');
-            if (statusBadge) statusBadge.textContent = 'STALE';
+            if (statusBadge && statusBadge.textContent !== 'STALE') {
+                statusBadge.textContent = 'STALE';
+            }
+        } else {
+            card.classList.remove('stale');
         }
     });
 }

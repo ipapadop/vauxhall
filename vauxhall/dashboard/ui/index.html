@@ -8,12 +8,20 @@
 </head>
 <body>
     <header>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
                 <h1>Vauxhall Agent Dashboard</h1>
                 <p id="js-status">Connecting...</p>
             </div>
-            <button id="clear-btn" class="secondary-btn">Clear Dashboard</button>
+            <div class="toolbar">
+                <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar">
+                <select id="sort-select" class="secondary-btn">
+                    <option value="recent">Recently Active</option>
+                    <option value="name">Agent Name</option>
+                    <option value="status">Status</option>
+                </select>
+                <button id="clear-btn" class="secondary-btn">Clear Dashboard</button>
+            </div>
         </div>
     </header>
     <main id="agent-grid">

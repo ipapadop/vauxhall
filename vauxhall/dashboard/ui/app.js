@@ -30,6 +30,14 @@ function init() {
             sortGrid(e.target.value);
         });
     }
+
+    // Modal logic
+    const modal = document.getElementById('history-modal');
+    const closeBtn = document.querySelector('.close-btn');
+    if (closeBtn) closeBtn.onclick = closeHistoryModal;
+    window.onclick = (event) => {
+        if (event.target == modal) closeHistoryModal();
+    };
     
     try {
         if (!window.pyloid) return;
@@ -50,7 +58,17 @@ function init() {
                 grid.appendChild(card);
             }
 
+            // Manage History
+            if (!card.history) card.history = [];
+            card.history.unshift({
+                time: new Date().toLocaleTimeString(),
+                state: data.state,
+                details: JSON.parse(JSON.stringify(data.details || {})) // deep copy
+            });
+            if (card.history.length > 20) card.history.pop();
+
             // Track last seen time
+
             card.dataset.lastSeen = Date.now();
             card.classList.remove('stale');
 
@@ -141,6 +159,27 @@ function sortGrid(criteria) {
 
     grid.innerHTML = '';
     sorted.forEach(card => grid.appendChild(card));
+}
+
+function openHistoryModal(agentKey) {
+    const card = agents[agentKey];
+    if (!card || !card.history) return;
+
+    document.getElementById('modal-agent-name').textContent = `History: ${agentKey}`;
+    const body = document.getElementById('modal-history-body');
+    body.innerHTML = card.history.map(item => `
+        <div class="history-item">
+            <span class="history-time">${item.time}</span>
+            <span class="history-state">${item.state}</span>
+            <span class="history-details">${item.details.tool || item.details.prompt || item.details.error || ''}</span>
+        </div>
+    `).join('');
+
+    document.getElementById('history-modal').style.display = "block";
+}
+
+function closeHistoryModal() {
+    document.getElementById('history-modal').style.display = "none";
 }
 
 function createCard(data, pyloidIpc) {

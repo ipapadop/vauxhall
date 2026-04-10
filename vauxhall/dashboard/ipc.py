@@ -55,3 +55,20 @@ class DashboardIPC(PyloidIPC):
             return True
         except Exception:
             return False
+
+    @Bridge(str, str, result=bool)
+    def notify(self, title: str, message: str) -> bool:
+        """Shows a desktop notification.
+
+        Args:
+            title: The title of the notification.
+            message: The message body.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        try:
+            self.pyloid.show_notification(title, message)
+            return True
+        except Exception:
+            return False

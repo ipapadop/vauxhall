@@ -49,3 +49,19 @@ export function clearAgents() {
 export function removeAgent(key) {
     delete agents[key];
 }
+
+/**
+ * Updates the token history for an agent.
+ * @param {HTMLElement} card - The agent card element.
+ * @param {number} tokens - The current token count.
+ */
+export function updateTokenHistory(card, tokens) {
+    if (!card.tokenHistory) card.tokenHistory = [];
+    if (tokens === undefined || tokens === null) return;
+    
+    card.tokenHistory.push(tokens);
+    
+    if (card.tokenHistory.length > 20) {
+        card.tokenHistory.shift();
+    }
+}

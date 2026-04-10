@@ -96,6 +96,23 @@ header {
     gap: 10px;
 }
 
+.stats-row {
+    margin: 4px 0 10px 0;
+    height: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.sparkline {
+    width: 100%;
+    height: 20px;
+    overflow: visible;
+}
+
+.sparkline polyline {
+    transition: all 0.3s ease;
+}
+
 .agent-info {
     min-width: 0;
     flex: 1;

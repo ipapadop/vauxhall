@@ -50,7 +50,7 @@ def simulate_agent(agent_idx: int) -> None:
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
     workspace = f"/tmp/vauxhall-test-{agent_idx}"
 
-    envs = ["local", "remote", "cloud"]
+    envs = ["local", "remote"]
     env = random.choice(envs)
 
     for _ in range(5):

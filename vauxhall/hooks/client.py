@@ -15,7 +15,7 @@ def format_message(
         agent: The name of the agent.
         workspace: The workspace directory path.
         state: The current state of the agent.
-        env: Optional execution environment (local, remote, cloud).
+        env: Optional execution environment (local, remote).
         **details: Additional key-value pairs for message details.
 
     Returns:
@@ -63,7 +63,7 @@ class TelemetryClient:
             agent: The name of the agent.
             workspace: The workspace directory path.
             state: The current state of the agent.
-            env: Optional execution environment (local, remote, cloud).
+            env: Optional execution environment (local, remote).
             **details: Additional key-value pairs for message details.
         """
         payload = format_message(agent, workspace, state, env, **details)

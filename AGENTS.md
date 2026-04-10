@@ -23,7 +23,7 @@ client.send(
     agent="MyAgent",
     workspace="/path/to/project",
     state="Acting",
-    env="local", # Optional: "local", "remote", or "cloud"
+    env="local", # Optional: "local" or "remote"
     tool="grep",
     cmd="grep -r 'TODO' .",
     tokens=1245,   # Optional: Token count for the operation
@@ -72,7 +72,7 @@ The dashboard uses the `state` field to color-code agent cards:
 ## Metadata & Features
 
 ### Environment Badges
-Vauxhall displays a badge (LOCAL, REMOTE, CLOUD) based on the `env` field. If omitted, the dashboard attempts to guess the environment based on the `workspace` path:
+Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, the dashboard attempts to guess the environment based on the `workspace` path:
 - Paths starting with `/home` or `C:\` default to **LOCAL**.
 - Other absolute paths default to **REMOTE**.
 

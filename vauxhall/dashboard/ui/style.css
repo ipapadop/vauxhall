@@ -8,7 +8,6 @@
     --error-color: #f85149;
     --waiting-color: #d29922;
     --working-color: #238636;
-    --cloud-color: #8957e5;
     --border-color: #30363d;
     --badge-bg: #21262d;
     --log-bg: #010409;
@@ -300,8 +299,4 @@ header {
 
 .env-remote {
     background-color: #1f6feb; /* Blue */
-}
-
-.env-cloud {
-    background-color: var(--cloud-color);
 }

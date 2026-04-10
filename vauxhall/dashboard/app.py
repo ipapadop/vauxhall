@@ -43,7 +43,7 @@ def main() -> None:
     if os.path.exists(tray_icon_path):
         app.set_tray_icon(tray_icon_path)
     
-    app.set_tray_menu([
+    app.set_tray_menu_items([
         {"label": "Show Dashboard", "callback": window.show},
         {"label": "Hide Dashboard", "callback": window.hide},
         {"type": "separator"},

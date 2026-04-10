@@ -117,12 +117,26 @@ export function updateCard(card, data) {
     }
 
     // Update Log Area
+    let newLogMessage = "";
     if (details.tool) {
-        logArea.textContent = `Running: ${details.tool}\n${details.cmd || ''}`;
+        newLogMessage = `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
     } else if (details.prompt) {
-        logArea.textContent = `Prompt: ${details.prompt}`;
-    } else {
-        logArea.textContent = "Ready...";
+        newLogMessage = `Prompt: ${details.prompt}`;
+    }
+
+    if (newLogMessage && newLogMessage !== card.lastLogMessage) {
+        card.lastLogMessage = newLogMessage;
+        const time = new Date().toLocaleTimeString();
+        const line = `[${time}] ${newLogMessage}`;
+
+        if (logArea.textContent === "Ready...") {
+            logArea.textContent = "";
+        }
+
+        const lines = logArea.textContent ? logArea.textContent.split('\n') : [];
+        lines.push(line);
+        logArea.textContent = lines.slice(-50).join('\n');
+        logArea.scrollTop = logArea.scrollHeight;
     }
 }
 

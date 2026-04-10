@@ -194,7 +194,7 @@ header {
     border-radius: 4px;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.85em;
-    height: 80px;
+    height: 100px;
     overflow-y: auto;
     white-space: pre-wrap;
 }

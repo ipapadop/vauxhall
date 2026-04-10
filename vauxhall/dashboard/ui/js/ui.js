@@ -126,16 +126,30 @@ export function updateCard(card, data) {
 
     if (newLogMessage && newLogMessage !== card.lastLogMessage) {
         card.lastLogMessage = newLogMessage;
-        const time = new Date().toLocaleTimeString();
-        const line = `[${time}] ${newLogMessage}`;
+        
+        const time = new Date().toLocaleTimeString([], { 
+            hour12: false, 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit' 
+        });
 
         if (logArea.textContent === "Ready...") {
-            logArea.textContent = "";
+            logArea.innerHTML = "";
         }
 
-        const lines = logArea.textContent ? logArea.textContent.split('\n') : [];
-        lines.push(line);
-        logArea.textContent = lines.slice(-50).join('\n');
+        const logLine = document.createElement('div');
+        logLine.className = 'log-line';
+        logLine.innerHTML = `<span style="color: var(--text-dim)">[${time}]</span> `;
+        logLine.appendChild(document.createTextNode(newLogMessage));
+        
+        logArea.appendChild(logLine);
+
+        // Truncate to 50 lines using DOM elements
+        while (logArea.children.length > 50) {
+            logArea.removeChild(logArea.firstChild);
+        }
+        
         logArea.scrollTop = logArea.scrollHeight;
     }
 }

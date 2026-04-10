@@ -5,7 +5,7 @@
 
 import { agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
-import { initIPC } from './js/ipc.js';
+import { initIPC, notify } from './js/ipc.js';
 
 function init() {
     console.log("Vauxhall Dashboard Initialized");
@@ -70,6 +70,15 @@ function init() {
                     card = createCard(data, window.ipc, (key) => openHistoryModal(key, agents));
                     agents[key] = card;
                     grid.appendChild(card);
+                }
+
+                // Trigger notifications on critical state changes
+                const prevState = card.dataset.lastState;
+                if (prevState !== data.state) {
+                    if (data.state === 'Error' || data.state === 'Waiting for Input' || data.state === 'Input Required') {
+                        notify(`Agent: ${data.agent}`, `State: ${data.state}`);
+                    }
+                    card.dataset.lastState = data.state;
                 }
 
                 updateAgentHistory(card, data);

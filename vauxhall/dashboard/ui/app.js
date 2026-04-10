@@ -80,8 +80,8 @@ function init() {
                 if (searchInput && searchInput.value) {
                     filterGrid(searchInput.value.toLowerCase(), agents);
                 }
-                if (sortSelect && sortSelect.value === 'recent') {
-                    sortGrid('recent', grid);
+                if (sortSelect && sortSelect.value) {
+                    sortGrid(sortSelect.value, grid);
                 }
             },
             onReady: () => {

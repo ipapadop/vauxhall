@@ -18,13 +18,16 @@ from vauxhall.hooks.client import TelemetryClient
 
 client = TelemetryClient(host="localhost", port=1883)
 
-# Send an "Acting" state with tool details
+# Send an "Acting" state with tool details, metrics, and environment context
 client.send(
     agent="MyAgent",
     workspace="/path/to/project",
     state="Acting",
+    env="local", # Optional: "local", "remote", or "cloud"
     tool="grep",
-    cmd="grep -r 'TODO' ."
+    cmd="grep -r 'TODO' .",
+    tokens=1245,   # Optional: Token count for the operation
+    duration=12.4  # Optional: Duration in seconds
 )
 
 # Send an "Idle" state when finished
@@ -41,10 +44,12 @@ You can publish JSON messages to the following topic structure:
   "agent": "AgentName",
   "workspace": "/absolute/path/to/workspace",
   "state": "Acting", 
+  "env": "remote", 
   "details": {
     "tool": "tool_name",
     "cmd": "command executed",
     "tokens": 1234,
+    "duration": 5.2,
     "prompt": "User prompt if waiting",
     "error": "Error message if failed"
   }
@@ -64,6 +69,19 @@ The dashboard uses the `state` field to color-code agent cards:
 | `Error` | 🔴 Red | Agent encountered a fatal error. |
 | `Idle` | None | Agent is finished or standby. |
 
+## Metadata & Features
+
+### Environment Badges
+Vauxhall displays a badge (LOCAL, REMOTE, CLOUD) based on the `env` field. If omitted, the dashboard attempts to guess the environment based on the `workspace` path:
+- Paths starting with `/home` or `C:\` default to **LOCAL**.
+- Other absolute paths default to **REMOTE**.
+
+### Metrics
+If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the agent card header.
+
+### Session History
+The dashboard automatically maintains a buffer of the last 20 operations per agent. Users can view this history by clicking the 🕒 icon on the card.
+
 ## Specific Agent Instructions
 
 ### Gemini CLI
@@ -71,6 +89,3 @@ The dashboard uses the `state` field to color-code agent cards:
 2. Add the following hooks:
    - **Pre-command**: `python3 path/to/vauxhall/hooks/gemini/pre_command.py`
    - **Post-command**: `python3 path/to/vauxhall/hooks/gemini/post_command.py`
-
-### Custom Agents
-For other agents like Claude or Codex, follow the pattern in `vauxhall/hooks/gemini/` or use the `TelemetryClient` directly in your execution loop.

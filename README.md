@@ -4,13 +4,14 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 
 ## Key Features
 
-- **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen.
-- **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously.
-- **Detailed Telemetry**: View live logs, active tools, token counts, and operation durations.
-- **Multi-Agent Support**: Track multiple agents running in different workspaces simultaneously.
-- **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access.
-- **Resilient Design**: Non-blocking hooks ensure agent performance is never impacted by dashboard connectivity.
-- **Stale Agent Detection**: Automatically identifies and grays out agents that haven't checked in recently.
+- **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen with color-coded indicators.
+- **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously, proportional to your window size.
+- **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
+- **Session History**: Track and audit the last 20 operations per agent via a dedicated history modal (🕒).
+- **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
+- **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
+- **Resilient Design**: Non-blocking hooks and robust backend error boundaries ensure stability without impacting agent performance.
+- **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
 
 ## Architecture
 
@@ -18,7 +19,7 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
 1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker. See [AGENTS.md](AGENTS.md) for integration details.
 2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
-3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a Chromium-based frontend (Vanilla HTML/CSS/JS).
+3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a modular Chromium-based frontend (Vanilla HTML/CSS/JS).
 
 ## Prerequisites
 
@@ -63,12 +64,12 @@ Vauxhall supports multiple agents through customizable hooks. See [AGENTS.md](AG
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script:
 ```bash
-python3 scripts/simulate_agent.py
+python3 scripts/simulate_agent.py -n 5
 ```
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based web dashboard (Python logic + HTML/JS UI).
+- `vauxhall/dashboard/`: The Pyloid-based dashboard application (Python logic + modular JS UI).
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.

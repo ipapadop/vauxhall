@@ -38,18 +38,6 @@ def main() -> None:
 
     ui_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "ui"))
 
-    # Tray Menu configuration
-    tray_icon_path = os.path.join(ui_dir, "icon.png")
-    if os.path.exists(tray_icon_path):
-        app.set_tray_icon(tray_icon_path)
-    
-    app.set_tray_menu_items([
-        {"label": "Show Dashboard", "callback": window.show},
-        {"label": "Hide Dashboard", "callback": window.hide},
-        {"type": "separator"},
-        {"label": "Exit", "callback": app.quit},
-    ])
-
     # Optional: suppressed due to bug in pyloid v0.27.2
     # icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
     # if os.path.exists(icon_path):

@@ -8,6 +8,9 @@ from pyloid.serve import pyloid_serve
 
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.logging_config import get_logger, setup_logging
+
+logger = get_logger(__name__)
 
 
 def main() -> None:
@@ -16,6 +19,9 @@ def main() -> None:
     This function initializes the Pyloid application, sets up the window and IPC,
     starts the MQTT subscriber, and runs the application loop.
     """
+    setup_logging()
+    logger.info("Starting Vauxhall Dashboard...")
+
     app = Pyloid(app_name="Vauxhall Dashboard")
 
     # Queue for updates received before frontend is ready
@@ -23,6 +29,8 @@ def main() -> None:
 
     def drain_queue() -> None:
         """Forward all queued updates to the frontend."""
+        if pending_updates:
+            logger.info(f"Draining {len(pending_updates)} queued updates.")
         while pending_updates:
             p = pending_updates.pop(0)
             window.invoke("agent-update", p)
@@ -36,8 +44,6 @@ def main() -> None:
         IPCs=[ipc],
     )
 
-    ui_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "ui"))
-
     # Optional: suppressed due to bug in pyloid v0.27.2
     # icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
     # if os.path.exists(icon_path):
@@ -45,7 +51,7 @@ def main() -> None:
 
     # Callback to emit data to JS
     def on_telemetry(data: dict[str, Any]) -> None:
-        """Handle telemetry data with error boundaries.
+        """Handle telemetry data received from MQTT.
 
         If the frontend is ready, the data is invoked immediately.
         Otherwise, it is queued until the frontend signals readiness.
@@ -57,7 +63,7 @@ def main() -> None:
             # Basic schema validation
             required_fields = ["agent", "workspace", "state"]
             if not all(field in data for field in required_fields):
-                print(f"ERROR: Received malformed telemetry: {data}")
+                logger.warning(f"Received malformed telemetry: {data}")
                 return
 
             if ipc.is_ready:
@@ -65,18 +71,22 @@ def main() -> None:
                 drain_queue()
                 window.invoke("agent-update", data)
             else:
+                logger.debug(f"Queuing telemetry for agent: {data.get('agent')}")
                 pending_updates.append(data)
         except Exception as e:
-            print(f"CRITICAL: Error in on_telemetry: {e}")
+            logger.exception(f"Error in on_telemetry: {e}")
 
     mqtt = DashboardSubscriber(on_telemetry)
     mqtt.start()
 
+    ui_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "ui"))
     url = pyloid_serve(ui_dir)
+    logger.info(f"Serving UI from {ui_dir} at {url}")
 
     window.load_url(url)
     window.show_and_focus()
     app.run()
+    logger.info("Vauxhall Dashboard shutting down...")
     mqtt.stop()
 
 

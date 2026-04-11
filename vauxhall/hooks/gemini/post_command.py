@@ -7,6 +7,7 @@ It sends a telemetry message to the Vauxhall Dashboard with the "Idle" state.
 import os
 
 from vauxhall.hooks.client import TelemetryClient
+from vauxhall.logging_config import setup_logging
 
 
 def main() -> None:
@@ -15,6 +16,7 @@ def main() -> None:
     Collects the current workspace and sends telemetry to the
     Vauxhall Dashboard indicating the agent is now idle.
     """
+    setup_logging()
     workspace = os.getcwd()
     client = TelemetryClient()
     client.send("Gemini", workspace, "Idle")

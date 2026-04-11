@@ -8,6 +8,7 @@ import os
 import sys
 
 from vauxhall.hooks.client import TelemetryClient
+from vauxhall.logging_config import setup_logging
 
 
 def main() -> None:
@@ -16,6 +17,7 @@ def main() -> None:
     Collects the current workspace and command arguments, and sends
     telemetry to the Vauxhall Dashboard.
     """
+    setup_logging()
     workspace = os.getcwd()
     # Assuming Gemini CLI passes command details via env or args
     cmd = " ".join(sys.argv[1:])

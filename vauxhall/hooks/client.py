@@ -5,6 +5,10 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from vauxhall.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def format_message(
     agent: str, workspace: str, state: str, env: str = None, **details: Any
@@ -72,5 +76,7 @@ class TelemetryClient:
             self.client.connect(self.host, self.port, keepalive=5)
             self.client.publish(topic, payload)
             self.client.disconnect()
-        except Exception:
+            logger.debug(f"Successfully sent telemetry for {agent} to {topic}")
+        except Exception as e:
+            logger.debug(f"Failed to send telemetry for {agent}: {e}")
             pass  # Fail silently per spec

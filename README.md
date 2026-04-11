@@ -7,6 +7,8 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen with color-coded indicators.
 - **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously, proportional to your window size.
 - **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
+- **SVG Sparklines**: Visualize token usage trends over the last 20 operations directly in the card header.
+- **Persistent Log Streaming**: Real-time append-only log stream with timestamps (`[HH:mm:ss]`) and auto-scrolling.
 - **Session History**: Track and audit the last 20 operations per agent via a dedicated history modal (🕒).
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.

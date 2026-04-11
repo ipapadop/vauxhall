@@ -5,6 +5,10 @@ from typing import Any, Callable, Optional
 import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
 
+from vauxhall.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
@@ -26,6 +30,7 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: Always True if reachable.
         """
+        logger.debug("Received ping from frontend.")
         return True
 
     @Bridge(result=bool)
@@ -36,6 +41,7 @@ class DashboardIPC(PyloidIPC):
             bool: Always True.
         """
         self.is_ready = True
+        logger.info("Frontend signaled readiness.")
         if self.on_ready_callback:
             self.on_ready_callback()
         return True
@@ -52,6 +58,8 @@ class DashboardIPC(PyloidIPC):
         """
         try:
             pyperclip.copy(text)
+            logger.info(f"Copied to clipboard: {text[:50]}...")
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to copy to clipboard: {e}")
             return False

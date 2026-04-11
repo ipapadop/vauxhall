@@ -14,11 +14,12 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from vauxhall.logging_config import get_logger, setup_logging
+
+logger = get_logger(__name__)
+
 POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
-    {
-        "state": "Thinking",
-        "details": {"thought": "Analyzing the directory structure..."},
-    },
+    {"state": "Thinking", "details": {"thought": "Analyzing the directory structure..."}},
     {"state": "Acting", "details": {"tool": "run_shell_command", "cmd": "ls -al"}},
     {"state": "Acting", "details": {"tool": "view_file", "path": "src/main.py"}},
     {
@@ -43,7 +44,11 @@ def simulate_agent(agent_idx: int) -> None:
         agent_idx: The index of the agent being simulated.
     """
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.connect("localhost", 1883)
+    try:
+        client.connect("localhost", 1883)
+    except Exception as e:
+        logger.error(f"Agent-{agent_idx} could not connect to broker: {e}")
+        return
 
     agent_id = f"test-{agent_idx}"
     topic = f"vauxhall/agents/{agent_id}/activity"
@@ -53,7 +58,7 @@ def simulate_agent(agent_idx: int) -> None:
     envs = ["local", "remote"]
     env = random.choice(envs)
 
-    for _ in range(5):
+    for i in range(5):
         op = random.choice(POSSIBLE_OPERATIONS)
         payload = {
             "agent": agent_name,
@@ -67,19 +72,22 @@ def simulate_agent(agent_idx: int) -> None:
             },
         }
         client.publish(topic, json.dumps(payload))
+        logger.info(f"Agent {agent_name} published transition {i+1}/5: {op['state']}")
         time.sleep(2)
 
     client.disconnect()
-    print(f"Agent {agent_name} finished 5 transitions.")
+    logger.info(f"Agent {agent_name} finished 5 transitions.")
 
 
 if __name__ == "__main__":
+    setup_logging()
     parser = argparse.ArgumentParser(description="Simulate agents activity")
     parser.add_argument(
         "-n", "--num-agents", type=int, default=1, help="Number of agents to simulate"
     )
     args = parser.parse_args()
 
+    logger.info(f"Starting simulation for {args.num_agents} agent(s)...")
     threads = []
     for i in range(args.num_agents):
         t = threading.Thread(target=simulate_agent, args=(i + 1,))
@@ -89,4 +97,4 @@ if __name__ == "__main__":
     for t in threads:
         t.join()
 
-    print(f"Finished simulating {args.num_agents} agent(s).")
+    logger.info(f"Finished simulating {args.num_agents} agent(s).")

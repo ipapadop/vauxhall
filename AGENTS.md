@@ -76,8 +76,11 @@ Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, 
 - Paths starting with `/home` or `C:\` default to **LOCAL**.
 - Other absolute paths default to **REMOTE**.
 
-### Metrics
-If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the agent card header.
+### Metrics & Sparklines
+If `tokens` or `duration` are provided in the `details` object, they will appear as small badges. Additionally, an **SVG Sparkline** will visualize the trend of the last 20 token counts in the card header.
+
+### Persistent Log Streaming
+The `log-area` on each card is a real-time append-only stream. Any update containing a `tool` or `cmd` will append a new line with a timestamp (`[HH:mm:ss]`). The stream maintains a rolling buffer of the last 50 lines.
 
 ### Session History
 The dashboard automatically maintains a buffer of the last 20 operations per agent. Users can view this history by clicking the 🕒 icon on the card.

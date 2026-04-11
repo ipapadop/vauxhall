@@ -31,16 +31,3 @@ export function initIPC(callbacks) {
         if (callbacks.onError) callbacks.onError("DashboardIPC not found");
     }
 }
-
-/**
- * Shows a desktop notification via the backend.
- * @param {string} title - The notification title.
- * @param {string} message - The notification message body.
- * @returns {Promise<boolean>}
- */
-export function notify(title, message) {
-    if (window.ipc && window.ipc.DashboardIPC) {
-        return window.ipc.DashboardIPC.notify(title, message);
-    }
-    return Promise.resolve(false);
-}

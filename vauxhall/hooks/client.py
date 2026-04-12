@@ -5,6 +5,7 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from vauxhall.config import settings
 from vauxhall.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -44,15 +45,15 @@ class TelemetryClient:
     Failures in connection or publishing are handled silently.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 1883) -> None:
+    def __init__(self, host: str | None = None, port: int | None = None) -> None:
         """Initialize the telemetry client.
 
         Args:
-            host: The MQTT broker hostname. Defaults to "localhost".
-            port: The MQTT broker port. Defaults to 1883.
+            host: The MQTT broker hostname. Defaults to settings.mqtt.host.
+            port: The MQTT broker port. Defaults to settings.mqtt.port.
         """
-        self.host = host
-        self.port = port
+        self.host = host or settings.mqtt.host
+        self.port = port or settings.mqtt.port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
     def send(

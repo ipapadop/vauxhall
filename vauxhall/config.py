@@ -18,7 +18,6 @@ class MQTTConfig:
     host: str = "localhost"
     port: int = 1883
     keepalive: int = 60
-    base_topic: str = "vauxhall"
 
 
 @dataclass
@@ -28,6 +27,17 @@ class DashboardConfig:
     host: str = "127.0.0.1"
     port: int = 8080
     debug: bool = False
+    window_title: str = "Vauxhall Agent Dashboard"
+    width: int = 1000
+    height: int = 800
+    stale_threshold: int = 120  # seconds
+
+
+@dataclass
+class LoggingConfig:
+    """Logging configuration."""
+
+    level: str = "INFO"
 
 
 @dataclass
@@ -39,6 +49,7 @@ class Config:
 
     mqtt: MQTTConfig = field(default_factory=MQTTConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> "Config":
@@ -67,12 +78,15 @@ class Config:
         else:
             logger.debug("Configuration file %s not found, using defaults", config_path)
 
-        mqtt_data = config_data.get("mqtt", {})
-        dashboard_data = config_data.get("dashboard", {})
+        # Handle empty sections safely
+        mqtt_data = config_data.get("mqtt") or {}
+        dashboard_data = config_data.get("dashboard") or {}
+        logging_data = config_data.get("logging") or {}
 
         return cls(
             mqtt=MQTTConfig(**mqtt_data),
             dashboard=DashboardConfig(**dashboard_data),
+            logging=LoggingConfig(**logging_data),
         )
 
 

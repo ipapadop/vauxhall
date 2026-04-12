@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional
 import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
 
+from vauxhall.config import settings
 from vauxhall.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -45,6 +46,16 @@ class DashboardIPC(PyloidIPC):
         if self.on_ready_callback:
             self.on_ready_callback()
         return True
+
+    @Bridge(result=int)
+    def get_stale_threshold(self) -> int:
+        """Retrieve the stale threshold in seconds from the configuration.
+
+        Returns:
+            int: The stale threshold in seconds.
+        """
+        logger.debug(f"Frontend requested stale threshold: {settings.dashboard.stale_threshold}s")
+        return settings.dashboard.stale_threshold
 
     @Bridge(str, result=bool)
     def copy_to_clipboard(self, text: str) -> bool:

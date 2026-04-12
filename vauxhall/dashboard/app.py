@@ -6,6 +6,7 @@ from typing import Any
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
 
+from vauxhall.config import settings
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.logging_config import get_logger, setup_logging
@@ -19,7 +20,7 @@ def main() -> None:
     This function initializes the Pyloid application, sets up the window and IPC,
     starts the MQTT subscriber, and runs the application loop.
     """
-    setup_logging()
+    setup_logging(level=settings.logging.level)
     logger.info("Starting Vauxhall Dashboard...")
 
     app = Pyloid(app_name="Vauxhall Dashboard")
@@ -38,9 +39,9 @@ def main() -> None:
     ipc = DashboardIPC(on_ready_callback=drain_queue)
 
     window = app.create_window(
-        title="Vauxhall Agent Dashboard",
-        width=1000,
-        height=800,
+        title=settings.dashboard.window_title,
+        width=settings.dashboard.width,
+        height=settings.dashboard.height,
         IPCs=[ipc],
     )
 

@@ -212,9 +212,8 @@ export function sortGrid(criteria, grid) {
 /**
  * Checks for stale agents and updates the last seen timer.
  */
-export function checkStaleness(agents) {
+export function checkStaleness(agents, staleThresholdMs = 120000) {
     const now = Date.now();
-    const staleThreshold = 120000; // 2 minutes
 
     Object.values(agents).forEach(card => {
         const lastSeen = parseInt(card.dataset.lastSeen);
@@ -231,7 +230,7 @@ export function checkStaleness(agents) {
             }
         }
 
-        if (diff > staleThreshold) {
+        if (diff > staleThresholdMs) {
             card.classList.add('stale');
             const statusBadge = card.querySelector('.status-badge');
             if (statusBadge && statusBadge.textContent !== 'STALE') {

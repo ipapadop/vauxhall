@@ -58,6 +58,7 @@ function init() {
     };
 
     // Initialize IPC
+    let staleThresholdMs = 120000;
     try {
         if (!window.pyloid) return;
 
@@ -86,6 +87,16 @@ function init() {
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";
+
+                // Fetch stale threshold from settings
+                if (window.ipc && window.ipc.DashboardIPC) {
+                    window.ipc.DashboardIPC.get_stale_threshold().then(seconds => {
+                        staleThresholdMs = seconds * 1000;
+                        console.log(`Stale threshold set to ${staleThresholdMs}ms`);
+                    }).catch(err => {
+                        console.error("Failed to fetch stale threshold:", err);
+                    });
+                }
             },
             onError: (err) => {
                 console.error("IPC Error:", err);
@@ -94,7 +105,7 @@ function init() {
         });
 
         // Start staleness check every 10 seconds
-        setInterval(() => checkStaleness(agents), 10000);
+        setInterval(() => checkStaleness(agents, staleThresholdMs), 10000);
 
     } catch (err) {
         console.error("Initialization error:", err);

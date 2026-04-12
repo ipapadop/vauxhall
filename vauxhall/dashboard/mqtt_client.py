@@ -72,9 +72,7 @@ class DashboardSubscriber:
         """Connect to the broker and start the background loop."""
         logger.info(f"Connecting to MQTT broker at {self.host}:{self.port}...")
         try:
-            self.client.connect(
-                self.host, self.port, keepalive=settings.mqtt.keepalive
-            )
+            self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
             self.client.loop_start()
         except Exception as e:
             logger.error(f"Could not connect to MQTT broker: {e}")

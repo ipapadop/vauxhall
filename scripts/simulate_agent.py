@@ -19,7 +19,10 @@ from vauxhall.logging_config import get_logger, setup_logging
 logger = get_logger(__name__)
 
 POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
-    {"state": "Thinking", "details": {"thought": "Analyzing the directory structure..."}},
+    {
+        "state": "Thinking",
+        "details": {"thought": "Analyzing the directory structure..."},
+    },
     {"state": "Acting", "details": {"tool": "run_shell_command", "cmd": "ls -al"}},
     {"state": "Acting", "details": {"tool": "view_file", "path": "src/main.py"}},
     {
@@ -72,7 +75,7 @@ def simulate_agent(agent_idx: int) -> None:
             },
         }
         client.publish(topic, json.dumps(payload))
-        logger.info(f"Agent {agent_name} published transition {i+1}/5: {op['state']}")
+        logger.info(f"Agent {agent_name} published transition {i + 1}/5: {op['state']}")
         time.sleep(2)
 
     client.disconnect()

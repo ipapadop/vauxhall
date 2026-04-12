@@ -24,12 +24,12 @@ def test_telemetry_client_fail_silently() -> None:
     client.send("Gemini", "/tmp/ws", "Acting", tool="grep")
 
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch  # noqa: E402
 
 
 @patch("vauxhall.hooks.client.mqtt.Client")
 def test_telemetry_client_send_calls(mock_client_class: MagicMock) -> None:
-    """Test that TelemetryClient.send calls connect, publish, wait_for_publish and disconnect."""
+    """Test that TelemetryClient.send calls all expected methods."""
     from vauxhall.hooks.client import TelemetryClient
 
     mock_client = mock_client_class.return_value

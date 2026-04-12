@@ -62,7 +62,7 @@ class TelemetryClient:
         workspace: str,
         state: str,
         env: str | None = None,
-        **details: Any
+        **details: Any,
     ) -> None:
         """Send a telemetry message.
 

@@ -45,7 +45,7 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
 
     subscriber.start()
 
-    mock_client.connect.assert_called_once_with("test_host", 1234)
+    mock_client.connect.assert_called_once_with("test_host", 1234, keepalive=60)
     mock_client.loop_start.assert_called_once()
 
     # Manually trigger on_connect to verify subscriptions

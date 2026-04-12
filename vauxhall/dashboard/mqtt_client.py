@@ -31,8 +31,8 @@ class DashboardSubscriber:
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self._on_message
         self.client.on_connect = self._on_connect
-        self.host = host or settings.mqtt.host
-        self.port = port or settings.mqtt.port
+        self.host = host if host is not None else settings.mqtt.host
+        self.port = port if port is not None else settings.mqtt.port
 
     def _on_connect(
         self,
@@ -72,7 +72,9 @@ class DashboardSubscriber:
         """Connect to the broker and start the background loop."""
         logger.info(f"Connecting to MQTT broker at {self.host}:{self.port}...")
         try:
-            self.client.connect(self.host, self.port)
+            self.client.connect(
+                self.host, self.port, keepalive=settings.mqtt.keepalive
+            )
             self.client.loop_start()
         except Exception as e:
             logger.error(f"Could not connect to MQTT broker: {e}")

@@ -54,7 +54,9 @@ class DashboardIPC(PyloidIPC):
         Returns:
             int: The stale threshold in seconds.
         """
-        logger.debug(f"Frontend requested stale threshold: {settings.dashboard.stale_threshold}s")
+        logger.debug(
+            f"Frontend requested stale threshold: {settings.dashboard.stale_threshold}s"
+        )
         return settings.dashboard.stale_threshold
 
     @Bridge(str, result=bool)

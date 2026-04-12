@@ -50,6 +50,7 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
 
     # Manually trigger on_connect to verify subscriptions
     from unittest.mock import call
+
     subscriber._on_connect(mock_client, None, {}, 0, None)
 
     mock_client.subscribe.assert_has_calls(

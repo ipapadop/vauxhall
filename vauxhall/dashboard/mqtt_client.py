@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
 
+from vauxhall.config import settings
 from vauxhall.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -16,25 +17,30 @@ class DashboardSubscriber:
     def __init__(
         self,
         callback: Callable[[dict[str, Any]], None],
-        host: str = "localhost",
-        port: int = 1883,
+        host: str | None = None,
+        port: int | None = None,
     ) -> None:
         """Initialize the subscriber.
 
         Args:
             callback: Function to call when telemetry data is received.
-            host: MQTT broker host. Defaults to "localhost".
-            port: MQTT broker port. Defaults to 1883.
+            host: MQTT broker host. Defaults to settings.mqtt.host.
+            port: MQTT broker port. Defaults to settings.mqtt.port.
         """
         self.callback = callback
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self._on_message
         self.client.on_connect = self._on_connect
-        self.host = host
-        self.port = port
+        self.host = host or settings.mqtt.host
+        self.port = port or settings.mqtt.port
 
     def _on_connect(
-        self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: Any,
+        reason_code: Any,
+        properties: Any,
     ) -> None:
         """Internal callback for MQTT connection."""
         if reason_code == 0:

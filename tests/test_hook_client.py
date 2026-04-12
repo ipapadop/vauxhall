@@ -22,3 +22,24 @@ def test_telemetry_client_fail_silently() -> None:
     client = TelemetryClient(host="nonexistent.local", port=1883)
     # This should not raise an exception
     client.send("Gemini", "/tmp/ws", "Acting", tool="grep")
+
+
+from unittest.mock import MagicMock, patch
+
+
+@patch("vauxhall.hooks.client.mqtt.Client")
+def test_telemetry_client_send_calls(mock_client_class: MagicMock) -> None:
+    """Test that TelemetryClient.send calls connect, publish, wait_for_publish and disconnect."""
+    from vauxhall.hooks.client import TelemetryClient
+
+    mock_client = mock_client_class.return_value
+    mock_publish_result = MagicMock()
+    mock_client.publish.return_value = mock_publish_result
+
+    client = TelemetryClient(host="test_host", port=1234)
+    client.send("Gemini", "/tmp/ws", "Acting", env="local", tool="grep")
+
+    mock_client.connect.assert_called_once_with("test_host", 1234, keepalive=60)
+    mock_client.publish.assert_called_once()
+    mock_publish_result.wait_for_publish.assert_called_once()
+    mock_client.disconnect.assert_called_once()

@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 def format_message(
-    agent: str, workspace: str, state: str, env: str = None, **details: Any
+    agent: str, workspace: str, state: str, env: str | None = None, **details: Any
 ) -> str:
     """Format a telemetry message as a JSON string.
 
@@ -52,12 +52,17 @@ class TelemetryClient:
             host: The MQTT broker hostname. Defaults to settings.mqtt.host.
             port: The MQTT broker port. Defaults to settings.mqtt.port.
         """
-        self.host = host or settings.mqtt.host
-        self.port = port or settings.mqtt.port
+        self.host = host if host is not None else settings.mqtt.host
+        self.port = port if port is not None else settings.mqtt.port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
     def send(
-        self, agent: str, workspace: str, state: str, env: str = None, **details: Any
+        self,
+        agent: str,
+        workspace: str,
+        state: str,
+        env: str | None = None,
+        **details: Any
     ) -> None:
         """Send a telemetry message.
 
@@ -74,8 +79,9 @@ class TelemetryClient:
         payload = format_message(agent, workspace, state, env, **details)
         topic = f"vauxhall/agents/{agent.lower()}/activity"
         try:
-            self.client.connect(self.host, self.port, keepalive=5)
-            self.client.publish(topic, payload)
+            self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
+            publish_result = self.client.publish(topic, payload)
+            publish_result.wait_for_publish()
             self.client.disconnect()
             logger.debug(f"Successfully sent telemetry for {agent} to {topic}")
         except Exception as e:

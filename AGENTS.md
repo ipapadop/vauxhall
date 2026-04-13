@@ -88,7 +88,11 @@ The dashboard automatically maintains a buffer of the last 20 operations per age
 ## Specific Agent Instructions
 
 ### Gemini CLI
-1. Locate your Gemini CLI configuration file.
-2. Add the following hooks:
-   - **Pre-command**: `python3 path/to/vauxhall/hooks/gemini/pre_command.py`
-   - **Post-command**: `python3 path/to/vauxhall/hooks/gemini/post_command.py`
+1. Locate your Gemini CLI configuration file (usually `.gemini/settings.json`).
+2. Register the following hooks calling the telemetry script:
+   - **BeforeAgent**: `vauxhall/hooks/gemini/telemetry_hook.py`
+   - **AfterAgent**: `vauxhall/hooks/gemini/telemetry_hook.py`
+   - **BeforeTool**: `vauxhall/hooks/gemini/telemetry_hook.py`
+   - **AfterTool**: `vauxhall/hooks/gemini/telemetry_hook.py`
+   - **Notification**: `vauxhall/hooks/gemini/telemetry_hook.py`
+

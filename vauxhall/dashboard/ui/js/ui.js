@@ -222,6 +222,13 @@ export function filterGrid(query, agents) {
 export function sortGrid(criteria, grid) {
     const cardsArray = Array.from(grid.children);
 
+    // FIRST: Record positions
+    const firstPositions = cardsArray.map(card => {
+        const rect = card.getBoundingClientRect();
+        return { card, top: rect.top, left: rect.left };
+    });
+
+    // LAST: Re-sort DOM
     const sorted = cardsArray.sort((a, b) => {
         if (criteria === 'name') {
             const nameA = a.querySelector('.agent-name').textContent;
@@ -244,6 +251,25 @@ export function sortGrid(criteria, grid) {
 
     grid.innerHTML = '';
     sorted.forEach(card => grid.appendChild(card));
+
+    // INVERT & PLAY
+    requestAnimationFrame(() => {
+        firstPositions.forEach(({ card, top, left }) => {
+            const rect = card.getBoundingClientRect();
+            const deltaX = left - rect.left;
+            const deltaY = top - rect.top;
+
+            if (deltaX !== 0 || deltaY !== 0) {
+                card.style.transition = 'none';
+                card.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+                requestAnimationFrame(() => {
+                    card.style.transition = 'transform 0.4s ease-out';
+                    card.style.transform = '';
+                });
+            }
+        });
+    });
 }
 
 /**

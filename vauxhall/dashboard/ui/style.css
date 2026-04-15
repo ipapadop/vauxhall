@@ -63,12 +63,19 @@ header {
     border-radius: 6px;
     padding: 1rem;
     transition: transform var(--transition-speed), border-color var(--transition-speed),
-        opacity var(--transition-speed), filter var(--transition-speed);
+        opacity var(--transition-speed), filter var(--transition-speed),
+        box-shadow var(--transition-speed);
     cursor: pointer;
     display: flex;
     flex-direction: column;
     height: auto;
     position: relative;
+}
+
+.agent-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-color: var(--accent-color);
 }
 
 .agent-card:active {

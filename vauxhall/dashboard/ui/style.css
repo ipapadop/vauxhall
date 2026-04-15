@@ -246,10 +246,15 @@ header {
     padding: 20px;
     border: 1px solid var(--border-color);
     width: 60%;
-    max-height: 80vh;
+    height: 70vh;
+    min-width: 400px;
+    min-height: 300px;
+    max-height: 90vh;
     border-radius: 8px;
     display: flex;
     flex-direction: column;
+    resize: both;
+    overflow: hidden;
 }
 
 .modal-header {
@@ -275,6 +280,7 @@ header {
 .modal-body {
     overflow-y: auto;
     font-family: monospace;
+    flex: 1;
 }
 
 .history-item {

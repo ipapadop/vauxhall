@@ -34,26 +34,31 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     
     const card = document.createElement('div');
     card.className = 'agent-card';
+    card.title = "Click to copy workspace path";
     card.innerHTML = `
         <div class="agent-header">
             <div class="agent-info">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="env-badge env-${env}">${env}</span>
-                    <div class="agent-name">${data.agent}</div>
-                    <div class="metric-badges"></div>
-                    <span class="history-icon" title="View History" style="cursor: pointer; font-size: 0.8em; margin-left: 5px;">🕒</span>
+                    <span class="env-badge env-${env}" title="Execution environment">${env}</span>
+                    <div class="agent-name" title="Agent name">${data.agent}</div>
                 </div>
-                <div class="agent-workspace">${data.workspace}</div>
-                <div class="last-seen-timer" style="font-size: 0.7em; color: var(--text-dim); margin-top: 2px;">just now</div>
+                <div class="agent-workspace" title="Current workspace path">${data.workspace}</div>
             </div>
-            <div class="status-badge">Idle</div>
+            <div class="status-badge" title="Current agent state">Idle</div>
         </div>
         <div class="stats-row">
-            <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none">
+            <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" title="Token usage trend over the last 20 operations">
                 <polyline points="" fill="none" stroke="var(--accent-color)" stroke-width="1" vector-effect="non-scaling-stroke"></polyline>
             </svg>
         </div>
-        <div class="log-area">Ready...</div>
+        <div class="log-area" title="Real-time operations log (scrolls automatically unless hovered)">Ready...</div>
+        <div class="agent-footer">
+            <div class="footer-meta">
+                <span class="last-seen-timer" title="Time since last activity">just now</span>
+                <div class="metric-badges" title="Recent operation metrics"></div>
+            </div>
+            <span class="history-icon" title="View historical operations">🕒</span>
+        </div>
     `;
     
     // History Click
@@ -73,6 +78,25 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     });
     
     return card;
+}
+
+/**
+ * Formats the details object into a human-readable action string.
+ * @param {Object} details - The telemetry details.
+ * @returns {string} A formatted string describing the action.
+ */
+function getDetailsString(details) {
+    if (!details) return "";
+    if (details.tool) {
+        return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
+    } else if (details.prompt) {
+        return `Prompt: ${details.prompt}`;
+    } else if (details.error) {
+        return `Error: ${details.error}`;
+    } else if (details.status) {
+        return details.status;
+    }
+    return "";
 }
 
 /**
@@ -109,20 +133,15 @@ export function updateCard(card, data) {
         metricsArea.innerHTML = '';
         if (details.tokens) {
             const t = details.tokens > 1000 ? (details.tokens/1000).toFixed(1) + 'k' : details.tokens;
-            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${details.tokens}">${t}</span>`;
+            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${details.tokens}" title="Tokens used in last operation">${t}</span>`;
         }
         if (details.duration) {
-            metricsArea.innerHTML += `<span class="metric-badge">${details.duration}s</span>`;
+            metricsArea.innerHTML += `<span class="metric-badge" title="Duration of last operation">${details.duration}s</span>`;
         }
     }
 
     // Update Log Area
-    let newLogMessage = "";
-    if (details.tool) {
-        newLogMessage = `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
-    } else if (details.prompt) {
-        newLogMessage = `Prompt: ${details.prompt}`;
-    }
+    const newLogMessage = getDetailsString(details);
 
     if (newLogMessage && newLogMessage !== card.lastLogMessage) {
         card.lastLogMessage = newLogMessage;
@@ -145,12 +164,10 @@ export function updateCard(card, data) {
         
         logArea.appendChild(logLine);
 
-        // Truncate to 50 lines using DOM elements
-        while (logArea.children.length > 50) {
-            logArea.removeChild(logArea.firstChild);
+        // Truncate to 5 events (last 5)
+        while (logArea.children.length > 5) {
+            logArea.removeChild(logArea.firstElementChild);
         }
-        
-        logArea.scrollTop = logArea.scrollHeight;
     }
 }
 
@@ -242,27 +259,53 @@ export function checkStaleness(agents, staleThresholdMs = 120000) {
     });
 }
 
+let isInteractingWithModal = false;
+
 /**
  * Populates and opens the history modal.
  */
-export function openHistoryModal(agentKey, agents) {
+export function openHistoryModal(agentKey, agents, isSilent = false) {
     const card = agents[agentKey];
     if (!card || !card.history) return;
 
-    document.getElementById('modal-agent-name').textContent = `History: ${agentKey}`;
+    if (!isSilent) {
+        document.getElementById('modal-agent-name').textContent = `History: ${agentKey}`;
+    }
+
     const body = document.getElementById('modal-history-body');
+    
+    // Capture scroll state BEFORE updating content
+    const isAtBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 50;
+    const oldScrollTop = body.scrollTop;
+
+    // Set up interaction listeners once
+    if (!body.hasListeners) {
+        body.addEventListener('pointerdown', () => { isInteractingWithModal = true; });
+        window.addEventListener('pointerup', () => { isInteractingWithModal = false; });
+        window.addEventListener('pointercancel', () => { isInteractingWithModal = false; });
+        body.hasListeners = true;
+    }
+
     body.innerHTML = card.history.map(item => `
         <div class="history-item">
             <span class="history-time">${item.time}</span>
             <span class="history-state">${item.state}</span>
-            <span class="history-details">${item.details.tool || item.details.prompt || item.details.error || ''}</span>
+            <span class="history-details">${getDetailsString(item.details)}</span>
         </div>
-    `).join('');
+    `).reverse().join(''); // Show in chronological order
 
-    document.getElementById('history-modal').style.display = "block";
-    
-    // Auto-scroll to bottom
-    body.scrollTop = body.scrollHeight;
+    const isInteracting = body.matches(':hover') || isInteractingWithModal;
+
+    if (!isSilent) {
+        document.getElementById('history-modal').style.display = "block";
+        body.scrollTop = body.scrollHeight;
+    } else if (isAtBottom && !isInteracting) {
+        body.scrollTop = body.scrollHeight;
+    } else {
+        // Freeze mode: Restore previous scroll position
+        // This is necessary because innerHTML assignment resets scrollTop to 0.
+        body.scrollTop = oldScrollTop;
+    }
 }
 
 /**

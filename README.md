@@ -7,13 +7,16 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen with color-coded indicators.
 - **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously, proportional to your window size.
 - **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
-- **SVG Sparklines**: Visualize token usage trends over the last 20 operations directly in the card header.
-- **Persistent Log Streaming**: Real-time append-only log stream with timestamps (`[HH:mm:ss]`) and auto-scrolling.
-- **Session History**: Track and audit the last 20 operations per agent via a dedicated history modal (🕒).
+- **SVG Sparklines**: Visualize token usage trends over the last 20 operations directly in the card body.
+- **Real-time Activity Log**: A concise, non-scrolling view of the last 5 events per agent with timestamps (`[HH:mm:ss]`).
+- **Audit History**: Deep-dive into agent behavior with a **resizable history modal** (🕒) that supports real-time updates and smart auto-scrolling (freezes on hover for easy reading).
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
+- **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
 - **Resilient Design**: Non-blocking hooks and robust backend error boundaries ensure stability without impacting agent performance.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
+- **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.
+
 
 ## Architecture
 
@@ -66,8 +69,11 @@ Vauxhall supports multiple agents through customizable hooks. See [AGENTS.md](AG
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script:
 ```bash
-python3 scripts/simulate_agent.py -n 5
+python3 scripts/simulate_agent.py -n 5 -t 20
 ```
+*   `-n`: Number of agents to simulate.
+*   `-t`: Number of transitions (events) per agent.
+
 
 ## Project Structure
 

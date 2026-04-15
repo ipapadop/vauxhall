@@ -77,22 +77,47 @@ Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, 
 - Other absolute paths default to **REMOTE**.
 
 ### Metrics & Sparklines
-If `tokens` or `duration` are provided in the `details` object, they will appear as small badges. Additionally, an **SVG Sparkline** will visualize the trend of the last 20 token counts in the card header.
+If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**. Additionally, an **SVG Sparkline** in the card body will visualize the trend of the last 20 token counts.
 
-### Persistent Log Streaming
-The `log-area` on each card is a real-time append-only stream. Any update containing a `tool` or `cmd` will append a new line with a timestamp (`[HH:mm:ss]`). The stream maintains a rolling buffer of the last 50 lines.
+### Real-Time Activity Log
+The `log-area` on each card is a real-time append-only stream of the **last 5 events**. Any update containing a `tool` or `cmd` will append a new line with a timestamp (`[HH:mm:ss]`). This area is non-scrolling to keep the dashboard clean.
 
-### Session History
-The dashboard automatically maintains a buffer of the last 20 operations per agent. Users can view this history by clicking the 🕒 icon on the card.
+### Session History & Audit
+The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
 ## Specific Agent Instructions
 
 ### Gemini CLI
 1. Locate your Gemini CLI configuration file (usually `.gemini/settings.json`).
-2. Register the following hooks calling the telemetry script:
-   - **BeforeAgent**: `vauxhall/hooks/gemini/telemetry_hook.py`
-   - **AfterAgent**: `vauxhall/hooks/gemini/telemetry_hook.py`
-   - **BeforeTool**: `vauxhall/hooks/gemini/telemetry_hook.py`
-   - **AfterTool**: `vauxhall/hooks/gemini/telemetry_hook.py`
-   - **Notification**: `vauxhall/hooks/gemini/telemetry_hook.py`
+2. Register the unified `telemetry_hook.py` for all supported hook events:
+
+```json
+{
+  "hooks": {
+    "BeforeAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "vauxhall-telemetry",
+            "type": "command",
+            "command": "python3 /path/to/vauxhall/hooks/gemini/telemetry_hook.py"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [...],
+    "BeforeTool": [...],
+    "AfterTool": [...],
+    "Notification": [...]
+  }
+}
+```
+
+The `telemetry_hook.py` script automatically detects the hook type and handles:
+- **Thinking**: Triggered `BeforeAgent`.
+- **Acting**: Triggered `BeforeTool` (shows tool name and command).
+- **Waiting for Input**: Triggered when `ask_user` is called or when a `ToolPermission` notification appears.
+- **Idle**: Triggered `AfterAgent` or `AfterTool`.
+
 

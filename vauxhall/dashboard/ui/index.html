@@ -41,7 +41,19 @@
     <div id="history-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="modal-agent-name">Agent History</h2>
+                <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+                    <h2 id="modal-agent-name">Agent History</h2>
+                    <div class="modal-toolbar" style="display: flex; gap: 10px;">
+                        <input type="text" id="modal-search" placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;">
+                        <select id="modal-state-filter" class="secondary-btn">
+                            <option value="ALL">All States</option>
+                            <option value="Acting">Acting</option>
+                            <option value="Thinking">Thinking</option>
+                            <option value="Waiting for Input">Waiting</option>
+                            <option value="Error">Error</option>
+                        </select>
+                    </div>
+                </div>
                 <span class="close-btn" title="Close history">&times;</span>
             </div>
             <div id="modal-history-body" class="modal-body">

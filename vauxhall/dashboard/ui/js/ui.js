@@ -311,8 +311,17 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
         body.hasListeners = true;
     }
 
+    const searchTerm = document.getElementById('modal-search')?.value.toLowerCase() || '';
+    const stateFilter = document.getElementById('modal-state-filter')?.value || 'ALL';
+
+    const filteredHistory = card.history.filter(item => {
+        const matchesSearch = getDetailsString(item.details).toLowerCase().includes(searchTerm);
+        const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting' && item.state === 'Waiting for Input');
+        return matchesSearch && matchesState;
+    });
+
     // Re-render timeline items
-    body.innerHTML = card.history.map(item => `
+    body.innerHTML = filteredHistory.map(item => `
         <div class="history-item">
             <span class="history-time">${item.time}</span>
             <span class="history-state">${item.state}</span>

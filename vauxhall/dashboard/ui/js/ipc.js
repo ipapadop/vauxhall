@@ -17,6 +17,7 @@ export function initIPC(callbacks) {
 
     if (pyloidEvent && pyloidEvent.listen) {
         pyloidEvent.listen('agent-update', callbacks.onAgentUpdate);
+        pyloidEvent.listen('status-update', callbacks.onStatusUpdate);
     }
 
     if (pyloidIpc && pyloidIpc.DashboardIPC) {

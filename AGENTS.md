@@ -88,8 +88,25 @@ The dashboard automatically maintains a full buffer of the last 20 operations pe
 ## Specific Agent Instructions
 
 ### Gemini CLI
-1. Locate your Gemini CLI configuration file (usually `.gemini/settings.json`).
-2. Register the unified `telemetry_hook.py` for all supported hook events:
+
+Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
+
+#### Automated Installation (Recommended)
+You can automatically register the hooks in your current workspace by running:
+
+```bash
+python3 vauxhall/hooks/gemini/install.py
+```
+
+This script will:
+1.  **Isolated Environment**: Create a dedicated virtual environment (`.vauxhall-venv`) in the current directory to isolate telemetry dependencies. If the directory exists, it is refreshed.
+2.  **Dependency Management**: Automatically install `paho-mqtt`, `PyYAML`, and the `vauxhall` package into the isolated venv.
+3.  **Clean Installation**: Purge any existing hooks starting with `vauxhall-` to ensure a clean state before registering new ones.
+4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register the hooks using the absolute path to the isolated venv's Python interpreter.
+5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, etc.) and clear descriptions for easy identification.
+
+#### Manual Configuration
+If you prefer to configure it manually, add the following to your `.gemini/settings.json`:
 
 ```json
 {

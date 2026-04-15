@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Configuration management for Vauxhall."""
 
 from dataclasses import dataclass, field

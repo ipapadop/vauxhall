@@ -1,4 +1,8 @@
 /**
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * @file ipc.js
  * @description Manages communication with the Python backend.
  */

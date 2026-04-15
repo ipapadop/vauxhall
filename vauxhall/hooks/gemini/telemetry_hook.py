@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vauxhall telemetry hook for Gemini CLI.
 
 This script is a unified entry point for all Gemini CLI hook events (BeforeAgent,

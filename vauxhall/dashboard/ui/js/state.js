@@ -1,4 +1,8 @@
 /**
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * @file state.js
  * @description Manages the global state of the dashboard, including agent tracking and history.
  */

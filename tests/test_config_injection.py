@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for config injection in MQTT components."""
 
 from unittest.mock import MagicMock

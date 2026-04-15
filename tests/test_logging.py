@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the logging configuration module."""
 
 import logging

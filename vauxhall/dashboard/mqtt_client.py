@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """MQTT client for the Vauxhall Dashboard."""
 
 import json

@@ -131,6 +131,16 @@ export function updateCard(card, data) {
 
     const details = data.details || {};
     
+    // Reset metrics when starting a new operation
+    if (data.state === 'Acting' || (data.state === 'Thinking' && details.prompt)) {
+        card.latestTokens = null;
+        card.latestDuration = null;
+    }
+
+    // Accumulate metrics
+    if (details.tokens) card.latestTokens = details.tokens;
+    if (details.duration) card.latestDuration = details.duration;
+
     // Update Token History & SVG Sparkline
     updateTokenHistory(card, details.tokens);
     const polyline = card.querySelector('.sparkline polyline');
@@ -141,12 +151,12 @@ export function updateCard(card, data) {
     // Update Footer Metric Badges
     if (metricsArea) {
         metricsArea.innerHTML = '';
-        if (details.tokens) {
-            const t = details.tokens > 1000 ? (details.tokens/1000).toFixed(1) + 'k' : details.tokens;
-            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${details.tokens}" title="Tokens used in last operation">${t}</span>`;
+        if (card.latestTokens) {
+            const t = card.latestTokens > 1000 ? (card.latestTokens/1000).toFixed(1) + 'k' : card.latestTokens;
+            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${card.latestTokens}" title="Tokens used in last operation">${t}</span>`;
         }
-        if (details.duration) {
-            metricsArea.innerHTML += `<span class="metric-badge" title="Duration of last operation">${details.duration}s</span>`;
+        if (card.latestDuration) {
+            metricsArea.innerHTML += `<span class="metric-badge" title="Duration of last operation">${card.latestDuration}s</span>`;
         }
     }
 

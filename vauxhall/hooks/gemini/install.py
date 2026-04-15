@@ -118,6 +118,10 @@ def install():
             "name": "vauxhall-done",
             "description": "Vauxhall telemetry for Gemini tool completion",
         },
+        "AfterModel": {
+            "name": "vauxhall-model",
+            "description": "Vauxhall telemetry for Gemini model completion",
+        },
         "Notification": {
             "name": "vauxhall-waiting",
             "description": "Vauxhall telemetry for Gemini waiting for input",

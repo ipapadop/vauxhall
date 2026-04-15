@@ -20,6 +20,7 @@ function init() {
     const closeBtn = document.querySelector('.close-btn');
     const modal = document.getElementById('history-modal');
     
+    // Tracks which agent is currently being viewed in the modal for live updates
     let currentHistoryKey = null;
 
     // Setup Event Listeners
@@ -60,6 +61,8 @@ function init() {
             currentHistoryKey = null;
         };
     }
+    
+    // Close modal on background click
     window.onclick = (event) => {
         if (event.target == modal) {
             closeHistoryModal();
@@ -67,7 +70,7 @@ function init() {
         }
     };
 
-    // Initialize IPC
+    // Initialize IPC with Python backend
     let staleThresholdMs = 120000;
     try {
         if (!window.pyloid) return;
@@ -79,23 +82,26 @@ function init() {
 
                 if (!card) {
                     card = createCard(data, window.ipc, (key) => {
-                        currentHistoryKey = key;
+                        currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);
                     });
                     agents[key] = card;
                     grid.appendChild(card);
                 }
 
+                // Global state management
                 updateAgentHistory(card, data);
                 updateLastSeen(card);
+                
+                // UI updates
                 updateCard(card, data);
 
-                // Live Update History Modal if open
+                // Push live updates to the history modal if it's viewing this agent
                 if (currentHistoryKey === key) {
-                    openHistoryModal(key, agents, true);
+                    openHistoryModal(key, agents, true); // true = silent update
                 }
 
-                // Re-apply filter and sort
+                // Re-apply filter and sort to keep view consistent
                 if (searchInput && searchInput.value) {
                     filterGrid(searchInput.value.toLowerCase(), agents);
                 }

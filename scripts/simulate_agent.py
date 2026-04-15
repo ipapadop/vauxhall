@@ -44,8 +44,8 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     telemetry messages at regular intervals.
 
     Args:
-        agent_idx: The index of the agent being simulated.
-        transitions: The number of transitions to simulate.
+        agent_idx: The index of the agent being simulated (used for unique naming).
+        transitions: The number of event transitions to simulate for this agent.
     """
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     try:
@@ -89,26 +89,32 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
 
 if __name__ == "__main__":
     setup_logging()
-    parser = argparse.ArgumentParser(description="Simulate agents activity")
+    parser = argparse.ArgumentParser(
+        description="Simulate multi-agent activity for Vauxhall"
+    )
     parser.add_argument(
-        "-n", "--num-agents", type=int, default=1, help="Number of agents to simulate"
+        "-n",
+        "--num-agents",
+        type=int,
+        default=1,
+        help="Number of concurrent agents to simulate",
     )
     parser.add_argument(
         "-t",
         "--num-transitions",
         type=int,
         default=5,
-        help="Number of transitions per agent",
+        help="Number of telemetry events to send per agent",
     )
     args = parser.parse_args()
 
-    start_msg = (
+    logger.info(
         f"Starting simulation for {args.num_agents} agent(s) "
         f"with {args.num_transitions} transitions each..."
     )
-    logger.info(start_msg)
     threads = []
     for i in range(args.num_agents):
+        # Each agent runs in its own thread to simulate concurrent activity
         t = threading.Thread(target=simulate_agent, args=(i + 1, args.num_transitions))
         threads.append(t)
         t.start()

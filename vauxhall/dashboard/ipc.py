@@ -2,6 +2,7 @@
 
 """IPC Bridge for the Vauxhall Dashboard."""
 
+import webbrowser
 from typing import Any, Callable, Optional
 
 import pyperclip
@@ -60,6 +61,24 @@ class DashboardIPC(PyloidIPC):
             f"Frontend requested stale threshold: {settings.dashboard.stale_threshold}s"
         )
         return settings.dashboard.stale_threshold
+
+    @Bridge(str, result=bool)
+    def open_url(self, url: str) -> bool:
+        """Opens a URL in the system's default browser.
+
+        Args:
+            url: The URL to open.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        try:
+            logger.info(f"Opening URL in system browser: {url}")
+            webbrowser.open(url)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to open URL: {e}")
+            return False
 
     @Bridge(str, result=bool)
     def copy_to_clipboard(self, text: str) -> bool:

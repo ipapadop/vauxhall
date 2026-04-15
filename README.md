@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/ipapadop/vauxhall">
+    <img src="vauxhall/dashboard/ui/logo.svg" width="150" alt="Vauxhall Logo">
+  </a>
+</p>
+
 # Vauxhall Agent Dashboard
 
 Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Codex, etc.). It provides a centralized, **modern grid view** of what your agents are doing across different workspaces, using a lightweight MQTT-based architecture and web technologies.

@@ -20,6 +20,7 @@ function init() {
     const clearBtn = document.getElementById('clear-btn');
     const clearStaleBtn = document.getElementById('clear-stale-btn');
     const themeToggle = document.getElementById('theme-toggle');
+    const logoLink = document.getElementById('logo-link');
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
     const closeBtn = document.querySelector('.close-btn');
@@ -35,6 +36,16 @@ function init() {
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('vauxhall-theme', newTheme);
+        });
+    }
+
+    if (logoLink) {
+        logoLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const url = logoLink.getAttribute('href');
+            if (window.ipc && window.ipc.DashboardIPC) {
+                window.ipc.DashboardIPC.open_url(url);
+            }
         });
     }
 

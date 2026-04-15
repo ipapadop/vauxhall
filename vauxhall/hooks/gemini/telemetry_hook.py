@@ -66,10 +66,12 @@ def main():
         tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
         tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
 
-        # Handle explicit 'ask_user' tool calls
-        if tool_name == "ask_user":
+        # Handle explicit 'ask_user' and 'ask_question' tool calls
+        if tool_name in ["ask_user", "ask_question"]:
             state = "Waiting for Input"
             questions = tool_input.get("questions", [])
+            if "question" in tool_input and not questions:
+                questions = [{"question": tool_input.get("question")}]
             if questions:
                 prompt = "\n".join([q.get("question", "") for q in questions])
                 details = {"prompt": prompt}

@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 # Superpowers extension internal state
 .superpowers/
+
+# AI Agents
+.gemini/
+.codex/
+.claude/
+.vauxhall-venv/

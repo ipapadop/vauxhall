@@ -10,6 +10,7 @@ passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
 import json
 import os
 import sys
+import time
 
 from vauxhall.hooks.client import TelemetryClient
 from vauxhall.logging_config import setup_logging
@@ -31,17 +32,21 @@ def main():
     # {
     #   "tool_name": "run_shell_command",
     #   "tool_input": {"command": "ls -al"},
-    #   "hook_event_name": "BeforeTool" | "AfterTool" | "BeforeAgent" | "AfterAgent",
+    #   "hook_event_name": "BeforeTool" | "AfterTool" | "BeforeAgent" | "AfterAgent" | "AfterModel",
     #   "notification_type": "ToolPermission", (optional)
     #   "message": "...", (optional)
     #   "cwd": "/path/to/project",
-    #   "prompt": "User input text" (optional)
+    #   "prompt": "User input text" (optional),
+    #   "llm_response": { ... } (AfterModel)
     # }
 
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")
     )
     workspace = input_data.get("cwd", input_data.get("workspace", os.getcwd()))
+
+    # Temporary file for tracking tool execution duration
+    time_file = os.path.join(workspace, ".gemini", ".vauxhall_tool_start.time")
 
     agent_name = "Gemini"
     details = {}
@@ -64,9 +69,24 @@ def main():
     elif hook_type == "AfterAgent":
         state = "Idle"
         details = {"status": "Ready"}
+    elif hook_type == "AfterModel":
+        state = "Thinking"
+        details = {"status": "Model replied"}
+        # Extract token counts
+        usage = input_data.get("llm_response", {}).get("usageMetadata", {})
+        tokens = usage.get("totalTokenCount")
+        if tokens is not None:
+            details["tokens"] = tokens
     elif hook_type == "BeforeTool":
         tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
         tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
+
+        # Record start time for duration calculation
+        try:
+            with open(time_file, "w") as f:
+                f.write(str(time.time()))
+        except Exception:
+            pass
 
         # Handle explicit 'ask_user' and 'ask_question' tool calls
         if tool_name in ["ask_user", "ask_question"]:
@@ -98,6 +118,17 @@ def main():
         state = "Thinking"
         tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
         details = {"tool": tool_name, "status": "completed"}
+
+        # Calculate duration
+        try:
+            if os.path.exists(time_file):
+                with open(time_file, "r") as f:
+                    start_time = float(f.read().strip())
+                duration = round(time.time() - start_time, 1)
+                details["duration"] = duration
+                os.remove(time_file)
+        except Exception:
+            pass
     else:
         # Generic fallback for unhandled hook events
         state = "Idle"

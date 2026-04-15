@@ -90,6 +90,21 @@ function init() {
             currentHistoryKey = null;
         };
     }
+
+    const modalSearch = document.getElementById('modal-search');
+    const modalFilter = document.getElementById('modal-state-filter');
+
+    if (modalSearch) {
+        modalSearch.addEventListener('input', () => {
+            if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
+        });
+    }
+
+    if (modalFilter) {
+        modalFilter.addEventListener('change', () => {
+            if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
+        });
+    }
     
     // Close modal on background click
     window.onclick = (event) => {
@@ -137,6 +152,9 @@ function init() {
                 if (sortSelect && sortSelect.value) {
                     sortGrid(sortSelect.value, grid);
                 }
+            },
+            onStatusUpdate: (msg) => {
+                if (status) status.innerText = msg;
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";

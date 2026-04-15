@@ -29,9 +29,12 @@ def main() -> None:
 
     # Queue for updates received before frontend is ready
     pending_updates: list[dict[str, Any]] = []
+    last_status: str | None = None
 
     def drain_queue() -> None:
         """Forward all queued updates to the frontend."""
+        if last_status:
+            window.invoke("status-update", last_status)
         if pending_updates:
             logger.info(f"Draining {len(pending_updates)} queued updates.")
         while pending_updates:
@@ -81,6 +84,8 @@ def main() -> None:
 
     def on_status(message: str) -> None:
         """Handle status updates from MQTT."""
+        nonlocal last_status
+        last_status = message
         try:
             if ipc.is_ready:
                 window.invoke("status-update", message)

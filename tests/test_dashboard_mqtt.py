@@ -12,7 +12,7 @@ from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 def test_dashboard_subscriber_on_message() -> None:
     """Test that valid JSON messages trigger the callback."""
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback)
+    subscriber = DashboardSubscriber(callback, MagicMock())
 
     msg: Any = MagicMock()
     msg.payload = json.dumps({"agent": "test", "activity": "working"}).encode()
@@ -26,7 +26,7 @@ def test_dashboard_subscriber_on_message() -> None:
 def test_dashboard_subscriber_on_message_invalid_json() -> None:
     """Test that invalid JSON messages are handled silently."""
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback)
+    subscriber = DashboardSubscriber(callback, MagicMock())
 
     msg: Any = MagicMock()
     msg.payload = b"invalid json"
@@ -43,7 +43,7 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
     """Test the subscriber lifecycle (start and stop)."""
     mock_client = mock_client_class.return_value
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback, host="test_host", port=1234)
+    subscriber = DashboardSubscriber(callback, MagicMock(), host="test_host", port=1234)
 
     subscriber.start()
 
@@ -63,3 +63,21 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
     subscriber.stop()
     mock_client.loop_stop.assert_called_once()
     mock_client.disconnect.assert_called_once()
+
+
+def test_dashboard_subscriber_on_connect_status() -> None:
+    """Test that on_connect triggers the status callback."""
+    status_callback = MagicMock()
+    subscriber = DashboardSubscriber(MagicMock(), status_callback)
+
+    subscriber._on_connect(MagicMock(), None, {}, 0, None)
+    status_callback.assert_called_with("Connected to Agent Fleet")
+
+
+def test_dashboard_subscriber_on_disconnect_status() -> None:
+    """Test that on_disconnect triggers the status callback."""
+    status_callback = MagicMock()
+    subscriber = DashboardSubscriber(MagicMock(), status_callback)
+
+    subscriber._on_disconnect(MagicMock(), None, {}, 1, None)
+    status_callback.assert_called_with("Disconnected. Retrying...")

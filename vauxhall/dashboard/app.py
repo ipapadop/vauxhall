@@ -79,7 +79,15 @@ def main() -> None:
         except Exception as e:
             logger.exception(f"Error in on_telemetry: {e}")
 
-    mqtt = DashboardSubscriber(on_telemetry)
+    def on_status(message: str) -> None:
+        """Handle status updates from MQTT."""
+        try:
+            if ipc.is_ready:
+                window.invoke("status-update", message)
+        except Exception as e:
+            logger.exception(f"Error in on_status: {e}")
+
+    mqtt = DashboardSubscriber(on_telemetry, on_status)
     mqtt.start()
 
     ui_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "ui"))

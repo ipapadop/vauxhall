@@ -44,7 +44,7 @@ class TestDashboardComponents(unittest.TestCase):
     def test_subscriber_on_message(self) -> None:
         """Test that the subscriber correctly forwards MQTT messages to the callback."""
         callback = MagicMock()
-        subscriber = DashboardSubscriber(callback)
+        subscriber = DashboardSubscriber(callback, MagicMock())
 
         # Create a mock message
         msg: Any = MagicMock()
@@ -59,7 +59,7 @@ class TestDashboardComponents(unittest.TestCase):
     def test_subscriber_on_message_invalid_json(self) -> None:
         """Test that invalid JSON messages are ignored by the subscriber."""
         callback = MagicMock()
-        subscriber = DashboardSubscriber(callback)
+        subscriber = DashboardSubscriber(callback, MagicMock())
 
         # Create a mock message with invalid JSON
         msg: Any = MagicMock()

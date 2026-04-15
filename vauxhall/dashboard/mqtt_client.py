@@ -19,6 +19,7 @@ class DashboardSubscriber:
     def __init__(
         self,
         callback: Callable[[dict[str, Any]], None],
+        status_callback: Callable[[str], None],
         host: str | None = None,
         port: int | None = None,
     ) -> None:
@@ -26,13 +27,16 @@ class DashboardSubscriber:
 
         Args:
             callback: Function to call when telemetry data is received.
+            status_callback: Function to call with connection status updates.
             host: MQTT broker host. Defaults to settings.mqtt.host.
             port: MQTT broker port. Defaults to settings.mqtt.port.
         """
         self.callback = callback
+        self.status_callback = status_callback
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self._on_message
         self.client.on_connect = self._on_connect
+        self.client.on_disconnect = self._on_disconnect
         self.host = host if host is not None else settings.mqtt.host
         self.port = port if port is not None else settings.mqtt.port
 
@@ -47,11 +51,25 @@ class DashboardSubscriber:
         """Internal callback for MQTT connection."""
         if reason_code == 0:
             logger.info(f"Connected to MQTT broker at {self.host}:{self.port}")
+            self.status_callback("Connected to Agent Fleet")
             client.subscribe("vauxhall/agents/+/activity")
             client.subscribe("vauxhall/agents/+/status")
             logger.info("Subscribed to agent telemetry topics.")
         else:
             logger.error(f"Failed to connect to MQTT broker: {reason_code}")
+            self.status_callback(f"Connection Failed: {reason_code}")
+
+    def _on_disconnect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        disconnect_flags: Any,
+        reason_code: Any,
+        properties: Any,
+    ) -> None:
+        """Internal callback for MQTT disconnection."""
+        logger.warning(f"Disconnected from MQTT broker: {reason_code}")
+        self.status_callback("Disconnected. Retrying...")
 
     def _on_message(
         self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage

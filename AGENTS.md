@@ -122,7 +122,10 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
     - `ruff format .` to ensure consistent formatting.
     - `ruff check .` to identify potential issues.
     - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
-2.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
+2.  **Testing**: Before committing, all existing and new tests MUST pass.
+    - Run `./.venv/bin/pytest` to verify.
+    - Always add unit tests for new features or bug fixes.
+3.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
     - `README.md`: Update features, architecture, and usage instructions.
     - `AGENTS.md`: Update integration methods, states, and metadata features.
 

@@ -15,11 +15,25 @@ function init() {
     // UI Element References
     const clearBtn = document.getElementById('clear-btn');
     const clearStaleBtn = document.getElementById('clear-stale-btn');
+    const themeToggle = document.getElementById('theme-toggle');
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
     const closeBtn = document.querySelector('.close-btn');
     const modal = document.getElementById('history-modal');
     
+    // Theme Management
+    const savedTheme = localStorage.getItem('vauxhall-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('vauxhall-theme', newTheme);
+        });
+    }
+
     // Tracks which agent is currently being viewed in the modal for live updates
     let currentHistoryKey = null;
 

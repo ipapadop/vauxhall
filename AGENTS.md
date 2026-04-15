@@ -114,10 +114,16 @@ The dashboard automatically maintains a full buffer of the last 20 operations pe
 }
 ```
 
-The `telemetry_hook.py` script automatically detects the hook type and handles:
-- **Thinking**: Triggered `BeforeAgent`.
-- **Acting**: Triggered `BeforeTool` (shows tool name and command).
-- **Waiting for Input**: Triggered when `ask_user` is called or when a `ToolPermission` notification appears.
-- **Idle**: Triggered `AfterAgent` or `AfterTool`.
+## Development & Maintenance Rules
+
+To ensure the stability and readability of the Vauxhall ecosystem, all contributors (and AI agents) must follow these rules:
+
+1.  **Code Style**: Before committing any Python changes, you MUST run:
+    - `ruff format .` to ensure consistent formatting.
+    - `ruff check .` to identify potential issues.
+    - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
+2.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
+    - `README.md`: Update features, architecture, and usage instructions.
+    - `AGENTS.md`: Update integration methods, states, and metadata features.
 
 

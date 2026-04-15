@@ -12,7 +12,7 @@ from vauxhall.hooks.client import TelemetryClient
 def test_dashboard_subscriber_uses_settings_by_default() -> None:
     """Verify that DashboardSubscriber uses settings.mqtt for default host and port."""
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback)
+    subscriber = DashboardSubscriber(callback, MagicMock())
 
     assert subscriber.host == settings.mqtt.host
     assert subscriber.port == settings.mqtt.port
@@ -29,7 +29,7 @@ def test_telemetry_client_uses_settings_by_default() -> None:
 def test_dashboard_subscriber_overrides_settings() -> None:
     """Verify that DashboardSubscriber can still override settings."""
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback, host="override_host", port=9999)
+    subscriber = DashboardSubscriber(callback, MagicMock(), host="override_host", port=9999)
 
     assert subscriber.host == "override_host"
     assert subscriber.port == 9999

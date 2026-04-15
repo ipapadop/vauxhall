@@ -19,6 +19,8 @@ function init() {
     const sortSelect = document.getElementById('sort-select');
     const closeBtn = document.querySelector('.close-btn');
     const modal = document.getElementById('history-modal');
+    
+    let currentHistoryKey = null;
 
     // Setup Event Listeners
     if (clearBtn) {
@@ -52,9 +54,17 @@ function init() {
         });
     }
 
-    if (closeBtn) closeBtn.onclick = closeHistoryModal;
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            closeHistoryModal();
+            currentHistoryKey = null;
+        };
+    }
     window.onclick = (event) => {
-        if (event.target == modal) closeHistoryModal();
+        if (event.target == modal) {
+            closeHistoryModal();
+            currentHistoryKey = null;
+        }
     };
 
     // Initialize IPC
@@ -68,7 +78,10 @@ function init() {
                 let card = agents[key];
 
                 if (!card) {
-                    card = createCard(data, window.ipc, (key) => openHistoryModal(key, agents));
+                    card = createCard(data, window.ipc, (key) => {
+                        currentHistoryKey = key;
+                        openHistoryModal(key, agents);
+                    });
                     agents[key] = card;
                     grid.appendChild(card);
                 }
@@ -76,6 +89,11 @@ function init() {
                 updateAgentHistory(card, data);
                 updateLastSeen(card);
                 updateCard(card, data);
+
+                // Live Update History Modal if open
+                if (currentHistoryKey === key) {
+                    openHistoryModal(key, agents, true);
+                }
 
                 // Re-apply filter and sort
                 if (searchInput && searchInput.value) {

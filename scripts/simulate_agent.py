@@ -37,7 +37,7 @@ POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
 ]
 
 
-def simulate_agent(agent_idx: int) -> None:
+def simulate_agent(agent_idx: int, transitions: int) -> None:
     """Simulate a single agent's activity.
 
     Connects to the MQTT broker, chooses random operations, and publishes
@@ -45,6 +45,7 @@ def simulate_agent(agent_idx: int) -> None:
 
     Args:
         agent_idx: The index of the agent being simulated.
+        transitions: The number of transitions to simulate.
     """
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     try:
@@ -61,7 +62,7 @@ def simulate_agent(agent_idx: int) -> None:
     envs = ["local", "remote"]
     env = random.choice(envs)
 
-    for i in range(5):
+    for i in range(transitions):
         op = random.choice(POSSIBLE_OPERATIONS)
         payload = {
             "agent": agent_name,
@@ -75,11 +76,15 @@ def simulate_agent(agent_idx: int) -> None:
             },
         }
         client.publish(topic, json.dumps(payload))
-        logger.info(f"Agent {agent_name} published transition {i + 1}/5: {op['state']}")
-        time.sleep(2)
+        msg = (
+            f"Agent {agent_name} published transition "
+            f"{i + 1}/{transitions}: {op['state']}"
+        )
+        logger.info(msg)
+        time.sleep(1)
 
     client.disconnect()
-    logger.info(f"Agent {agent_name} finished 5 transitions.")
+    logger.info(f"Agent {agent_name} finished {transitions} transitions.")
 
 
 if __name__ == "__main__":
@@ -88,12 +93,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "-n", "--num-agents", type=int, default=1, help="Number of agents to simulate"
     )
+    parser.add_argument(
+        "-t",
+        "--num-transitions",
+        type=int,
+        default=5,
+        help="Number of transitions per agent",
+    )
     args = parser.parse_args()
 
-    logger.info(f"Starting simulation for {args.num_agents} agent(s)...")
+    start_msg = (
+        f"Starting simulation for {args.num_agents} agent(s) "
+        f"with {args.num_transitions} transitions each..."
+    )
+    logger.info(start_msg)
     threads = []
     for i in range(args.num_agents):
-        t = threading.Thread(target=simulate_agent, args=(i + 1,))
+        t = threading.Thread(target=simulate_agent, args=(i + 1, args.num_transitions))
         threads.append(t)
         t.start()
 

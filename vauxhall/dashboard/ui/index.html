@@ -14,15 +14,15 @@
                 <p id="js-status">Connecting...</p>
             </div>
             <div class="toolbar">
-                <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar">
-                <select id="sort-select" class="secondary-btn">
+                <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar" title="Filter agents by name or workspace path">
+                <select id="sort-select" class="secondary-btn" title="Sort agent cards">
                     <option value="name" selected>Agent Name</option>
                     <option value="recent">Recently Active</option>
                     <option value="status">Status</option>
                     <option value="tokens">Total Tokens</option>
                 </select>
-                <button id="clear-stale-btn" class="secondary-btn">Clear Stale</button>
-                <button id="clear-btn" class="secondary-btn">Clear Dashboard</button>
+                <button id="clear-stale-btn" class="secondary-btn" title="Remove inactive (stale) agents from the dashboard">Clear Stale</button>
+                <button id="clear-btn" class="secondary-btn" title="Remove all agents from the dashboard">Clear Dashboard</button>
             </div>
         </div>
     </header>
@@ -34,7 +34,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-agent-name">Agent History</h2>
-                <span class="close-btn">&times;</span>
+                <span class="close-btn" title="Close history">&times;</span>
             </div>
             <div id="modal-history-body" class="modal-body">
                 <!-- Timeline items will be injected here -->

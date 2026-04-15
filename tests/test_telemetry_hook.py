@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Gemini telemetry hook."""
 
 import io

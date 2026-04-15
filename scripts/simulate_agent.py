@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Simulation script for AI agent activity.
 
 This script publishes mock telemetry data to an MQTT broker to simulate

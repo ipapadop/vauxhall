@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Main entry point for the Vauxhall Dashboard application."""
 
 import os

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json

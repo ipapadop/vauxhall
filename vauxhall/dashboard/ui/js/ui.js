@@ -1,4 +1,8 @@
 /**
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * @file ui.js
  * @description Handles DOM manipulation, card creation, and updates.
  */

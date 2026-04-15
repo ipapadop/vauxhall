@@ -1,4 +1,8 @@
 /**
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * @file app.js
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */

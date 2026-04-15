@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """MQTT subscriber tests for the Vauxhall Dashboard."""
 
 import json

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the IPC bridge."""
 
 from unittest.mock import MagicMock, patch

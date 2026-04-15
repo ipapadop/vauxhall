@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """IPC Bridge for the Vauxhall Dashboard."""
 
 from typing import Any, Callable, Optional

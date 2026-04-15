@@ -83,5 +83,11 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 - `tests/`: Comprehensive test suite for UI and network components.
 - `docs/superpowers/specs/`: Detailed design and architecture documentation.
 
+## Development
+
+Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
+- **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
+- **Docs**: Always update `README.md` and `AGENTS.md` after every change.
+
 ## License
 MIT

@@ -28,8 +28,13 @@ export function generateSparklinePath(history) {
 
 /**
  * Creates an agent card element.
+ * @param {Object} data - Initial telemetry data.
+ * @param {Object} pyloidIpc - Pyloid IPC bridge.
+ * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
+ * @returns {HTMLElement} The created card.
  */
 export function createCard(data, pyloidIpc, openHistoryCallback) {
+    // Guess environment if not provided
     const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
     
     const card = document.createElement('div');
@@ -51,7 +56,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                 <polyline points="" fill="none" stroke="var(--accent-color)" stroke-width="1" vector-effect="non-scaling-stroke"></polyline>
             </svg>
         </div>
-        <div class="log-area" title="Real-time operations log (scrolls automatically unless hovered)">Ready...</div>
+        <div class="log-area" title="Real-time operations log (shows last 5 events)">Ready...</div>
         <div class="agent-footer">
             <div class="footer-meta">
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
@@ -61,14 +66,14 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
         </div>
     `;
     
-    // History Click
+    // Setup History Modal Trigger
     card.querySelector('.history-icon').addEventListener('click', (e) => {
         e.stopPropagation();
         const key = `${data.agent}:${data.workspace}`;
         openHistoryCallback(key);
     });
     
-    // Copy Click
+    // Setup Workspace Copy Trigger
     card.addEventListener('click', () => {
         pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then(success => {
             if (success) {
@@ -101,6 +106,7 @@ function getDetailsString(details) {
 
 /**
  * Updates an agent card with new telemetry.
+ * Handles state styles, metrics, sparklines, and the 5-event rolling log.
  */
 export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
@@ -109,7 +115,7 @@ export function updateCard(card, data) {
     
     statusBadge.textContent = data.state;
     
-    // Update State Classes
+    // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');
     if (data.state === 'Error') {
         card.classList.add('error');
@@ -119,16 +125,16 @@ export function updateCard(card, data) {
         card.classList.add('working');
     }
 
-    // Update Metrics
     const details = data.details || {};
     
-    // Update Token History & Sparkline
+    // Update Token History & SVG Sparkline
     updateTokenHistory(card, details.tokens);
     const polyline = card.querySelector('.sparkline polyline');
     if (polyline && card.tokenHistory) {
         polyline.setAttribute('points', generateSparklinePath(card.tokenHistory));
     }
 
+    // Update Footer Metric Badges
     if (metricsArea) {
         metricsArea.innerHTML = '';
         if (details.tokens) {
@@ -140,7 +146,7 @@ export function updateCard(card, data) {
         }
     }
 
-    // Update Log Area
+    // Update Rolling Activity Log (last 5 entries)
     const newLogMessage = getDetailsString(details);
 
     if (newLogMessage && newLogMessage !== card.lastLogMessage) {
@@ -164,7 +170,7 @@ export function updateCard(card, data) {
         
         logArea.appendChild(logLine);
 
-        // Truncate to 5 events (last 5)
+        // Enforce 5-event limit for the card view
         while (logArea.children.length > 5) {
             logArea.removeChild(logArea.firstElementChild);
         }
@@ -263,6 +269,11 @@ let isInteractingWithModal = false;
 
 /**
  * Populates and opens the history modal.
+ * Supports real-time updates and resizable behavior.
+ * 
+ * @param {string} agentKey - Unique key for the agent.
+ * @param {Object} agents - Global agents state object.
+ * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
  */
 export function openHistoryModal(agentKey, agents, isSilent = false) {
     const card = agents[agentKey];
@@ -274,11 +285,11 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
 
     const body = document.getElementById('modal-history-body');
     
-    // Capture scroll state BEFORE updating content
+    // Check if user is at the bottom BEFORE updating content
     const isAtBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 50;
     const oldScrollTop = body.scrollTop;
 
-    // Set up interaction listeners once
+    // Initialize interaction listeners (only once)
     if (!body.hasListeners) {
         body.addEventListener('pointerdown', () => { isInteractingWithModal = true; });
         window.addEventListener('pointerup', () => { isInteractingWithModal = false; });
@@ -286,24 +297,26 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
         body.hasListeners = true;
     }
 
+    // Re-render timeline items
     body.innerHTML = card.history.map(item => `
         <div class="history-item">
             <span class="history-time">${item.time}</span>
             <span class="history-state">${item.state}</span>
             <span class="history-details">${getDetailsString(item.details)}</span>
         </div>
-    `).reverse().join(''); // Show in chronological order
+    `).reverse().join(''); // Chronological order (oldest top, newest bottom)
 
     const isInteracting = body.matches(':hover') || isInteractingWithModal;
 
     if (!isSilent) {
+        // Initial open: Show modal and jump to latest event
         document.getElementById('history-modal').style.display = "block";
         body.scrollTop = body.scrollHeight;
     } else if (isAtBottom && !isInteracting) {
+        // Live update: Only follow tail if user was already at the bottom and isn't hovering
         body.scrollTop = body.scrollHeight;
     } else {
-        // Freeze mode: Restore previous scroll position
-        // This is necessary because innerHTML assignment resets scrollTop to 0.
+        // Freeze mode: Restore scroll position to prevent jumping during innerHTML refresh
         body.scrollTop = oldScrollTop;
     }
 }

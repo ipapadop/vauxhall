@@ -1,7 +1,8 @@
-"""Vauxhall hook for Gemini CLI.
+"""Vauxhall telemetry hook for Gemini CLI.
 
-This script processes Gemini CLI tool events and sends telemetry to Vauxhall.
-It supports both BeforeTool and AfterTool hooks.
+This script is a unified entry point for all Gemini CLI hook events (BeforeAgent,
+AfterAgent, BeforeTool, AfterTool, and Notification). It processes the event JSON
+passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
 """
 
 import json
@@ -17,31 +18,22 @@ def main():
     try:
         input_data = json.load(sys.stdin)
     except Exception:
-        # If no valid JSON on stdin, we can't do much
+        # If no valid JSON on stdin, output empty JSON as required by CLI protocol
         print("{}")
         return
 
-    # Basic setup
     setup_logging()
     client = TelemetryClient()
 
-    # Extract info from Gemini event
-    # Example event structure (hypothetical, based on common CLI patterns):
-    # {
-    #   "tool": "run_shell_command",
-    #   "arguments": {"command": "ls -al"},
-    #   "hook_type": "BeforeTool" | "AfterTool",
-    #   "workspace": "/path/to/project"
-    # }
-
-    # Extract info from Gemini event
-    # Gemini CLI structure:
+    # Gemini CLI event structure:
     # {
     #   "tool_name": "run_shell_command",
     #   "tool_input": {"command": "ls -al"},
     #   "hook_event_name": "BeforeTool" | "AfterTool" | "BeforeAgent" | "AfterAgent",
+    #   "notification_type": "ToolPermission", (optional)
+    #   "message": "...", (optional)
     #   "cwd": "/path/to/project",
-    #   "prompt": "User input text"
+    #   "prompt": "User input text" (optional)
     # }
 
     hook_type = input_data.get(
@@ -54,6 +46,7 @@ def main():
 
     if hook_type == "Notification":
         notification_type = input_data.get("notification_type", "")
+        # Handle safety confirmation prompts
         if notification_type == "ToolPermission":
             state = "Waiting for Input"
             details = {
@@ -61,7 +54,7 @@ def main():
                 "tool": input_data.get("details", {}).get("tool_name", "unknown"),
             }
         else:
-            # Other notifications can be ignored or handled as thinking/acting
+            # Ignore other notification types for now
             return
     elif hook_type == "BeforeAgent":
         state = "Thinking"
@@ -73,12 +66,11 @@ def main():
         tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
         tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
 
+        # Handle explicit 'ask_user' tool calls
         if tool_name == "ask_user":
             state = "Waiting for Input"
-            # Extract questions for prompt
             questions = tool_input.get("questions", [])
             if questions:
-                # Concatenate questions into a string
                 prompt = "\n".join([q.get("question", "") for q in questions])
                 details = {"prompt": prompt}
             else:
@@ -86,7 +78,7 @@ def main():
         else:
             state = "Acting"
 
-            # Determine a friendly "command" display based on the tool
+            # Extract a friendly display string based on the tool being used
             cmd_display = ""
             if tool_name == "run_shell_command":
                 cmd_display = tool_input.get("command", "")
@@ -99,18 +91,18 @@ def main():
                 "args": json.dumps(tool_input),
             }
     elif hook_type == "AfterTool":
-        state = "Idle"
+        state = "Thinking"
         tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
         details = {"tool": tool_name, "status": "completed"}
     else:
-        # Fallback for unknown hooks
+        # Generic fallback for unhandled hook events
         state = "Idle"
         details = {"hook": hook_type}
 
-    # Send to Vauxhall
+    # Publish telemetry via MQTT
     client.send(agent=agent_name, workspace=workspace, state=state, **details)
 
-    # Required: output valid JSON to stdout
+    # Required: output valid JSON to stdout to satisfy CLI hook protocol
     print("{}")
 
 

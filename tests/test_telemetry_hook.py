@@ -57,3 +57,28 @@ def test_ask_user_tool() -> None:
             state="Waiting for Input",
             prompt="Continue?",
         )
+
+
+def test_ask_question_tool() -> None:
+    """Verify that an ask_question tool call sets the state to 'Waiting for Input'."""
+    hook_data = {
+        "hook_event_name": "BeforeTool",
+        "tool_name": "ask_question",
+        "tool_input": {"question": "What is next?"},
+        "cwd": "/workspace",
+    }
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        mock_instance = MockClient.return_value
+        main()
+
+        mock_instance.send.assert_called_once_with(
+            agent="Gemini",
+            workspace="/workspace",
+            state="Waiting for Input",
+            prompt="What is next?",
+        )

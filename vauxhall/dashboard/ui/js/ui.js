@@ -249,7 +249,7 @@ export function sortGrid(criteria, grid) {
         return 0;
     });
 
-    grid.innerHTML = '';
+    // Instead of grid.innerHTML = '', just append in new order
     sorted.forEach(card => grid.appendChild(card));
 
     // INVERT & PLAY
@@ -264,8 +264,15 @@ export function sortGrid(criteria, grid) {
                 card.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
 
                 requestAnimationFrame(() => {
-                    card.style.transition = 'transform 0.4s ease-out';
+                    // Use CSS variable for consistent speed
+                    card.style.transition = 'transform var(--transition-speed) ease-out';
                     card.style.transform = '';
+
+                    // Clear styles after transition to restore CSS hover etc.
+                    card.addEventListener('transitionend', () => {
+                        card.style.transition = '';
+                        card.style.transform = '';
+                    }, { once: true });
                 });
             }
         });

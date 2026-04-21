@@ -117,13 +117,13 @@ def test_tool_duration_calculation() -> None:
     """Verify that duration is calculated between BeforeTool and AfterTool."""
     workspace = "/tmp/vauxhall-test-duration"
     os.makedirs(os.path.join(workspace, ".gemini"), exist_ok=True)
-    
+
     before_data = {
         "hook_event_name": "BeforeTool",
         "tool_name": "ls",
         "cwd": workspace,
     }
-    
+
     after_data = {
         "hook_event_name": "AfterTool",
         "tool_name": "ls",
@@ -136,12 +136,12 @@ def test_tool_duration_calculation() -> None:
         patch("time.time") as mock_time,
     ):
         mock_instance = MockClient.return_value
-        
+
         # 1. BeforeTool
         mock_time.return_value = 1000.0
         with patch("sys.stdin", io.StringIO(json.dumps(before_data))):
             main()
-        
+
         # 2. AfterTool
         mock_time.return_value = 1002.5
         with patch("sys.stdin", io.StringIO(json.dumps(after_data))):
@@ -156,7 +156,8 @@ def test_tool_duration_calculation() -> None:
             status="completed",
             duration=2.5,
         )
-    
+
     # Cleanup
     import shutil
+
     shutil.rmtree(workspace)

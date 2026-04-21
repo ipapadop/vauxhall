@@ -30,7 +30,9 @@ def test_telemetry_client_uses_settings_by_default() -> None:
 def test_dashboard_subscriber_overrides_settings() -> None:
     """Verify that DashboardSubscriber can still override settings."""
     callback = MagicMock()
-    subscriber = DashboardSubscriber(callback, MagicMock(), host="override_host", port=9999)
+    subscriber = DashboardSubscriber(
+        callback, MagicMock(), host="override_host", port=9999
+    )
 
     assert subscriber.host == "override_host"
     assert subscriber.port == 9999

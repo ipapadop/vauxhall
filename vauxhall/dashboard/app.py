@@ -94,7 +94,10 @@ class DashboardApp:
         self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
         self.mqtt.start()
 
-        ui_dir = Path(__file__).parent / "ui"
+        ui_dir = Path(__file__).parent / "ui" / "dist"
+        if not ui_dir.exists():
+            ui_dir = Path(__file__).parent / "ui"
+
         ui_dir_abs = ui_dir.resolve()
         url = pyloid_serve(str(ui_dir_abs))
         logger.info("Serving UI from %s at %s", ui_dir_abs, url)

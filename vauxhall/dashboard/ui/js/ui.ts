@@ -4,7 +4,7 @@
  */
 
 /**
- * @file ui.js
+ * @file ui.ts
  * @description Handles DOM manipulation, card creation, and updates.
  */
 
@@ -15,7 +15,7 @@ import { updateTokenHistory } from './state.js';
  * @param {number[]} history - The history of values.
  * @returns {string} The points string for a polyline.
  */
-export function generateSparklinePath(history) {
+export function generateSparklinePath(history: number[]): string {
     if (!history || history.length < 2) return "";
     
     const width = 100;
@@ -33,16 +33,16 @@ export function generateSparklinePath(history) {
 
 /**
  * Creates an agent card element.
- * @param {Object} data - Initial telemetry data.
- * @param {Object} pyloidIpc - Pyloid IPC bridge.
+ * @param {AgentData} data - Initial telemetry data.
+ * @param {any} pyloidIpc - Pyloid IPC bridge.
  * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
- * @returns {HTMLElement} The created card.
+ * @returns {AgentHTMLElement} The created card.
  */
-export function createCard(data, pyloidIpc, openHistoryCallback) {
+export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback: (key: string) => void): AgentHTMLElement {
     // Guess environment if not provided
     const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
     
-    const card = document.createElement('div');
+    const card = document.createElement('div') as AgentHTMLElement;
     card.className = 'agent-card';
     card.title = "Click to copy workspace path";
     card.innerHTML = `
@@ -72,19 +72,24 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     `;
     
     // Setup History Modal Trigger
-    card.querySelector('.history-icon').addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = `${data.agent}:${data.workspace}`;
-        openHistoryCallback(key);
-    });
+    const historyIcon = card.querySelector('.history-icon');
+    if (historyIcon) {
+        historyIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const key = `${data.agent}:${data.workspace}`;
+            openHistoryCallback(key);
+        });
+    }
     
     // Setup Workspace Copy Trigger
     card.addEventListener('click', () => {
-        pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then(success => {
-            if (success) {
-                showCopyFeedback(card);
-            }
-        });
+        if (pyloidIpc && pyloidIpc.DashboardIPC) {
+            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then((success: boolean) => {
+                if (success) {
+                    showCopyFeedback(card);
+                }
+            });
+        }
     });
     
     return card;
@@ -92,10 +97,10 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
 
 /**
  * Formats the details object into a human-readable action string.
- * @param {Object} details - The telemetry details.
+ * @param {any} details - The telemetry details.
  * @returns {string} A formatted string describing the action.
  */
-function getDetailsString(details) {
+function getDetailsString(details: any): string {
     if (!details) return "";
     if (details.tool) {
         return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
@@ -113,12 +118,12 @@ function getDetailsString(details) {
  * Updates an agent card with new telemetry.
  * Handles state styles, metrics, sparklines, and the 5-event rolling log.
  */
-export function updateCard(card, data) {
+export function updateCard(card: AgentHTMLElement, data: AgentData) {
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
     
-    statusBadge.textContent = data.state;
+    if (statusBadge) statusBadge.textContent = data.state;
     
     // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');
@@ -164,7 +169,7 @@ export function updateCard(card, data) {
     // Update Rolling Activity Log (last 5 entries)
     const newLogMessage = getDetailsString(details);
 
-    if (newLogMessage && newLogMessage !== card.lastLogMessage) {
+    if (newLogMessage && newLogMessage !== card.lastLogMessage && logArea) {
         card.lastLogMessage = newLogMessage;
         
         const time = new Date().toLocaleTimeString([], { 
@@ -195,7 +200,7 @@ export function updateCard(card, data) {
 /**
  * Shows "Copied!" feedback on a card.
  */
-function showCopyFeedback(card) {
+function showCopyFeedback(card: HTMLElement) {
     card.classList.add('copied');
     setTimeout(() => {
         card.classList.remove('copied');
@@ -205,10 +210,14 @@ function showCopyFeedback(card) {
 /**
  * Filters the agent grid.
  */
-export function filterGrid(query, agents) {
+export function filterGrid(query: string, agents: Record<string, AgentHTMLElement>) {
     Object.values(agents).forEach(card => {
-        const name = card.querySelector('.agent-name').textContent.toLowerCase();
-        const workspace = card.querySelector('.agent-workspace').textContent.toLowerCase();
+        const nameElement = card.querySelector('.agent-name');
+        const workspaceElement = card.querySelector('.agent-workspace');
+        if (!nameElement || !workspaceElement) return;
+
+        const name = nameElement.textContent?.toLowerCase() || '';
+        const workspace = workspaceElement.textContent?.toLowerCase() || '';
         if (name.includes(query) || workspace.includes(query)) {
             card.style.display = 'flex';
         } else {
@@ -220,8 +229,8 @@ export function filterGrid(query, agents) {
 /**
  * Sorts the agent grid.
  */
-export function sortGrid(criteria, grid) {
-    const cardsArray = Array.from(grid.children);
+export function sortGrid(criteria: string, grid: HTMLElement) {
+    const cardsArray = Array.from(grid.children) as AgentHTMLElement[];
 
     // FIRST: Record positions
     const firstPositions = cardsArray.map(card => {
@@ -232,19 +241,19 @@ export function sortGrid(criteria, grid) {
     // LAST: Re-sort DOM
     const sorted = cardsArray.sort((a, b) => {
         if (criteria === 'name') {
-            const nameA = a.querySelector('.agent-name').textContent;
-            const nameB = b.querySelector('.agent-name').textContent;
+            const nameA = a.querySelector('.agent-name')?.textContent || '';
+            const nameB = b.querySelector('.agent-name')?.textContent || '';
             return nameA.localeCompare(nameB);
         } else if (criteria === 'recent') {
-            return parseInt(b.dataset.lastSeen) - parseInt(a.dataset.lastSeen);
+            return parseInt(b.dataset.lastSeen || '0') - parseInt(a.dataset.lastSeen || '0');
         } else if (criteria === 'status') {
-            const statusOrder = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
-            const statusA = a.querySelector('.status-badge').textContent;
-            const statusB = b.querySelector('.status-badge').textContent;
+            const statusOrder: Record<string, number> = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+            const statusA = a.querySelector('.status-badge')?.textContent || '';
+            const statusB = b.querySelector('.status-badge')?.textContent || '';
             return (statusOrder[statusA] ?? 9) - (statusOrder[statusB] ?? 9);
         } else if (criteria === 'tokens') {
-            const tokensA = parseInt(a.querySelector('.metric-badge.tokens')?.dataset.value || 0);
-            const tokensB = parseInt(b.querySelector('.metric-badge.tokens')?.dataset.value || 0);
+            const tokensA = parseInt((a.querySelector('.metric-badge.tokens') as HTMLElement)?.dataset.value || '0');
+            const tokensB = parseInt((b.querySelector('.metric-badge.tokens') as HTMLElement)?.dataset.value || '0');
             return tokensB - tokensA;
         }
         return 0;
@@ -283,11 +292,11 @@ export function sortGrid(criteria, grid) {
 /**
  * Checks for stale agents and updates the last seen timer.
  */
-export function checkStaleness(agents, staleThresholdMs = 120000) {
+export function checkStaleness(agents: Record<string, AgentHTMLElement>, staleThresholdMs: number = 120000) {
     const now = Date.now();
 
     Object.values(agents).forEach(card => {
-        const lastSeen = parseInt(card.dataset.lastSeen);
+        const lastSeen = parseInt(card.dataset.lastSeen || '0');
         const diff = now - lastSeen;
         
         // Update timer text
@@ -320,33 +329,35 @@ let isInteractingWithModal = false;
  * Supports real-time updates and resizable behavior.
  * 
  * @param {string} agentKey - Unique key for the agent.
- * @param {Object} agents - Global agents state object.
+ * @param {Record<string, AgentHTMLElement>} agents - Global agents state object.
  * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
  */
-export function openHistoryModal(agentKey, agents, isSilent = false) {
+export function openHistoryModal(agentKey: string, agents: Record<string, AgentHTMLElement>, isSilent: boolean = false) {
     const card = agents[agentKey];
     if (!card || !card.history) return;
 
     if (!isSilent) {
-        document.getElementById('modal-agent-name').textContent = `History: ${agentKey}`;
+        const modalAgentName = document.getElementById('modal-agent-name');
+        if (modalAgentName) modalAgentName.textContent = `History: ${agentKey}`;
     }
 
     const body = document.getElementById('modal-history-body');
+    if (!body) return;
     
     // Check if user is at the bottom BEFORE updating content
     const isAtBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 50;
     const oldScrollTop = body.scrollTop;
 
     // Initialize interaction listeners (only once)
-    if (!body.hasListeners) {
+    if (!(body as any).hasListeners) {
         body.addEventListener('pointerdown', () => { isInteractingWithModal = true; });
         window.addEventListener('pointerup', () => { isInteractingWithModal = false; });
         window.addEventListener('pointercancel', () => { isInteractingWithModal = false; });
-        body.hasListeners = true;
+        (body as any).hasListeners = true;
     }
 
-    const searchTerm = document.getElementById('modal-search')?.value.toLowerCase() || '';
-    const stateFilter = document.getElementById('modal-state-filter')?.value || 'ALL';
+    const searchTerm = (document.getElementById('modal-search') as HTMLInputElement)?.value.toLowerCase() || '';
+    const stateFilter = (document.getElementById('modal-state-filter') as HTMLSelectElement)?.value || 'ALL';
 
     const filteredHistory = card.history.filter(item => {
         const matchesSearch = getDetailsString(item.details).toLowerCase().includes(searchTerm);
@@ -367,7 +378,8 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
 
     if (!isSilent) {
         // Initial open: Show modal and jump to latest event
-        document.getElementById('history-modal').style.display = "block";
+        const historyModal = document.getElementById('history-modal');
+        if (historyModal) historyModal.style.display = "block";
         body.scrollTop = body.scrollHeight;
     } else if (isAtBottom && !isInteracting) {
         // Live update: Only follow tail if user was already at the bottom and isn't hovering
@@ -382,5 +394,6 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
  * Closes the history modal.
  */
 export function closeHistoryModal() {
-    document.getElementById('history-modal').style.display = "none";
+    const historyModal = document.getElementById('history-modal');
+    if (historyModal) historyModal.style.display = "none";
 }

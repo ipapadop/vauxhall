@@ -4,7 +4,7 @@
  */
 
 /**
- * @file app.js
+ * @file app.ts
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
@@ -17,14 +17,16 @@ function init() {
     const status = document.getElementById('js-status');
     const grid = document.getElementById('agent-grid');
     
+    if (!grid) return;
+
     // UI Element References
     const clearBtn = document.getElementById('clear-btn');
     const clearStaleBtn = document.getElementById('clear-stale-btn');
     const themeToggle = document.getElementById('theme-toggle');
     const logoLink = document.getElementById('logo-link');
-    const searchInput = document.getElementById('search-input');
-    const sortSelect = document.getElementById('sort-select');
-    const closeBtn = document.querySelector('.close-btn');
+    const searchInput = document.getElementById('search-input') as HTMLInputElement;
+    const sortSelect = document.getElementById('sort-select') as HTMLSelectElement;
+    const closeBtn = document.querySelector('.close-btn') as HTMLElement;
     const modal = document.getElementById('history-modal');
     
     // Theme Management
@@ -44,14 +46,14 @@ function init() {
         logoLink.addEventListener('click', (e) => {
             e.preventDefault();
             const url = logoLink.getAttribute('href');
-            if (window.ipc && window.ipc.DashboardIPC) {
+            if (url && window.ipc && window.ipc.DashboardIPC) {
                 window.ipc.DashboardIPC.open_url(url);
             }
         });
     }
 
     // Tracks which agent is currently being viewed in the modal for live updates
-    let currentHistoryKey = null;
+    let currentHistoryKey: string | null = null;
 
     // Setup Event Listeners
     if (clearBtn) {
@@ -75,13 +77,13 @@ function init() {
 
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
-            filterGrid(e.target.value.toLowerCase(), agents);
+            filterGrid((e.target as HTMLInputElement).value.toLowerCase(), agents);
         });
     }
 
     if (sortSelect) {
         sortSelect.addEventListener('change', (e) => {
-            sortGrid(e.target.value, grid);
+            sortGrid((e.target as HTMLSelectElement).value, grid);
         });
     }
 
@@ -121,7 +123,7 @@ function init() {
         if (!window.pyloid) return;
 
         initIPC({
-            onAgentUpdate: (data) => {
+            onAgentUpdate: (data: AgentData) => {
                 const key = `${data.agent}:${data.workspace}`;
                 let card = agents[key];
 
@@ -154,7 +156,7 @@ function init() {
                     sortGrid(sortSelect.value, grid);
                 }
             },
-            onStatusUpdate: (msg) => {
+            onStatusUpdate: (msg: string) => {
                 if (status) status.innerText = msg;
             },
             onReady: () => {
@@ -170,7 +172,7 @@ function init() {
                     });
                 }
             },
-            onError: (err) => {
+            onError: (err: any) => {
                 console.error("IPC Error:", err);
                 if (status) status.innerText = err;
             }

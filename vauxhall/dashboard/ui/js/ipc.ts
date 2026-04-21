@@ -4,15 +4,22 @@
  */
 
 /**
- * @file ipc.js
+ * @file ipc.ts
  * @description Manages communication with the Python backend.
  */
 
+interface IPCCallbacks {
+    onAgentUpdate: (data: AgentData) => void;
+    onStatusUpdate: (msg: string) => void;
+    onReady: () => void;
+    onError: (err: any) => void;
+}
+
 /**
  * Initializes the IPC connection and sets up listeners.
- * @param {Object} callbacks - An object containing callback functions for various events.
+ * @param {IPCCallbacks} callbacks - An object containing callback functions for various events.
  */
-export function initIPC(callbacks) {
+export function initIPC(callbacks: IPCCallbacks) {
     const pyloidEvent = window.pyloid.event || window.pyloid.EventAPI;
     const pyloidIpc = window.ipc;
 

@@ -33,14 +33,14 @@ class TestDashboardComponents(unittest.TestCase):
         with patch("pyperclip.copy") as mock_copy:
             result = ipc.copy_to_clipboard("test text")
             mock_copy.assert_called_once_with("test text")
-            self.assertTrue(result)
+            assert result
 
     def test_ipc_copy_to_clipboard_error(self) -> None:
         """Test that clipboard errors are handled gracefully."""
         ipc = DashboardIPC()
         with patch("pyperclip.copy", side_effect=Exception("error")):
             result = ipc.copy_to_clipboard("test text")
-            self.assertFalse(result)
+            assert not result
 
     def test_subscriber_on_message(self) -> None:
         """Test that the subscriber correctly forwards MQTT messages to the callback."""
@@ -49,7 +49,11 @@ class TestDashboardComponents(unittest.TestCase):
 
         # Create a mock message
         msg: Any = MagicMock()
-        data = {"agent": "Gemini", "workspace": "/tmp", "state": "Running"}
+        data = {
+            "agent": "Gemini",
+            "workspace": "/home/user/project",
+            "state": "Running",
+        }
         msg.payload = json.dumps(data).encode()
 
         # Call the private method directly for testing

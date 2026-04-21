@@ -3,7 +3,7 @@
 
 """Main entry point for the Vauxhall Dashboard application."""
 
-import os
+from pathlib import Path
 from typing import Any
 
 from pyloid import Pyloid
@@ -17,47 +17,33 @@ from vauxhall.logging_config import get_logger, setup_logging
 logger = get_logger(__name__)
 
 
-def main() -> None:
-    """Run the Vauxhall Dashboard application.
+class DashboardApp:
+    """Encapsulates the Dashboard application state and logic."""
 
-    This function initializes the Pyloid application, sets up the window and IPC,
-    starts the MQTT subscriber, and runs the application loop.
-    """
-    setup_logging(level=settings.logging.level)
-    logger.info("Starting Vauxhall Dashboard...")
+    def __init__(self, app: Pyloid) -> None:
+        """Initialize the Dashboard application.
 
-    app = Pyloid(app_name="Vauxhall Dashboard")
+        Args:
+            app: The Pyloid application instance.
+        """
+        self.app = app
+        self.window: Any = None
+        self.ipc = DashboardIPC(on_ready_callback=self.drain_queue)
+        self.pending_updates: list[dict[str, Any]] = []
+        self.last_status: str | None = None
+        self.mqtt: DashboardSubscriber | None = None
 
-    # Queue for updates received before frontend is ready
-    pending_updates: list[dict[str, Any]] = []
-    last_status: str | None = None
-
-    def drain_queue() -> None:
+    def drain_queue(self) -> None:
         """Forward all queued updates to the frontend."""
-        if last_status:
-            window.invoke("status-update", last_status)
-        if pending_updates:
-            logger.info(f"Draining {len(pending_updates)} queued updates.")
-        while pending_updates:
-            p = pending_updates.pop(0)
-            window.invoke("agent-update", p)
+        if self.last_status:
+            self.window.invoke("status-update", self.last_status)
+        if self.pending_updates:
+            logger.info("Draining %d queued updates.", len(self.pending_updates))
+        while self.pending_updates:
+            p = self.pending_updates.pop(0)
+            self.window.invoke("agent-update", p)
 
-    ipc = DashboardIPC(on_ready_callback=drain_queue)
-
-    window = app.create_window(
-        title=settings.dashboard.window_title,
-        width=settings.dashboard.width,
-        height=settings.dashboard.height,
-        IPCs=[ipc],
-    )
-
-    # Optional: suppressed due to bug in pyloid v0.27.2
-    # icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.png")
-    # if os.path.exists(icon_path):
-    #     app.set_icon(icon_path)
-
-    # Callback to emit data to JS
-    def on_telemetry(data: dict[str, Any]) -> None:
+    def on_telemetry(self, data: dict[str, Any]) -> None:
         """Handle telemetry data received from MQTT.
 
         If the frontend is ready, the data is invoked immediately.
@@ -70,41 +56,65 @@ def main() -> None:
             # Basic schema validation
             required_fields = ["agent", "workspace", "state"]
             if not all(field in data for field in required_fields):
-                logger.warning(f"Received malformed telemetry: {data}")
+                logger.warning("Received malformed telemetry: %s", data)
                 return
 
-            if ipc.is_ready:
+            if self.ipc.is_ready:
                 # Drain queue if any (just in case)
-                drain_queue()
-                window.invoke("agent-update", data)
+                self.drain_queue()
+                self.window.invoke("agent-update", data)
             else:
-                logger.debug(f"Queuing telemetry for agent: {data.get('agent')}")
-                pending_updates.append(data)
-        except Exception as e:
-            logger.exception(f"Error in on_telemetry: {e}")
+                logger.debug("Queuing telemetry for agent: %s", data.get("agent"))
+                self.pending_updates.append(data)
+        except Exception:
+            logger.exception("Error in on_telemetry")
 
-    def on_status(message: str) -> None:
-        """Handle status updates from MQTT."""
-        nonlocal last_status
-        last_status = message
+    def on_status(self, message: str) -> None:
+        """Handle status updates from MQTT.
+
+        Args:
+            message: The status message.
+        """
+        self.last_status = message
         try:
-            if ipc.is_ready:
-                window.invoke("status-update", message)
-        except Exception as e:
-            logger.exception(f"Error in on_status: {e}")
+            if self.ipc.is_ready:
+                self.window.invoke("status-update", message)
+        except Exception:
+            logger.exception("Error in on_status")
 
-    mqtt = DashboardSubscriber(on_telemetry, on_status)
-    mqtt.start()
+    def run(self) -> None:
+        """Run the application."""
+        self.window = self.app.create_window(
+            title=settings.dashboard.window_title,
+            width=settings.dashboard.width,
+            height=settings.dashboard.height,
+            IPCs=[self.ipc],
+        )
 
-    ui_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "ui"))
-    url = pyloid_serve(ui_dir)
-    logger.info(f"Serving UI from {ui_dir} at {url}")
+        self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
+        self.mqtt.start()
 
-    window.load_url(url)
-    window.show_and_focus()
-    app.run()
-    logger.info("Vauxhall Dashboard shutting down...")
-    mqtt.stop()
+        ui_dir = Path(__file__).parent / "ui"
+        ui_dir_abs = ui_dir.resolve()
+        url = pyloid_serve(str(ui_dir_abs))
+        logger.info("Serving UI from %s at %s", ui_dir_abs, url)
+
+        self.window.load_url(url)
+        self.window.show_and_focus()
+        self.app.run()
+        logger.info("Vauxhall Dashboard shutting down...")
+        self.mqtt.stop()
+
+
+def main() -> None:
+    """Run the Vauxhall Dashboard application."""
+    setup_logging(level=settings.logging.level)
+    logger.info("Starting Vauxhall Dashboard...")
+
+    app = Pyloid(app_name="Vauxhall Dashboard")
+    dashboard = DashboardApp(app)
+    dashboard.run()
+
 
 
 if __name__ == "__main__":

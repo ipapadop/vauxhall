@@ -5,6 +5,7 @@
 
 from unittest.mock import MagicMock, patch
 
+from vauxhall.config import settings
 from vauxhall.dashboard.ipc import DashboardIPC
 
 
@@ -27,8 +28,6 @@ def test_ipc_set_ready() -> None:
 
 def test_ipc_get_stale_threshold() -> None:
     """Verify that get_stale_threshold returns value from settings."""
-    from vauxhall.config import settings
-
     ipc = DashboardIPC()
     assert ipc.get_stale_threshold() == settings.dashboard.stale_threshold
 

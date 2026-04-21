@@ -72,11 +72,11 @@ class Config:
         config_data = {}
         if config_path.exists():
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with config_path.open(encoding="utf-8") as f:
                     config_data = yaml.safe_load(f) or {}
                 logger.info("Loaded configuration from %s", config_path)
-            except Exception as e:
-                logger.error("Failed to load configuration from %s: %s", config_path, e)
+            except Exception:
+                logger.exception("Failed to load configuration from %s", config_path)
         else:
             logger.debug("Configuration file %s not found, using defaults", config_path)
 

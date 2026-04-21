@@ -29,7 +29,7 @@ def test_config_load_from_yaml(tmp_path: Path) -> None:
         "dashboard": {"stale_threshold": 300},
         "logging": {"level": "DEBUG"},
     }
-    with open(config_file, "w") as f:
+    with config_file.open("w") as f:
         yaml.dump(data, f)
 
     cfg = Config.load(config_file)
@@ -44,7 +44,7 @@ def test_config_partial_load(tmp_path: Path) -> None:
     """Verify that Config.load handles partial YAML files."""
     config_file = tmp_path / "partial.yaml"
     data = {"mqtt": {"host": "only_host"}}
-    with open(config_file, "w") as f:
+    with config_file.open("w") as f:
         yaml.dump(data, f)
 
     cfg = Config.load(config_file)

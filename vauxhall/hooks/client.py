@@ -4,7 +4,6 @@
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
-from typing import Any
 
 import paho.mqtt.client as mqtt
 
@@ -15,7 +14,7 @@ logger = get_logger(__name__)
 
 
 def format_message(
-    agent: str, workspace: str, state: str, env: str | None = None, **details: Any
+    agent: str, workspace: str, state: str, env: str | None = None, **details: object
 ) -> str:
     """Format a telemetry message as a JSON string.
 
@@ -65,7 +64,7 @@ class TelemetryClient:
         workspace: str,
         state: str,
         env: str | None = None,
-        **details: Any,
+        **details: object,
     ) -> None:
         """Send a telemetry message.
 
@@ -86,7 +85,7 @@ class TelemetryClient:
             publish_result = self.client.publish(topic, payload)
             publish_result.wait_for_publish()
             self.client.disconnect()
-            logger.debug(f"Successfully sent telemetry for {agent} to {topic}")
-        except Exception as e:
-            logger.debug(f"Failed to send telemetry for {agent}: {e}")
-            pass  # Fail silently per spec
+            logger.debug("Successfully sent telemetry for %s to %s", agent, topic)
+        except Exception:
+            logger.debug("Failed to send telemetry for %s", agent)
+            # Fail silently per spec

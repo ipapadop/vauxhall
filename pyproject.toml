@@ -4,6 +4,7 @@
 [project]
 name = "vauxhall"
 version = "0.1.0"
+description = "Dashboard for agents"
 requires-python = ">=3.10"
 dependencies = [
     "paho-mqtt>=2.0.0",
@@ -12,9 +13,55 @@ dependencies = [
     "PyYAML>=6.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    {include-group = "lint"},
+    {include-group = "test"},
+]
+lint = [
+    "ruff>=0.14.0",
+]
+test = [
+    "pytest>=9.0.1",
+]
+
+[tool.uv]
+package = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["ALL",]
+ignore = [
+    "ANN002",   # no type annotation for *args
+    "ANN003",   # no type annotation for **kwargs
+    "ARG002",   # unused arguments
+    "BLE001",   # catch blind exception
+    "COM812",   # interferes with formatter
+    "D100",     # missing docstring in public module
+    "D104",     # missing docstring in public package
+    "ERA001",   # remove commented out code
+    "INP001",   # implicit namespace package
+    "PLR0912",  # too many branches
+    "PLR2004",  # magic numbers
+    "LOG015",   # logging on root logger
+    "S101",     # assert used
+    "S110",     # exception logging
+    "S311",     # weak random number generator
+    "S603",     # check for execution of untrusted input
+    "SLF001",   # private member accessed
+    "T201",     # using print
+    "TRY401",   # allow exception message
+]
+extend-select = ["I"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+ignore-var-parameters = true  # ignore missing documentation for *args and **kwargs parameters
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 20
+quote-style = "double"

@@ -5,7 +5,7 @@
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 
@@ -50,9 +50,6 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
 
     mock_client.connect.assert_called_once_with("test_host", 1234, keepalive=60)
     mock_client.loop_start.assert_called_once()
-
-    # Manually trigger on_connect to verify subscriptions
-    from unittest.mock import call
 
     subscriber._on_connect(mock_client, None, {}, 0, None)
 

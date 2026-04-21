@@ -11,8 +11,10 @@ the Vauxhall Dashboard without requiring real agent hooks.
 import argparse
 import json
 import random
+import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -53,14 +55,14 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     try:
         client.connect("localhost", 1883)
-    except Exception as e:
-        logger.error(f"Agent-{agent_idx} could not connect to broker: {e}")
+    except Exception:
+        logger.exception("Agent-%d could not connect to broker", agent_idx)
         return
 
     agent_id = f"test-{agent_idx}"
     topic = f"vauxhall/agents/{agent_id}/activity"
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
-    workspace = f"/tmp/vauxhall-test-{agent_idx}"
+    workspace = Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}"
 
     envs = ["local", "remote"]
     env = random.choice(envs)
@@ -79,15 +81,17 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
             },
         }
         client.publish(topic, json.dumps(payload))
-        msg = (
-            f"Agent {agent_name} published transition "
-            f"{i + 1}/{transitions}: {op['state']}"
+        logger.info(
+            "Agent %s published transition %d/%d: %s",
+            agent_name,
+            i + 1,
+            transitions,
+            op["state"],
         )
-        logger.info(msg)
         time.sleep(1)
 
     client.disconnect()
-    logger.info(f"Agent {agent_name} finished {transitions} transitions.")
+    logger.info("Agent %s finished %d transitions.", agent_name, transitions)
 
 
 if __name__ == "__main__":
@@ -112,8 +116,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger.info(
-        f"Starting simulation for {args.num_agents} agent(s) "
-        f"with {args.num_transitions} transitions each..."
+        "Starting simulation for %d agent(s) with %d transitions each...",
+        args.num_agents,
+        args.num_transitions,
     )
     threads = []
     for i in range(args.num_agents):
@@ -125,4 +130,5 @@ if __name__ == "__main__":
     for t in threads:
         t.join()
 
-    logger.info(f"Finished simulating {args.num_agents} agent(s).")
+    logger.info("Finished simulating %d agent(s).", args.num_agents)
+

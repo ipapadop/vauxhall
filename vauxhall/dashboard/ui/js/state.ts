@@ -4,18 +4,18 @@
  */
 
 /**
- * @file state.js
+ * @file state.ts
  * @description Manages the global state of the dashboard, including agent tracking and history.
  */
 
-export const agents = {}; // (agent:workspace) -> DOM element
+export const agents: Record<string, AgentHTMLElement> = {}; // (agent:workspace) -> DOM element
 
 /**
  * Ensures an agent's history buffer is initialized and updated.
- * @param {HTMLElement} card - The agent card element.
- * @param {Object} data - The telemetry data.
+ * @param {AgentHTMLElement} card - The agent card element.
+ * @param {AgentData} data - The telemetry data.
  */
-export function updateAgentHistory(card, data) {
+export function updateAgentHistory(card: AgentHTMLElement, data: AgentData) {
     if (!card.history) card.history = [];
     
     card.history.unshift({
@@ -31,10 +31,10 @@ export function updateAgentHistory(card, data) {
 
 /**
  * Tracks the last seen time for an agent.
- * @param {HTMLElement} card - The agent card element.
+ * @param {AgentHTMLElement} card - The agent card element.
  */
-export function updateLastSeen(card) {
-    card.dataset.lastSeen = Date.now();
+export function updateLastSeen(card: AgentHTMLElement) {
+    card.dataset.lastSeen = Date.now().toString();
     card.classList.remove('stale');
 }
 
@@ -51,16 +51,16 @@ export function clearAgents() {
  * Removes a specific agent from the state.
  * @param {string} key - The agent key.
  */
-export function removeAgent(key) {
+export function removeAgent(key: string) {
     delete agents[key];
 }
 
 /**
  * Updates the token history for an agent.
- * @param {HTMLElement} card - The agent card element.
- * @param {number} tokens - The current token count.
+ * @param {AgentHTMLElement} card - The agent card element.
+ * @param {number | undefined} tokens - The current token count.
  */
-export function updateTokenHistory(card, tokens) {
+export function updateTokenHistory(card: AgentHTMLElement, tokens?: number) {
     if (!card.tokenHistory) card.tokenHistory = [];
     if (tokens === undefined || tokens === null) return;
     

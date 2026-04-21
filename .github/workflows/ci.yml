@@ -11,6 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Frontend dependencies
+        run: npm install
+      - name: Build Frontend
+        run: npm run build
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

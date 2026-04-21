@@ -1,0 +1,32 @@
+{
+  "name": "vauxhall",
+  "version": "1.0.0",
+  "description": "<p align=\"center\">   <a href=\"https://github.com/ipapadop/vauxhall\">     <img src=\"vauxhall/dashboard/ui/logo.svg\" width=\"150\" alt=\"Vauxhall Logo\">   </a> </p>",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ipapadop/vauxhall.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ipapadop/vauxhall/issues"
+  },
+  "homepage": "https://github.com/ipapadop/vauxhall#readme",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.9"
+  }
+}

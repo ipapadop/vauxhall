@@ -4,7 +4,8 @@
 """MQTT client for the Vauxhall Dashboard."""
 
 import json
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
@@ -44,36 +45,36 @@ class DashboardSubscriber:
     def _on_connect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        flags: Any,
-        reason_code: Any,
-        properties: Any,
+        userdata: object,
+        flags: mqtt.ConnectFlags,
+        reason_code: mqtt.ReasonCode,
+        properties: mqtt.Properties | None,
     ) -> None:
         """Internal callback for MQTT connection."""
         if reason_code == 0:
-            logger.info(f"Connected to MQTT broker at {self.host}:{self.port}")
+            logger.info("Connected to MQTT broker at %s:%d", self.host, self.port)
             self.status_callback("Connected to Agent Fleet")
             client.subscribe("vauxhall/agents/+/activity")
             client.subscribe("vauxhall/agents/+/status")
             logger.info("Subscribed to agent telemetry topics.")
         else:
-            logger.error(f"Failed to connect to MQTT broker: {reason_code}")
+            logger.error("Failed to connect to MQTT broker: %s", reason_code)
             self.status_callback(f"Connection Failed: {reason_code}")
 
     def _on_disconnect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        disconnect_flags: Any,
-        reason_code: Any,
-        properties: Any,
+        userdata: object,
+        disconnect_flags: mqtt.DisconnectFlags,
+        reason_code: mqtt.ReasonCode,
+        properties: mqtt.Properties | None,
     ) -> None:
         """Internal callback for MQTT disconnection."""
-        logger.warning(f"Disconnected from MQTT broker: {reason_code}")
+        logger.warning("Disconnected from MQTT broker: %s", reason_code)
         self.status_callback("Disconnected. Retrying...")
 
     def _on_message(
-        self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
+        self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
         """Internal callback for MQTT messages.
 
@@ -84,19 +85,20 @@ class DashboardSubscriber:
         """
         try:
             data = json.loads(msg.payload.decode())
-            logger.debug(f"Received MQTT message on topic: {msg.topic}")
+            logger.debug("Received MQTT message on topic: %s", msg.topic)
             self.callback(data)
-        except Exception as e:
-            logger.error(f"Error processing MQTT message: {e}")
+        except Exception:
+            logger.exception("Error processing MQTT message")
 
     def start(self) -> None:
         """Connect to the broker and start the background loop."""
-        logger.info(f"Connecting to MQTT broker at {self.host}:{self.port}...")
+        logger.info("Connecting to MQTT broker at %s:%d...", self.host, self.port)
         try:
             self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
             self.client.loop_start()
-        except Exception as e:
-            logger.error(f"Could not connect to MQTT broker: {e}")
+        except Exception:
+            logger.exception("Could not connect to MQTT broker")
+
 
     def stop(self) -> None:
         """Stop the background loop and disconnect from the broker."""

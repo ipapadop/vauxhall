@@ -5,7 +5,8 @@
 
 import io
 import json
-import os
+import shutil
+from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.hooks.gemini.telemetry_hook import main
@@ -22,11 +23,13 @@ def test_notification_tool_permission() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = MockClient.return_value
+        mock_instance = mock_client_class.return_value
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -48,11 +51,13 @@ def test_ask_user_tool() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = MockClient.return_value
+        mock_instance = mock_client_class.return_value
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -73,11 +78,13 @@ def test_ask_question_tool() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = MockClient.return_value
+        mock_instance = mock_client_class.return_value
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -97,11 +104,13 @@ def test_after_model_tokens() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = MockClient.return_value
+        mock_instance = mock_client_class.return_value
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -113,29 +122,31 @@ def test_after_model_tokens() -> None:
         )
 
 
-def test_tool_duration_calculation() -> None:
+def test_tool_duration_calculation(tmp_path: Path) -> None:
     """Verify that duration is calculated between BeforeTool and AfterTool."""
-    workspace = "/tmp/vauxhall-test-duration"
-    os.makedirs(os.path.join(workspace, ".gemini"), exist_ok=True)
+    workspace = tmp_path / "vauxhall-test-duration"
+    (workspace / ".gemini").mkdir(parents=True, exist_ok=True)
 
     before_data = {
         "hook_event_name": "BeforeTool",
         "tool_name": "ls",
-        "cwd": workspace,
+        "cwd": str(workspace),
     }
 
     after_data = {
         "hook_event_name": "AfterTool",
         "tool_name": "ls",
-        "cwd": workspace,
+        "cwd": str(workspace),
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as MockClient,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
         patch("sys.stdout", new=io.StringIO()),
         patch("time.time") as mock_time,
     ):
-        mock_instance = MockClient.return_value
+        mock_instance = mock_client_class.return_value
 
         # 1. BeforeTool
         mock_time.return_value = 1000.0
@@ -150,7 +161,7 @@ def test_tool_duration_calculation() -> None:
         # Check AfterTool call (last call)
         mock_instance.send.assert_called_with(
             agent="Gemini",
-            workspace=workspace,
+            workspace=str(workspace),
             state="Thinking",
             tool="ls",
             status="completed",
@@ -158,6 +169,4 @@ def test_tool_duration_calculation() -> None:
         )
 
     # Cleanup
-    import shutil
-
     shutil.rmtree(workspace)

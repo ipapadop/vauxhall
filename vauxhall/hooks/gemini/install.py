@@ -11,23 +11,16 @@ import sys
 from pathlib import Path
 
 
-def install():
-    print("Vauxhall Gemini Hook Installer")
-    print("------------------------------")
+def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
+    """Create a virtual environment and install dependencies.
 
-    # 1. Paths and Environment Setup
-    cwd = Path.cwd()
-    install_script_dir = Path(__file__).parent.absolute()
-    hook_script = install_script_dir / "telemetry_hook.py"
-    repo_root = install_script_dir.parents[2]
+    Args:
+        venv_dir: Path to the virtual environment directory.
+        repo_root: Path to the root of the vauxhall repository.
 
-    venv_dir = cwd / ".vauxhall-venv"
-
-    if not hook_script.exists():
-        print(f"Error: Could not find hook script at {hook_script}")
-        sys.exit(1)
-
-    # 2. Create Virtual Environment
+    Returns:
+        Path: The path to the venv's Python executable.
+    """
     if venv_dir.exists():
         print(f"Removing existing venv at {venv_dir}...")
         shutil.rmtree(venv_dir)
@@ -41,7 +34,7 @@ def install():
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    # 3. Install Dependencies
+    # Install Dependencies
     print("Installing dependencies into venv...")
     subprocess.run(
         [str(venv_python), "-m", "pip", "install", "--upgrade", "pip"],
@@ -60,34 +53,49 @@ def install():
         check=True,
         capture_output=True,
     )
+    return venv_python
 
-    # 4. Locate Gemini settings
-    target_settings = cwd / ".gemini" / "settings.json"
-    if not target_settings.parent.exists():
-        print(f"Creating directory: {target_settings.parent}")
-        target_settings.parent.mkdir(parents=True, exist_ok=True)
 
-    # 5. Load current settings
-    settings = {}
-    if target_settings.exists():
-        print(f"Reading existing settings from {target_settings}")
+def load_settings(settings_path: Path) -> dict:
+    """Load Gemini settings from a JSON file.
+
+    Args:
+        settings_path: Path to the settings.json file.
+
+    Returns:
+        dict: The loaded settings dictionary.
+    """
+    if not settings_path.parent.exists():
+        print(f"Creating directory: {settings_path.parent}")
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if settings_path.exists():
+        print(f"Reading existing settings from {settings_path}")
         try:
-            with open(target_settings, "r") as f:
+            with settings_path.open() as f:
                 settings = json.load(f)
             # Create backup
-            backup_path = target_settings.with_suffix(".json.bak")
-            shutil.copy(target_settings, backup_path)
+            backup_path = settings_path.with_suffix(".json.bak")
+            shutil.copy(settings_path, backup_path)
             print(f"Backup created at {backup_path}")
         except Exception as e:
             print(f"Warning: Could not read existing settings: {e}")
+        else:
+            return settings
+    return {}
 
-    # 6. Prepare hook definitions
+
+def purge_vauxhall_hooks(settings: dict) -> None:
+    """Remove existing vauxhall hooks from settings.
+
+    Args:
+        settings: The settings dictionary to modify.
+    """
     if "hooks" not in settings:
-        settings["hooks"] = {}
+        return
 
-    # Purge old vauxhall hooks
     print("Purging old Vauxhall hooks...")
-    for event in settings["hooks"]:
+    for event in list(settings["hooks"].keys()):
         for matcher_group in settings["hooks"][event]:
             if "hooks" in matcher_group:
                 matcher_group["hooks"] = [
@@ -100,8 +108,74 @@ def install():
             mg for mg in settings["hooks"][event] if mg.get("hooks")
         ]
 
-    hook_command = f"{venv_python.absolute()} {hook_script.absolute()}"
 
+def register_hook(settings: dict, event: str, hook_config: dict, command: str) -> None:
+    """Register a single hook in the settings dictionary.
+
+    Args:
+        settings: The settings dictionary to modify.
+        event: The hook event name (e.g., BeforeAgent).
+        hook_config: Dictionary with hook name and description.
+        command: The command to execute for the hook.
+    """
+    if "hooks" not in settings:
+        settings["hooks"] = {}
+
+    if event not in settings["hooks"]:
+        settings["hooks"][event] = []
+
+    new_hook = {
+        "name": hook_config["name"],
+        "type": "command",
+        "command": command,
+        "description": hook_config["description"],
+    }
+
+    installed = False
+    for matcher_group in settings["hooks"][event]:
+        if matcher_group.get("matcher") == "*":
+            hooks_list = matcher_group.setdefault("hooks", [])
+            for i, existing_hook in enumerate(hooks_list):
+                if existing_hook.get("name") == hook_config["name"]:
+                    hooks_list[i] = new_hook
+                    installed = True
+                    break
+            if not installed:
+                hooks_list.append(new_hook)
+                installed = True
+            break
+
+    if not installed:
+        settings["hooks"][event].append({"matcher": "*", "hooks": [new_hook]})
+
+
+def install() -> None:
+    """Main installation entry point."""
+    print("Vauxhall Gemini Hook Installer")
+    print("------------------------------")
+
+    # 1. Paths and Environment Setup
+    cwd = Path.cwd()
+    install_script_dir = Path(__file__).parent.absolute()
+    hook_script = install_script_dir / "telemetry_hook.py"
+    repo_root = install_script_dir.parents[2]
+    venv_dir = cwd / ".vauxhall-venv"
+
+    if not hook_script.exists():
+        print(f"Error: Could not find hook script at {hook_script}")
+        sys.exit(1)
+
+    # 2. Setup Venv
+    venv_python = setup_venv(venv_dir, repo_root)
+
+    # 3. Load settings
+    target_settings = cwd / ".gemini" / "settings.json"
+    settings = load_settings(target_settings)
+
+    # 4. Prepare hooks
+    purge_vauxhall_hooks(settings)
+
+    hook_command = f"{venv_python.absolute()} {hook_script.absolute()}"
     hook_configs = {
         "BeforeAgent": {
             "name": "vauxhall-thinking",
@@ -129,40 +203,14 @@ def install():
         },
     }
 
-    # 7. Inject hooks for all events
+    # 5. Register hooks
     for event, config in hook_configs.items():
-        if event not in settings["hooks"]:
-            settings["hooks"][event] = []
-
-        new_hook = {
-            "name": config["name"],
-            "type": "command",
-            "command": hook_command,
-            "description": config["description"],
-        }
-
-        # Check if a hook with this name already exists in any matcher group
-        installed = False
-        for matcher_group in settings["hooks"][event]:
-            if matcher_group.get("matcher") == "*":
-                hooks_list = matcher_group.get("hooks", [])
-                for i, existing_hook in enumerate(hooks_list):
-                    if existing_hook.get("name") == config["name"]:
-                        hooks_list[i] = new_hook
-                        installed = True
-                        break
-                if not installed:
-                    hooks_list.append(new_hook)
-                    installed = True
-                break
-
-        if not installed:
-            settings["hooks"][event].append({"matcher": "*", "hooks": [new_hook]})
+        register_hook(settings, event, config, hook_command)
         print(f"Registered hook for: {event}")
 
-    # 8. Save settings
+    # 6. Save settings
     try:
-        with open(target_settings, "w") as f:
+        with target_settings.open("w") as f:
             json.dump(settings, f, indent=2)
         print(f"\nSuccess! Hooks installed successfully in {target_settings}")
         print(f"Venv created at {venv_dir}")

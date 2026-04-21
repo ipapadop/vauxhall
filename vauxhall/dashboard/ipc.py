@@ -4,7 +4,8 @@
 """IPC Bridge for the Vauxhall Dashboard."""
 
 import webbrowser
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
@@ -18,7 +19,7 @@ logger = get_logger(__name__)
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
 
-    def __init__(self, on_ready_callback: Optional[Callable[[], Any]] = None) -> None:
+    def __init__(self, on_ready_callback: Callable[[], Any] | None = None) -> None:
         """Initialize the IPC bridge.
 
         Args:
@@ -59,7 +60,8 @@ class DashboardIPC(PyloidIPC):
             int: The stale threshold in seconds.
         """
         logger.debug(
-            f"Frontend requested stale threshold: {settings.dashboard.stale_threshold}s"
+            "Frontend requested stale threshold: %ds",
+            settings.dashboard.stale_threshold,
         )
         return settings.dashboard.stale_threshold
 
@@ -74,12 +76,13 @@ class DashboardIPC(PyloidIPC):
             bool: True if successful, False otherwise.
         """
         try:
-            logger.info(f"Opening URL in system browser: {url}")
+            logger.info("Opening URL in system browser: %s", url)
             webbrowser.open(url)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to open URL: {e}")
+        except Exception:
+            logger.exception("Failed to open URL")
             return False
+        else:
+            return True
 
     @Bridge(str, result=bool)
     def copy_to_clipboard(self, text: str) -> bool:
@@ -93,8 +96,10 @@ class DashboardIPC(PyloidIPC):
         """
         try:
             pyperclip.copy(text)
-            logger.info(f"Copied to clipboard: {text[:50]}...")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to copy to clipboard: {e}")
+            logger.info("Copied to clipboard: %s...", text[:50])
+        except Exception:
+            logger.exception("Failed to copy to clipboard")
             return False
+        else:
+            return True
+

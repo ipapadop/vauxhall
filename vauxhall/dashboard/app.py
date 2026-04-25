@@ -119,6 +119,5 @@ def main() -> None:
     dashboard.run()
 
 
-
 if __name__ == "__main__":
     main()

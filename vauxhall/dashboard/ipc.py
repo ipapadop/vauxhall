@@ -102,4 +102,3 @@ class DashboardIPC(PyloidIPC):
             return False
         else:
             return True
-

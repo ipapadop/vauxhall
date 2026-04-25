@@ -99,7 +99,6 @@ class DashboardSubscriber:
         except Exception:
             logger.exception("Could not connect to MQTT broker")
 
-
     def stop(self) -> None:
         """Stop the background loop and disconnect from the broker."""
         logger.info("Disconnecting from MQTT broker...")

@@ -131,4 +131,3 @@ if __name__ == "__main__":
         t.join()
 
     logger.info("Finished simulating %d agent(s).", args.num_agents)
-

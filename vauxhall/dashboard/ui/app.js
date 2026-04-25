@@ -123,7 +123,7 @@ function init() {
         if (!window.pyloid) return;
 
         initIPC({
-            onAgentUpdate: (data: AgentData) => {
+            onAgentUpdate: (data) => {
                 const key = `${data.agent}:${data.workspace}`;
                 let card = agents[key];
 
@@ -156,7 +156,7 @@ function init() {
                     sortGrid(sortSelect.value, grid);
                 }
             },
-            onStatusUpdate: (msg: string) => {
+            onStatusUpdate: (msg) => {
                 if (status) status.innerText = msg;
             },
             onReady: () => {
@@ -172,7 +172,7 @@ function init() {
                     });
                 }
             },
-            onError: (err: any) => {
+            onError: (err) => {
                 console.error("IPC Error:", err);
                 if (status) status.innerText = err;
             }

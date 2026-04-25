@@ -30,7 +30,7 @@ class TestDashboardComponents(unittest.TestCase):
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""
         ipc = DashboardIPC()
-        with patch("pyperclip.copy") as mock_copy:
+        with patch("vauxhall.dashboard.ipc.pyperclip.copy") as mock_copy:
             result = ipc.copy_to_clipboard("test text")
             mock_copy.assert_called_once_with("test text")
             assert result
@@ -38,7 +38,9 @@ class TestDashboardComponents(unittest.TestCase):
     def test_ipc_copy_to_clipboard_error(self) -> None:
         """Test that clipboard errors are handled gracefully."""
         ipc = DashboardIPC()
-        with patch("pyperclip.copy", side_effect=Exception("error")):
+        with patch(
+            "vauxhall.dashboard.ipc.pyperclip.copy", side_effect=Exception("error")
+        ):
             result = ipc.copy_to_clipboard("test text")
             assert not result
 

@@ -32,7 +32,7 @@ def test_ipc_get_stale_threshold() -> None:
     assert ipc.get_stale_threshold() == settings.dashboard.stale_threshold
 
 
-@patch("pyperclip.copy")
+@patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
     """Verify that copy_to_clipboard calls pyperclip."""
     ipc = DashboardIPC()
@@ -40,7 +40,7 @@ def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
     mock_copy.assert_called_once_with("test text")
 
 
-@patch("pyperclip.copy")
+@patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard_error(mock_copy: MagicMock) -> None:
     """Verify that copy_to_clipboard handles errors gracefully."""
     mock_copy.side_effect = Exception("clipboard error")

@@ -20,12 +20,50 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
+from vauxhall.dashboard.app import DashboardApp
 from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
 
 class TestDashboardComponents(unittest.TestCase):
     """Tests for IPC and Subscriber components."""
+
+    def setUp(self) -> None:
+        """Set up the test environment."""
+        self.mock_app = MagicMock()
+        self.dashboard = DashboardApp(self.mock_app)
+        self.dashboard.window = MagicMock()
+
+    def test_on_telemetry_missing_fields(self) -> None:
+        """Verify that telemetry missing required fields is dropped."""
+        self.dashboard.ipc.is_ready = True
+
+        # Missing workspace
+        self.dashboard.on_telemetry({"agent": "TestAgent", "state": "Idle"})
+        self.dashboard.window.invoke.assert_not_called()
+        assert len(self.dashboard.pending_updates) == 0
+
+        # Missing state
+        self.dashboard.on_telemetry({"agent": "TestAgent", "workspace": "/path"})
+        self.dashboard.window.invoke.assert_not_called()
+        assert len(self.dashboard.pending_updates) == 0
+
+    def test_on_telemetry_queuing(self) -> None:
+        """Verify that telemetry is queued when IPC is not ready and flushed on drain."""
+        self.dashboard.ipc.is_ready = False
+
+        valid_data = {"agent": "TestAgent", "workspace": "/path", "state": "Acting"}
+        self.dashboard.on_telemetry(valid_data)
+
+        # Should be queued, not invoked
+        self.dashboard.window.invoke.assert_not_called()
+        assert len(self.dashboard.pending_updates) == 1
+        assert self.dashboard.pending_updates[0] == valid_data
+
+        # Drain queue
+        self.dashboard.drain_queue()
+        self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
+        assert len(self.dashboard.pending_updates) == 0
 
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""

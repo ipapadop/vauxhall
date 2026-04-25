@@ -62,7 +62,7 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     agent_id = f"test-{agent_idx}"
     topic = f"vauxhall/agents/{agent_id}/activity"
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
-    workspace = Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}"
+    workspace = str(Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}")
 
     envs = ["local", "remote"]
     env = random.choice(envs)

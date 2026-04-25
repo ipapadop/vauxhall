@@ -80,12 +80,12 @@ python3 -m vauxhall.dashboard.app
 Vauxhall supports multiple agents through customizable hooks. See [AGENTS.md](AGENTS.md) for detailed integration instructions for Gemini CLI and other tools.
 
 ### 4. Simulation
-To see the dashboard in action without running actual agents, use the simulation script:
+To see the dashboard in action without running actual agents, use the simulation script to publish mock telemetry data for multiple agents:
 ```bash
 python3 scripts/simulate_agent.py -n 5 -t 20
 ```
-*   `-n`: Number of agents to simulate.
-*   `-t`: Number of transitions (events) per agent.
+*   `-n`, `--num-agents`: Number of concurrent agents to simulate.
+*   `-t`, `--num-transitions`: Number of telemetry events (transitions) to send per agent.
 
 
 ## Project Structure

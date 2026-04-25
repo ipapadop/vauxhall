@@ -15,7 +15,7 @@ import { updateTokenHistory } from './state.js';
  * @param {number[]} history - The history of values.
  * @returns {string} The points string for a polyline.
  */
-export function generateSparklinePath(history: number[]): string {
+export function generateSparklinePath(history) {
     if (!history || history.length < 2) return "";
     
     const width = 100;
@@ -38,11 +38,11 @@ export function generateSparklinePath(history: number[]): string {
  * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
  * @returns {AgentHTMLElement} The created card.
  */
-export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback: (key: string) => void): AgentHTMLElement {
+export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback: (key) => void): AgentHTMLElement {
     // Guess environment if not provided
     const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
     
-    const card = document.createElement('div') as AgentHTMLElement;
+    const card = document.createElement('div') ;
     card.className = 'agent-card';
     card.title = "Click to copy workspace path";
     card.innerHTML = `
@@ -100,7 +100,7 @@ export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback:
  * @param {any} details - The telemetry details.
  * @returns {string} A formatted string describing the action.
  */
-function getDetailsString(details: any): string {
+function getDetailsString(details: any) {
     if (!details) return "";
     if (details.tool) {
         return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
@@ -118,7 +118,7 @@ function getDetailsString(details: any): string {
  * Updates an agent card with new telemetry.
  * Handles state styles, metrics, sparklines, and the 5-event rolling log.
  */
-export function updateCard(card: AgentHTMLElement, data: AgentData) {
+export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
@@ -210,7 +210,7 @@ function showCopyFeedback(card: HTMLElement) {
 /**
  * Filters the agent grid.
  */
-export function filterGrid(query: string, agents: Record<string, AgentHTMLElement>) {
+export function filterGrid(query, agents: Record<string, AgentHTMLElement>) {
     Object.values(agents).forEach(card => {
         const nameElement = card.querySelector('.agent-name');
         const workspaceElement = card.querySelector('.agent-workspace');
@@ -229,8 +229,8 @@ export function filterGrid(query: string, agents: Record<string, AgentHTMLElemen
 /**
  * Sorts the agent grid.
  */
-export function sortGrid(criteria: string, grid: HTMLElement) {
-    const cardsArray = Array.from(grid.children) as AgentHTMLElement[];
+export function sortGrid(criteria, grid: HTMLElement) {
+    const cardsArray = Array.from(grid.children) ;
 
     // FIRST: Record positions
     const firstPositions = cardsArray.map(card => {
@@ -292,7 +292,7 @@ export function sortGrid(criteria: string, grid: HTMLElement) {
 /**
  * Checks for stale agents and updates the last seen timer.
  */
-export function checkStaleness(agents: Record<string, AgentHTMLElement>, staleThresholdMs: number = 120000) {
+export function checkStaleness(agents, staleThresholdMs = 120000) {
     const now = Date.now();
 
     Object.values(agents).forEach(card => {
@@ -332,7 +332,7 @@ let isInteractingWithModal = false;
  * @param {Record<string, AgentHTMLElement>} agents - Global agents state object.
  * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
  */
-export function openHistoryModal(agentKey: string, agents: Record<string, AgentHTMLElement>, isSilent: boolean = false) {
+export function openHistoryModal(agentKey, agents: Record<string, AgentHTMLElement>, isSilent: boolean = false) {
     const card = agents[agentKey];
     if (!card || !card.history) return;
 

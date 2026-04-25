@@ -30,12 +30,12 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
 1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker. See [AGENTS.md](AGENTS.md) for integration details.
 2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
-3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a modern **TypeScript + Vite** frontend.
+3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a modern **Vanilla JavaScript** frontend.
 
 ## Prerequisites
 
 - **Python 3.10+**
-- **Node.js 18+**
+
 - **Mosquitto MQTT Broker**: Install via your package manager (e.g., `brew install mosquitto` or `sudo apt install mosquitto`).
 
 ## Installation
@@ -84,7 +84,7 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based dashboard application (Python logic + TypeScript/Vite UI).
+- `vauxhall/dashboard/`: The Pyloid-based dashboard application (Python logic + Vanilla JS UI).
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.
@@ -94,7 +94,6 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
 - **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
-- **Node.js**: Always run `npm run build` after making changes to the frontend in `vauxhall/dashboard/ui/`.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.
 
 ## License

@@ -57,12 +57,6 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
     pip install .
     ```
 
-4.  **Install Frontend dependencies and Build**:
-    ```bash
-    npm install
-    npm run build
-    ```
-
 ## Usage
 
 ### 1. Start the MQTT Broker

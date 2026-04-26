@@ -57,6 +57,25 @@ class TelemetryClient:
         self.host = host if host is not None else settings.mqtt.host
         self.port = port if port is not None else settings.mqtt.port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.is_connected = False
+
+
+    def __enter__(self) -> "TelemetryClient":
+        """Enter the context manager, establishing a persistent connection."""
+        try:
+            self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
+            self.client.loop_start()
+            self.is_connected = True
+        except Exception:
+            logger.debug("Failed to connect telemetry client inside context manager")
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        """Exit the context manager, closing the connection."""
+        if self.is_connected:
+            self.client.loop_stop()
+            self.client.disconnect()
+            self.is_connected = False
 
     def send(
         self,
@@ -81,10 +100,15 @@ class TelemetryClient:
         payload = format_message(agent, workspace, state, env, **details)
         topic = f"vauxhall/agents/{agent.lower()}/activity"
         try:
-            self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
-            publish_result = self.client.publish(topic, payload)
-            publish_result.wait_for_publish()
-            self.client.disconnect()
+            if not self.is_connected:
+                # Fallback for ad-hoc sends without context manager
+                self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
+                publish_result = self.client.publish(topic, payload)
+                publish_result.wait_for_publish()
+                self.client.disconnect()
+            else:
+                # Use persistent connection
+                self.client.publish(topic, payload)
             logger.debug("Successfully sent telemetry for %s to %s", agent, topic)
         except Exception:
             logger.debug("Failed to send telemetry for %s", agent)

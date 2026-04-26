@@ -76,7 +76,7 @@ Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, 
 - Paths starting with `/home` or `C:\` default to **LOCAL**.
 - Other absolute paths default to **REMOTE**.
 
-If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**. Additionally, an **SVG Sparkline** in the card body will visualize the trend of the last 20 token counts.
+If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**.
 
 ### Real-Time Activity Log
 The `log-area` on each card is a real-time append-only stream of the **last 5 events**. Any update containing a `tool` or `cmd` will append a new line with a timestamp (`[HH:mm:ss]`). This area is non-scrolling to keep the dashboard clean.

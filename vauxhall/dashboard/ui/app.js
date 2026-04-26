@@ -4,7 +4,7 @@
  */
 
 /**
- * @file app.ts
+ * @file app.js
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
@@ -24,9 +24,9 @@ function init() {
     const clearStaleBtn = document.getElementById('clear-stale-btn');
     const themeToggle = document.getElementById('theme-toggle');
     const logoLink = document.getElementById('logo-link');
-    const searchInput = document.getElementById('search-input') as HTMLInputElement;
-    const sortSelect = document.getElementById('sort-select') as HTMLSelectElement;
-    const closeBtn = document.querySelector('.close-btn') as HTMLElement;
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+    const closeBtn = document.querySelector('.close-btn');
     const modal = document.getElementById('history-modal');
     
     // Theme Management
@@ -77,13 +77,13 @@ function init() {
 
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
-            filterGrid((e.target as HTMLInputElement).value.toLowerCase(), agents);
+            filterGrid(e.target.value.toLowerCase(), agents);
         });
     }
 
     if (sortSelect) {
         sortSelect.addEventListener('change', (e) => {
-            sortGrid((e.target as HTMLSelectElement).value, grid);
+            sortGrid(e.target.value, grid);
         });
     }
 

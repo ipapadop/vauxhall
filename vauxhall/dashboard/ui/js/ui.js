@@ -1,15 +1,25 @@
 /**
+ * SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
+ * @file ui.js
+ * @description Handles DOM manipulation, card creation, and updates.
+ */
+
+/**
  * Creates an agent card element.
- * @param {AgentData} data - Initial telemetry data.
+ * @param {object} data - Initial telemetry data.
  * @param {any} pyloidIpc - Pyloid IPC bridge.
  * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
- * @returns {AgentHTMLElement} The created card.
+ * @returns {HTMLElement} The created card.
  */
 export function createCard(data, pyloidIpc, openHistoryCallback) {
     // Guess environment if not provided
     const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
     
-    const card = document.createElement('div') ;
+    const card = document.createElement('div');
     card.className = 'agent-card';
     card.title = "Click to copy workspace path";
     card.innerHTML = `
@@ -60,7 +70,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
 
 /**
  * Formats the details object into a human-readable action string.
- * @param {any} details - The telemetry details.
+ * @param {object} details - The telemetry details.
  * @returns {string} A formatted string describing the action.
  */
 function getDetailsString(details) {
@@ -80,6 +90,8 @@ function getDetailsString(details) {
 /**
  * Updates an agent card with new telemetry.
  * Handles state styles, metrics, and the 5-event rolling log.
+ * @param {HTMLElement} card - The agent card element.
+ * @param {object} data - The telemetry data.
  */
 export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
@@ -109,13 +121,6 @@ export function updateCard(card, data) {
     // Accumulate metrics
     if (details.tokens) card.latestTokens = details.tokens;
     if (details.duration) card.latestDuration = details.duration;
-
-    // Update Token History & SVG Sparkline
-    updateTokenHistory(card, details.tokens);
-    const polyline = card.querySelector('.sparkline polyline');
-    if (polyline && card.tokenHistory) {
-        polyline.setAttribute('points', generateSparklinePath(card.tokenHistory));
-    }
 
     // Update Footer Metric Badges
     if (metricsArea) {
@@ -162,8 +167,9 @@ export function updateCard(card, data) {
 
 /**
  * Shows "Copied!" feedback on a card.
+ * @param {HTMLElement} card - The agent card element.
  */
-function showCopyFeedback(card: HTMLElement) {
+function showCopyFeedback(card) {
     card.classList.add('copied');
     setTimeout(() => {
         card.classList.remove('copied');
@@ -172,6 +178,8 @@ function showCopyFeedback(card: HTMLElement) {
 
 /**
  * Filters the agent grid.
+ * @param {string} query - The search query.
+ * @param {object} agents - The agents state object.
  */
 export function filterGrid(query, agents) {
     Object.values(agents).forEach(card => {
@@ -191,9 +199,11 @@ export function filterGrid(query, agents) {
 
 /**
  * Sorts the agent grid.
+ * @param {string} criteria - The sort criteria.
+ * @param {HTMLElement} grid - The agent grid element.
  */
-export function sortGrid(criteria, grid: HTMLElement) {
-    const cardsArray = Array.from(grid.children) ;
+export function sortGrid(criteria, grid) {
+    const cardsArray = Array.from(grid.children);
 
     // FIRST: Record positions
     const firstPositions = cardsArray.map(card => {
@@ -254,6 +264,8 @@ export function sortGrid(criteria, grid: HTMLElement) {
 
 /**
  * Checks for stale agents and updates the last seen timer.
+ * @param {object} agents - The agents state object.
+ * @param {number} staleThresholdMs - The staleness threshold in milliseconds.
  */
 export function checkStaleness(agents, staleThresholdMs = 120000) {
     const now = Date.now();
@@ -292,7 +304,7 @@ let isInteractingWithModal = false;
  * Supports real-time updates and resizable behavior.
  * 
  * @param {string} agentKey - Unique key for the agent.
- * @param {Record<string, AgentHTMLElement>} agents - Global agents state object.
+ * @param {object} agents - Global agents state object.
  * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
  */
 export function openHistoryModal(agentKey, agents, isSilent = false) {

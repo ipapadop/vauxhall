@@ -156,15 +156,15 @@ export function updateCard(card, data) {
         logLine.innerHTML = `<span style="color: var(--text-dim)">[${time}]</span> `;
         logLine.appendChild(document.createTextNode(newLogMessage));
         
-        logArea.appendChild(logLine);
+        logArea.prepend(logLine);
 
-        // Enforce 5-event limit for the card view
+        // Enforce 5-event limit for the card view (remove oldest from bottom)
         while (logArea.children.length > 5) {
-            logArea.removeChild(logArea.firstElementChild);
+            logArea.removeChild(logArea.lastElementChild);
         }
 
-        // Auto-scroll to bottom
-        logArea.scrollTop = logArea.scrollHeight;
+        // Keep view at the top (newest)
+        logArea.scrollTop = 0;
     }
 }
 

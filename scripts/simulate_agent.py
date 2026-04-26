@@ -17,8 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-import paho.mqtt.client as mqtt
 
+from vauxhall.hooks.client import TelemetryClient
 from vauxhall.logging_config import get_logger, setup_logging
 
 logger = get_logger(__name__)
@@ -52,45 +52,42 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
         agent_idx: The index of the agent being simulated (used for unique naming).
         transitions: The number of event transitions to simulate for this agent.
     """
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    try:
-        client.connect("localhost", 1883)
-    except Exception:
-        logger.exception("Agent-%d could not connect to broker", agent_idx)
-        return
-
-    agent_id = f"test-{agent_idx}"
-    topic = f"vauxhall/agents/{agent_id}/activity"
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
     workspace = str(Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}")
 
     envs = ["local", "remote"]
     env = random.choice(envs)
 
-    for i in range(transitions):
-        op = random.choice(POSSIBLE_OPERATIONS)
-        payload = {
-            "agent": agent_name,
-            "env": env,
-            "workspace": workspace,
-            "state": op["state"],
-            "details": {
+    with TelemetryClient("localhost", 1883) as client:
+        if not client.is_connected:
+            logger.error("Agent-%d could not connect to broker", agent_idx)
+            return
+
+        for i in range(transitions):
+            op = random.choice(POSSIBLE_OPERATIONS)
+            details = {
                 **op["details"],
                 "tokens": random.randint(100, 5000),
                 "duration": round(random.uniform(0.5, 30.0), 1),
-            },
-        }
-        client.publish(topic, json.dumps(payload))
-        logger.info(
-            "Agent %s published transition %d/%d: %s",
-            agent_name,
-            i + 1,
-            transitions,
-            op["state"],
-        )
-        time.sleep(1)
+            }
+            
+            client.send(
+                agent=agent_name,
+                workspace=workspace,
+                state=op["state"],
+                env=env,
+                **details
+            )
+            
+            logger.info(
+                "Agent %s published transition %d/%d: %s",
+                agent_name,
+                i + 1,
+                transitions,
+                op["state"],
+            )
+            time.sleep(1)
 
-    client.disconnect()
     logger.info("Agent %s finished %d transitions.", agent_name, transitions)
 
 

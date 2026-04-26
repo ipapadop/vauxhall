@@ -215,9 +215,16 @@ header {
     border-radius: 4px;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.85em;
-    height: 110px; /* Fixed height for ~5-6 lines */
-    overflow: hidden;
+    line-height: 1.4;
+    height: 130px; /* Comfortable height for 5-6 lines */
+    overflow-y: auto;
     white-space: pre-wrap;
+    word-break: break-all;
+    margin-bottom: 12px;
+}
+
+.log-line {
+    margin-bottom: 4px;
 }
 
 .agent-footer {

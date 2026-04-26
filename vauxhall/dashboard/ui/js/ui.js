@@ -1,37 +1,4 @@
 /**
- * SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
- * SPDX-License-Identifier: MIT
- */
-
-/**
- * @file ui.ts
- * @description Handles DOM manipulation, card creation, and updates.
- */
-
-import { updateTokenHistory } from './state.js';
-
-/**
- * Generates an SVG polyline points string for a sparkline.
- * @param {number[]} history - The history of values.
- * @returns {string} The points string for a polyline.
- */
-export function generateSparklinePath(history) {
-    if (!history || history.length < 2) return "";
-    
-    const width = 100;
-    const height = 20;
-    const max = Math.max(...history);
-    const min = Math.min(...history);
-    const range = (max - min) || 1;
-    
-    return history.map((val, i) => {
-        const x = (i / (history.length - 1)) * width;
-        const y = height - ((val - min) / range) * height;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
-}
-
-/**
  * Creates an agent card element.
  * @param {AgentData} data - Initial telemetry data.
  * @param {any} pyloidIpc - Pyloid IPC bridge.
@@ -56,11 +23,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
             </div>
             <div class="status-badge" title="Current agent state">Idle</div>
         </div>
-        <div class="stats-row">
-            <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" title="Token usage trend over the last 20 operations">
-                <polyline points="" fill="none" stroke="var(--accent-color)" stroke-width="1" vector-effect="non-scaling-stroke"></polyline>
-            </svg>
-        </div>
+        
         <div class="log-area" title="Real-time operations log (shows last 5 events)">Ready...</div>
         <div class="agent-footer">
             <div class="footer-meta">
@@ -116,7 +79,7 @@ function getDetailsString(details) {
 
 /**
  * Updates an agent card with new telemetry.
- * Handles state styles, metrics, sparklines, and the 5-event rolling log.
+ * Handles state styles, metrics, and the 5-event rolling log.
  */
 export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');

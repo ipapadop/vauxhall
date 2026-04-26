@@ -162,6 +162,9 @@ export function updateCard(card, data) {
         while (logArea.children.length > 5) {
             logArea.removeChild(logArea.firstElementChild);
         }
+
+        // Auto-scroll to bottom
+        logArea.scrollTop = logArea.scrollHeight;
     }
 }
 

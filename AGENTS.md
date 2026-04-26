@@ -76,7 +76,6 @@ Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, 
 - Paths starting with `/home` or `C:\` default to **LOCAL**.
 - Other absolute paths default to **REMOTE**.
 
-### Metrics & Sparklines
 If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**. Additionally, an **SVG Sparkline** in the card body will visualize the trend of the last 20 token counts.
 
 ### Real-Time Activity Log

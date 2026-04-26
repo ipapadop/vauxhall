@@ -51,7 +51,7 @@ export function clearAgents() {
  * Removes a specific agent from the state.
  * @param {string} key - The agent key.
  */
-export function removeAgent(key: string) {
+export function removeAgent(key) {
     delete agents[key];
 }
 

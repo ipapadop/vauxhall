@@ -38,7 +38,7 @@ export function generateSparklinePath(history) {
  * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
  * @returns {AgentHTMLElement} The created card.
  */
-export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback: (key) => void): AgentHTMLElement {
+export function createCard(data, pyloidIpc, openHistoryCallback) {
     // Guess environment if not provided
     const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
     
@@ -84,7 +84,7 @@ export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback:
     // Setup Workspace Copy Trigger
     card.addEventListener('click', () => {
         if (pyloidIpc && pyloidIpc.DashboardIPC) {
-            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then((success: boolean) => {
+            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then((success) => {
                 if (success) {
                     showCopyFeedback(card);
                 }
@@ -100,7 +100,7 @@ export function createCard(data: AgentData, pyloidIpc: any, openHistoryCallback:
  * @param {any} details - The telemetry details.
  * @returns {string} A formatted string describing the action.
  */
-function getDetailsString(details: any) {
+function getDetailsString(details) {
     if (!details) return "";
     if (details.tool) {
         return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
@@ -210,7 +210,7 @@ function showCopyFeedback(card: HTMLElement) {
 /**
  * Filters the agent grid.
  */
-export function filterGrid(query, agents: Record<string, AgentHTMLElement>) {
+export function filterGrid(query, agents) {
     Object.values(agents).forEach(card => {
         const nameElement = card.querySelector('.agent-name');
         const workspaceElement = card.querySelector('.agent-workspace');
@@ -247,13 +247,13 @@ export function sortGrid(criteria, grid: HTMLElement) {
         } else if (criteria === 'recent') {
             return parseInt(b.dataset.lastSeen || '0') - parseInt(a.dataset.lastSeen || '0');
         } else if (criteria === 'status') {
-            const statusOrder: Record<string, number> = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+            const statusOrder = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
             const statusA = a.querySelector('.status-badge')?.textContent || '';
             const statusB = b.querySelector('.status-badge')?.textContent || '';
             return (statusOrder[statusA] ?? 9) - (statusOrder[statusB] ?? 9);
         } else if (criteria === 'tokens') {
-            const tokensA = parseInt((a.querySelector('.metric-badge.tokens') as HTMLElement)?.dataset.value || '0');
-            const tokensB = parseInt((b.querySelector('.metric-badge.tokens') as HTMLElement)?.dataset.value || '0');
+            const tokensA = parseInt(a.querySelector('.metric-badge.tokens')?.dataset.value || '0');
+            const tokensB = parseInt(b.querySelector('.metric-badge.tokens')?.dataset.value || '0');
             return tokensB - tokensA;
         }
         return 0;
@@ -332,7 +332,7 @@ let isInteractingWithModal = false;
  * @param {Record<string, AgentHTMLElement>} agents - Global agents state object.
  * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
  */
-export function openHistoryModal(agentKey, agents: Record<string, AgentHTMLElement>, isSilent: boolean = false) {
+export function openHistoryModal(agentKey, agents, isSilent = false) {
     const card = agents[agentKey];
     if (!card || !card.history) return;
 
@@ -349,15 +349,15 @@ export function openHistoryModal(agentKey, agents: Record<string, AgentHTMLEleme
     const oldScrollTop = body.scrollTop;
 
     // Initialize interaction listeners (only once)
-    if (!(body as any).hasListeners) {
+    if (!body.hasListeners) {
         body.addEventListener('pointerdown', () => { isInteractingWithModal = true; });
         window.addEventListener('pointerup', () => { isInteractingWithModal = false; });
         window.addEventListener('pointercancel', () => { isInteractingWithModal = false; });
-        (body as any).hasListeners = true;
+        body.hasListeners = true;
     }
 
-    const searchTerm = (document.getElementById('modal-search') as HTMLInputElement)?.value.toLowerCase() || '';
-    const stateFilter = (document.getElementById('modal-state-filter') as HTMLSelectElement)?.value || 'ALL';
+    const searchTerm = document.getElementById('modal-search')?.value.toLowerCase() || '';
+    const stateFilter = document.getElementById('modal-state-filter')?.value || 'ALL';
 
     const filteredHistory = card.history.filter(item => {
         const matchesSearch = getDetailsString(item.details).toLowerCase().includes(searchTerm);

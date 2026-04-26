@@ -53,7 +53,7 @@ function init() {
     }
 
     // Tracks which agent is currently being viewed in the modal for live updates
-    let currentHistoryKey: string | null = null;
+    let currentHistoryKey = null;
 
     // Setup Event Listeners
     if (clearBtn) {

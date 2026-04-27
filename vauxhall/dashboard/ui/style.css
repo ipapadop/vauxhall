@@ -227,6 +227,35 @@ header {
     margin-bottom: 4px;
 }
 
+.log-acting {
+    color: var(--accent-color);
+    font-weight: bold;
+}
+
+.log-tool {
+    color: var(--accent-color);
+}
+
+.log-cmd {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.log-prompt {
+    color: var(--waiting-color);
+    font-weight: bold;
+}
+
+.log-error {
+    color: var(--error-color);
+    font-weight: bold;
+}
+
+.log-completed {
+    color: var(--working-color);
+    font-weight: bold;
+}
+
 .agent-footer {
     display: flex;
     justify-content: space-between;

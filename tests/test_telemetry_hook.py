@@ -30,6 +30,7 @@ def test_notification_tool_permission() -> None:
         patch("sys.stdout", new=io.StringIO()),
     ):
         mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -58,6 +59,7 @@ def test_ask_user_tool() -> None:
         patch("sys.stdout", new=io.StringIO()),
     ):
         mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -85,6 +87,7 @@ def test_ask_question_tool() -> None:
         patch("sys.stdout", new=io.StringIO()),
     ):
         mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -111,6 +114,7 @@ def test_after_model_tokens() -> None:
         patch("sys.stdout", new=io.StringIO()),
     ):
         mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
         main()
 
         mock_instance.send.assert_called_once_with(
@@ -147,6 +151,7 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
         patch("time.time") as mock_time,
     ):
         mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
 
         # 1. BeforeTool
         mock_time.return_value = 1000.0

@@ -21,7 +21,7 @@ export function updateAgentHistory(card, data) {
     card.history.unshift({
         time: new Date().toLocaleTimeString(),
         state: data.state,
-        details: JSON.parse(JSON.stringify(data.details || {})) // deep copy
+        details: structuredClone(data.details || {}) // deep copy
     });
     
     if (card.history.length > 20) {

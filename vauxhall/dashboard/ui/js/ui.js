@@ -80,31 +80,31 @@ function getDetailsString(data) {
 
     // Prioritize prompt for waiting states
     if (state === 'Waiting for Input' || state === 'Input Required' || state === 'Waiting') {
-        if (details.prompt) return `Prompt: ${details.prompt}`;
+        if (details.prompt) return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
         if (details.message) return details.message;
     }
 
     if (details.error) {
-        return `Error: ${details.error}`;
+        return `<span class="log-error">Error:</span> ${details.error}`;
     }
 
     if (details.tool) {
         // If it's a known placeholder, and we have something better, use it
         if (details.tool === 'unknown' || details.tool === 'unknown_tool') {
-             if (details.prompt) return `Prompt: ${details.prompt}`;
+             if (details.prompt) return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
              if (details.status) return details.status;
         }
 
         // For AfterTool (Thinking state), show "Completed"
         if (state === 'Thinking' && details.status === 'completed') {
-            return `Completed: ${details.tool}`;
+            return `<span class="log-completed">Completed:</span> <span class="log-tool">${details.tool}</span>`;
         }
 
-        return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
+        return `<span class="log-acting">Running:</span> <span class="log-tool">${details.tool}</span>${details.cmd ? ' <span class="log-cmd">' + details.cmd + '</span>' : ''}`;
     }
 
     if (details.prompt) {
-        return `Prompt: ${details.prompt}`;
+        return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
     }
 
     if (details.status) {
@@ -180,8 +180,7 @@ export function updateCard(card, data) {
 
         const logLine = document.createElement('div');
         logLine.className = 'log-line';
-        logLine.innerHTML = `<span style="color: var(--text-dim)">[${time}]</span> `;
-        logLine.appendChild(document.createTextNode(newLogMessage));
+        logLine.innerHTML = `<span style="color: var(--text-dim)">[${time}]</span> ${newLogMessage}`;
         
         logArea.prepend(logLine);
 

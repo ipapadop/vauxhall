@@ -4,9 +4,9 @@
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
+from typing import Self
 
 import paho.mqtt.client as mqtt
-from typing_extensions import Self
 
 from vauxhall.config import settings
 from vauxhall.logging_config import get_logger

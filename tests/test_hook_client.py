@@ -47,19 +47,19 @@ def test_telemetry_client_context_manager() -> None:
     with patch("vauxhall.hooks.client.mqtt.Client") as mock_mqtt:
         mock_mqtt_instance = MagicMock()
         mock_mqtt.return_value = mock_mqtt_instance
-        
+
         with TelemetryClient() as client:
             assert client.is_connected
             mock_mqtt_instance.connect.assert_called_once()
             mock_mqtt_instance.loop_start.assert_called_once()
-            
+
             client.send("Agent", "/path", "Acting")
-            
+
             # publish should be called, but not a new connect/disconnect
             mock_mqtt_instance.publish.assert_called_once()
             assert mock_mqtt_instance.connect.call_count == 1
             mock_mqtt_instance.disconnect.assert_not_called()
-            
+
         # After context, it should disconnect
         assert not client.is_connected
         mock_mqtt_instance.loop_stop.assert_called_once()

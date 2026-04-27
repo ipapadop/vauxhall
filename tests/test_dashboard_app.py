@@ -20,7 +20,7 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
-from vauxhall.dashboard.app import DashboardApp
+from vauxhall.dashboard.app import DashboardApp  # noqa: E402
 from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
@@ -49,7 +49,7 @@ class TestDashboardComponents(unittest.TestCase):
         assert len(self.dashboard.pending_updates) == 0
 
     def test_on_telemetry_queuing(self) -> None:
-        """Verify that telemetry is queued when IPC is not ready and flushed on drain."""
+        """Verify that telemetry queued when IPC is not ready and flushed on drain."""
         self.dashboard.ipc.is_ready = False
 
         valid_data = {"agent": "TestAgent", "workspace": "/path", "state": "Acting"}

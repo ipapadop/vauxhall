@@ -94,7 +94,9 @@ class DashboardSubscriber:
         """Connect to the broker and start the background loop."""
         logger.info("Connecting to MQTT broker at %s:%d...", self.host, self.port)
         try:
-            self.client.connect_async(self.host, self.port, keepalive=settings.mqtt.keepalive)
+            self.client.connect_async(
+                self.host, self.port, keepalive=settings.mqtt.keepalive
+            )
             self.client.loop_start()
         except Exception:
             logger.exception("Failed to initialize async connection to MQTT broker")

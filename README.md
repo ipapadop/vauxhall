@@ -87,7 +87,6 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.
-- `docs/superpowers/specs/`: Detailed design and architecture documentation.
 
 ## Development
 

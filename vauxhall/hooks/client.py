@@ -6,6 +6,7 @@
 import json
 
 import paho.mqtt.client as mqtt
+from typing_extensions import Self
 
 from vauxhall.config import settings
 from vauxhall.logging_config import get_logger
@@ -59,8 +60,7 @@ class TelemetryClient:
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.is_connected = False
 
-
-    def __enter__(self) -> "TelemetryClient":
+    def __enter__(self) -> Self:
         """Enter the context manager, establishing a persistent connection."""
         try:
             self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
@@ -102,7 +102,9 @@ class TelemetryClient:
         try:
             if not self.is_connected:
                 # Fallback for ad-hoc sends without context manager
-                self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
+                self.client.connect(
+                    self.host, self.port, keepalive=settings.mqtt.keepalive
+                )
                 publish_result = self.client.publish(topic, payload)
                 publish_result.wait_for_publish()
                 self.client.disconnect()

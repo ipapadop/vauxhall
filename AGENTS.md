@@ -79,7 +79,13 @@ Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, 
 If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**.
 
 ### Real-Time Activity Log
-The `log-area` on each card is a real-time append-only stream of the **last 5 events**. Any update containing a `tool` or `cmd` will append a new line with a timestamp (`[HH:mm:ss]`). This area is non-scrolling to keep the dashboard clean.
+The `log-area` on each card is a real-time append-only stream of the **last 5 events**. Any update containing a `tool`, `cmd`, or `prompt` will append a new line with a timestamp (`[HH:mm:ss]`).
+
+- **Acting**: Shows "Running: <tool> <cmd>".
+- **Waiting**: Shows "Prompt: <prompt>" (prioritized over tool names).
+- **Thinking**: Shows "Completed: <tool>" or the specific status message.
+
+This area is non-scrolling to keep the dashboard clean.
 
 ### Session History & Audit
 The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.

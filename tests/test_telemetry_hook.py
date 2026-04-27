@@ -175,3 +175,28 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
 
     # Cleanup
     shutil.rmtree(workspace)
+
+
+def test_unknown_tool_before_tool() -> None:
+    """Verify that an unknown tool in BeforeTool does not send 'tool' key."""
+    hook_data = {
+        "hook_event_name": "BeforeTool",
+        "cwd": "/workspace",
+    }
+
+    with (
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
+        main()
+
+        # Should NOT have 'tool' key
+        mock_instance.send.assert_called_once()
+        kwargs = mock_instance.send.call_args.kwargs
+        assert "tool" not in kwargs
+        assert kwargs["state"] == "Acting"

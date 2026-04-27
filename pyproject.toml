@@ -65,3 +65,7 @@ ignore-var-parameters = true  # ignore missing documentation for *args and **kwa
 docstring-code-format = true
 docstring-code-line-length = 20
 quote-style = "double"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

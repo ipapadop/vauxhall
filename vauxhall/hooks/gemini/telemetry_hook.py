@@ -130,7 +130,6 @@ def main() -> None:
         return
 
     setup_logging()
-    client = TelemetryClient()
 
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")
@@ -169,7 +168,8 @@ def main() -> None:
         state = "Idle"
         details = {"hook": hook_type}
 
-    client.send(agent=agent_name, workspace=workspace, state=state, **details)
+    with TelemetryClient() as client:
+        client.send(agent=agent_name, workspace=workspace, state=state, **details)
     print("{}")
 
 

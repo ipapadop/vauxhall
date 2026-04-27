@@ -4,7 +4,7 @@
  */
 
 /**
- * @file ipc.ts
+ * @file ipc.js
  * @description Manages communication with the Python backend.
  */
 

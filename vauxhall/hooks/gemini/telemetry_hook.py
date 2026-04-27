@@ -32,10 +32,12 @@ def handle_notification(
     notification_type = input_data.get("notification_type", "")
     if notification_type == "ToolPermission":
         state = "Waiting for Input"
+        tool_name = input_data.get("details", {}).get("tool_name", "unknown")
         details = {
             "prompt": input_data.get("message", "Permission required..."),
-            "tool": input_data.get("details", {}).get("tool_name", "unknown"),
         }
+        if tool_name != "unknown":
+            details["tool"] = tool_name
         return state, details
     return None
 
@@ -52,7 +54,7 @@ def handle_before_tool(
     Returns:
         tuple[str, dict[str, Any]]: (state, details).
     """
-    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
+    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
     tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
 
     # Record start time for duration calculation
@@ -83,10 +85,12 @@ def handle_before_tool(
             cmd_display = tool_input.get("file_path", "")
 
         details = {
-            "tool": tool_name,
             "cmd": cmd_display,
             "args": json.dumps(tool_input),
         }
+        if tool_name != "unknown":
+            details["tool"] = tool_name
+
     return state, details
 
 
@@ -103,8 +107,10 @@ def handle_after_tool(
         tuple[str, dict[str, Any]]: (state, details).
     """
     state = "Thinking"
-    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown_tool"))
-    details = {"tool": tool_name, "status": "completed"}
+    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
+    details = {"status": "completed"}
+    if tool_name != "unknown":
+        details["tool"] = tool_name
 
     # Calculate duration
     try:

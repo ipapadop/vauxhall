@@ -9,14 +9,12 @@ the Vauxhall Dashboard without requiring real agent hooks.
 """
 
 import argparse
-import json
 import random
 import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
-
 
 from vauxhall.hooks.client import TelemetryClient
 from vauxhall.logging_config import get_logger, setup_logging
@@ -70,15 +68,15 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
                 "tokens": random.randint(100, 5000),
                 "duration": round(random.uniform(0.5, 30.0), 1),
             }
-            
+
             client.send(
                 agent=agent_name,
                 workspace=workspace,
                 state=op["state"],
                 env=env,
-                **details
+                **details,
             )
-            
+
             logger.info(
                 "Agent %s published transition %d/%d: %s",
                 agent_name,

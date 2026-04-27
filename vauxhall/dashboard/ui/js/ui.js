@@ -69,21 +69,48 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
 }
 
 /**
- * Formats the details object into a human-readable action string.
- * @param {object} details - The telemetry details.
+ * Formats the telemetry data into a human-readable action string.
+ * @param {object} data - The telemetry data object (containing state and details).
  * @returns {string} A formatted string describing the action.
  */
-function getDetailsString(details) {
-    if (!details) return "";
-    if (details.tool) {
-        return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
-    } else if (details.prompt) {
-        return `Prompt: ${details.prompt}`;
-    } else if (details.error) {
+function getDetailsString(data) {
+    if (!data) return "";
+    const details = data.details || {};
+    const state = data.state;
+
+    // Prioritize prompt for waiting states
+    if (state === 'Waiting for Input' || state === 'Input Required' || state === 'Waiting') {
+        if (details.prompt) return `Prompt: ${details.prompt}`;
+        if (details.message) return details.message;
+    }
+
+    if (details.error) {
         return `Error: ${details.error}`;
-    } else if (details.status) {
+    }
+
+    if (details.tool) {
+        // If it's a known placeholder, and we have something better, use it
+        if (details.tool === 'unknown' || details.tool === 'unknown_tool') {
+             if (details.prompt) return `Prompt: ${details.prompt}`;
+             if (details.status) return details.status;
+        }
+
+        // For AfterTool (Thinking state), show "Completed"
+        if (state === 'Thinking' && details.status === 'completed') {
+            return `Completed: ${details.tool}`;
+        }
+
+        return `Running: ${details.tool}${details.cmd ? ' ' + details.cmd : ''}`;
+    }
+
+    if (details.prompt) {
+        return `Prompt: ${details.prompt}`;
+    }
+
+    if (details.status) {
         return details.status;
     }
+
     return "";
 }
 
@@ -135,7 +162,7 @@ export function updateCard(card, data) {
     }
 
     // Update Rolling Activity Log (last 5 entries)
-    const newLogMessage = getDetailsString(details);
+    const newLogMessage = getDetailsString(data);
 
     if (newLogMessage && newLogMessage !== card.lastLogMessage && logArea) {
         card.lastLogMessage = newLogMessage;
@@ -338,7 +365,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     const stateFilter = document.getElementById('modal-state-filter')?.value || 'ALL';
 
     const filteredHistory = card.history.filter(item => {
-        const matchesSearch = getDetailsString(item.details).toLowerCase().includes(searchTerm);
+        const matchesSearch = getDetailsString(item).toLowerCase().includes(searchTerm);
         const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting' && item.state === 'Waiting for Input');
         return matchesSearch && matchesState;
     });
@@ -348,7 +375,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
         <div class="history-item">
             <span class="history-time">${item.time}</span>
             <span class="history-state">${item.state}</span>
-            <span class="history-details">${getDetailsString(item.details)}</span>
+            <span class="history-details">${getDetailsString(item)}</span>
         </div>
     `).reverse().join(''); // Chronological order (oldest top, newest bottom)
 

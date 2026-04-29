@@ -6,13 +6,13 @@
 from unittest.mock import MagicMock
 
 from vauxhall.dashboard.config import dashboard_settings
-from vauxhall.hooks.config import hook_settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.hooks.client import TelemetryClient
+from vauxhall.hooks.config import hook_settings
 
 
 def test_dashboard_subscriber_uses_settings_by_default() -> None:
-    """Verify that DashboardSubscriber uses dashboard_settings.mqtt for default host and port."""
+    """Verify that DashboardSubscriber uses dashboard_settings.mqtt by default."""
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback, MagicMock())
 

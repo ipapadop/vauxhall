@@ -8,7 +8,7 @@ from typing import Self
 
 import paho.mqtt.client as mqtt
 
-from vauxhall.core.config import settings
+from vauxhall.hooks.config import hook_settings as settings
 from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)

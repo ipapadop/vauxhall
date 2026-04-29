@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from vauxhall.core.config import settings
+from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.ipc import DashboardIPC
 
 

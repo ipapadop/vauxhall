@@ -9,7 +9,7 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
-from vauxhall.core.config import settings
+from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)

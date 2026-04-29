@@ -9,7 +9,7 @@ from typing import Any
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
 
-from vauxhall.core.config import settings
+from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber

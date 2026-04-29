@@ -5,11 +5,14 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from vauxhall.core.config import MQTTConfig, LoggingConfig, load_config_data
+
+from vauxhall.core.config import LoggingConfig, MQTTConfig, load_config_data
+
 
 @dataclass
 class UIConfig:
     """UI configuration for the dashboard."""
+
     host: str = "127.0.0.1"
     port: int = 8080
     debug: bool = False
@@ -18,9 +21,11 @@ class UIConfig:
     height: int = 800
     stale_threshold: int = 120
 
+
 @dataclass
 class DashboardConfig:
     """Consolidated configuration for the dashboard."""
+
     mqtt: MQTTConfig = field(default_factory=MQTTConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     dashboard: UIConfig = field(default_factory=UIConfig)
@@ -37,12 +42,13 @@ class DashboardConfig:
         """
         if config_path is None:
             config_path = Path("vauxhall_dashboard.json")
-        
+
         data = load_config_data(config_path)
         return cls(
             mqtt=MQTTConfig(**data.get("mqtt", {})),
             logging=LoggingConfig(**data.get("logging", {})),
             dashboard=UIConfig(**data.get("dashboard", {})),
         )
+
 
 dashboard_settings = DashboardConfig.load()

@@ -4,27 +4,30 @@
 """Shared configuration schemas for Vauxhall."""
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar("T")
 
 @dataclass
 class MQTTConfig:
     """MQTT client configuration."""
+
     host: str = "localhost"
     port: int = 1883
     keepalive: int = 60
 
+
 @dataclass
 class LoggingConfig:
     """Logging configuration."""
+
     level: str = "INFO"
+
 
 def load_config_data(config_path: Path) -> dict[str, Any]:
     """Load configuration data from a JSON file.

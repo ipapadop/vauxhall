@@ -16,6 +16,7 @@ from typing import Any
 
 from vauxhall.core.logging import setup_logging
 from vauxhall.hooks.client import TelemetryClient
+from vauxhall.hooks.config import hook_settings
 
 
 def handle_notification(
@@ -195,7 +196,7 @@ def main() -> None:
         print("{}")
         return
 
-    setup_logging()
+    setup_logging(level=hook_settings.logging.level)
 
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")

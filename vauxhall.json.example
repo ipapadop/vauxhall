@@ -1,0 +1,19 @@
+{
+  "mqtt": {
+    "host": "localhost",
+    "port": 1883,
+    "keepalive": 60
+  },
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "debug": false,
+    "window_title": "Vauxhall Agent Dashboard",
+    "width": 1000,
+    "height": 800,
+    "stale_threshold": 120
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

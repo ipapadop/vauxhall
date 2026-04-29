@@ -10,8 +10,8 @@ from typing import Any
 import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
 
-from vauxhall.config import settings
-from vauxhall.logging_config import get_logger
+from vauxhall.core.config import settings
+from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)
 

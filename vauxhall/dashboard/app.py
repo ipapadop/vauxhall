@@ -9,10 +9,10 @@ from typing import Any
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
 
-from vauxhall.config import settings
+from vauxhall.core.config import settings
+from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
-from vauxhall.logging_config import get_logger, setup_logging
 
 logger = get_logger(__name__)
 

@@ -5,7 +5,7 @@
 
 import logging
 
-from vauxhall.logging_config import get_logger, setup_logging
+from vauxhall.core.logging import get_logger, setup_logging
 
 
 def test_get_logger() -> None:

@@ -39,22 +39,16 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 
 ## Installation
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/ipapadop/vauxhall.git
-    cd vauxhall
-    ```
+### For Dashboard Users
+```bash
+pip install "vauxhall[dashboard]"
+```
 
-2.  **Set up a virtual environment**:
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
-
-3.  **Install Python dependencies**:
-    ```bash
-    pip install .
-    ```
+### For Remote Agents (Minimum Dependencies)
+```bash
+pip install "vauxhall[hooks]"
+```
+*(This only installs `paho-mqtt` and the core logic)*
 
 ## Usage
 
@@ -66,6 +60,10 @@ mosquitto
 
 ### 2. Run the Dashboard
 ```bash
+# Using uv (recommended for development)
+uv run python3 -m vauxhall.dashboard.app
+
+# Or using standard python
 python3 -m vauxhall.dashboard.app
 ```
 

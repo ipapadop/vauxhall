@@ -105,7 +105,7 @@ python3 vauxhall/hooks/gemini/install.py
 
 This script will:
 1.  **Isolated Environment**: Create a dedicated virtual environment (`.vauxhall-venv`) in the current directory to isolate telemetry dependencies. If the directory exists, it is refreshed.
-2.  **Dependency Management**: Automatically install `paho-mqtt`, `PyYAML`, and the `vauxhall` package into the isolated venv.
+2.  **Dependency Management**: Automatically install `paho-mqtt` and the `vauxhall-hooks` package into the isolated venv.
 3.  **Clean Installation**: Purge any existing hooks starting with `vauxhall-` to ensure a clean state before registering new ones.
 4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register the hooks using the absolute path to the isolated venv's Python interpreter.
 5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, etc.) and clear descriptions for easy identification.
@@ -150,5 +150,3 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
 4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
     - `README.md`: Update features, architecture, and usage instructions.
     - `AGENTS.md`: Update integration methods, states, and metadata features.
-
-

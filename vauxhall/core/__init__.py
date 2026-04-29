@@ -1,4 +1,4 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Vauxhall Agent Dashboard package."""
+"""Core functionality for Vauxhall."""

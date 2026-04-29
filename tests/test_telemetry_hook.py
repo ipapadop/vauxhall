@@ -200,3 +200,28 @@ def test_unknown_tool_before_tool() -> None:
         kwargs = mock_instance.send.call_args.kwargs
         assert "tool" not in kwargs
         assert kwargs["state"] == "Acting"
+
+
+def test_setup_logging_called_with_configured_level() -> None:
+    """Verify that setup_logging is called with the level from hook_settings."""
+    hook_data = {
+        "hook_event_name": "BeforeAgent",
+        "prompt": "test prompt",
+        "cwd": "/workspace",
+    }
+
+    from unittest.mock import MagicMock
+
+    # Mock hook_settings to return a specific logging level
+    mock_settings = MagicMock()
+    mock_settings.logging.level = "DEBUG"
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.setup_logging") as mock_setup_logging,
+        patch("vauxhall.hooks.gemini.telemetry_hook.hook_settings", mock_settings),
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"),
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        main()
+        mock_setup_logging.assert_called_once_with(level="DEBUG")

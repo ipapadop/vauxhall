@@ -5,26 +5,27 @@
 
 from unittest.mock import MagicMock
 
-from vauxhall.core.config import settings
+from vauxhall.dashboard.config import dashboard_settings
+from vauxhall.hooks.config import hook_settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.hooks.client import TelemetryClient
 
 
 def test_dashboard_subscriber_uses_settings_by_default() -> None:
-    """Verify that DashboardSubscriber uses settings.mqtt for default host and port."""
+    """Verify that DashboardSubscriber uses dashboard_settings.mqtt for default host and port."""
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback, MagicMock())
 
-    assert subscriber.host == settings.mqtt.host
-    assert subscriber.port == settings.mqtt.port
+    assert subscriber.host == dashboard_settings.mqtt.host
+    assert subscriber.port == dashboard_settings.mqtt.port
 
 
 def test_telemetry_client_uses_settings_by_default() -> None:
-    """Verify that TelemetryClient uses settings.mqtt for default host and port."""
+    """Verify that TelemetryClient uses hook_settings.mqtt for default host and port."""
     client = TelemetryClient()
 
-    assert client.host == settings.mqtt.host
-    assert client.port == settings.mqtt.port
+    assert client.host == hook_settings.mqtt.host
+    assert client.port == hook_settings.mqtt.port
 
 
 def test_dashboard_subscriber_overrides_settings() -> None:

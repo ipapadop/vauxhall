@@ -41,15 +41,10 @@ def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
         check=True,
         capture_output=True,
     )
+    # Install the vauxhall package in editable mode with hooks extra
+    print(f"Installing vauxhall[hooks] from {repo_root}...")
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "paho-mqtt", "PyYAML"],
-        check=True,
-        capture_output=True,
-    )
-    # Install the vauxhall package in editable mode from the absolute repo path
-    print(f"Installing vauxhall package from {repo_root}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-e", str(repo_root)],
+        [str(venv_python), "-m", "pip", "install", "-e", f"{repo_root}[hooks]"],
         check=True,
         capture_output=True,
     )

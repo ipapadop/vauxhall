@@ -14,8 +14,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from vauxhall.core.logging import setup_logging
 from vauxhall.hooks.client import TelemetryClient
-from vauxhall.logging_config import setup_logging
 
 
 def handle_notification(

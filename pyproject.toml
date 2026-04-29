@@ -4,19 +4,24 @@
 [project]
 name = "vauxhall"
 version = "0.1.0"
-description = "Dashboard for agents"
+description = "Vauxhall Agent Dashboard & Hooks"
 requires-python = ">=3.10"
 dependencies = [
     "paho-mqtt>=2.0.0",
+]
+
+[project.optional-dependencies]
+dashboard = [
     "pyperclip>=1.8.2",
     "pyloid>=0.1.0",
-    "PyYAML>=6.0.0",
 ]
+hooks = []
 
 [dependency-groups]
 dev = [
     {include-group = "lint"},
     {include-group = "test"},
+    "vauxhall[dashboard]",
 ]
 lint = [
     "ruff>=0.14.0",

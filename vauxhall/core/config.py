@@ -3,12 +3,11 @@
 
 """Configuration management for Vauxhall."""
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-import yaml
-
-from vauxhall.logging_config import get_logger
+from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -46,7 +45,7 @@ class LoggingConfig:
 class Config:
     """Central configuration for Vauxhall.
 
-    Loads configuration from vauxhall.yaml if it exists, otherwise uses defaults.
+    Loads configuration from vauxhall.json if it exists, otherwise uses defaults.
     """
 
     mqtt: MQTTConfig = field(default_factory=MQTTConfig)
@@ -55,17 +54,17 @@ class Config:
 
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> "Config":
-        """Load configuration from a YAML file.
+        """Load configuration from a JSON file.
 
         Args:
-            config_path: Path to the configuration file. Defaults to vauxhall.yaml
+            config_path: Path to the configuration file. Defaults to vauxhall.json
                 in the current working directory.
 
         Returns:
             Config: The loaded configuration object.
         """
         if config_path is None:
-            config_path = Path("vauxhall.yaml")
+            config_path = Path("vauxhall.json")
         else:
             config_path = Path(config_path)
 
@@ -73,7 +72,7 @@ class Config:
         if config_path.exists():
             try:
                 with config_path.open(encoding="utf-8") as f:
-                    config_data = yaml.safe_load(f) or {}
+                    config_data = json.load(f) or {}
                 logger.info("Loaded configuration from %s", config_path)
             except Exception:
                 logger.exception("Failed to load configuration from %s", config_path)
@@ -90,6 +89,24 @@ class Config:
             dashboard=DashboardConfig(**dashboard_data),
             logging=LoggingConfig(**logging_data),
         )
+
+    def save(self, config_path: str | Path | None = None) -> None:
+        """Save the current configuration to a JSON file.
+
+        Args:
+            config_path: Path to the configuration file. Defaults to vauxhall.json.
+        """
+        if config_path is None:
+            config_path = Path("vauxhall.json")
+        else:
+            config_path = Path(config_path)
+
+        try:
+            with config_path.open("w", encoding="utf-8") as f:
+                json.dump(asdict(self), f, indent=4)
+            logger.info("Saved configuration to %s", config_path)
+        except Exception:
+            logger.exception("Failed to save configuration to %s", config_path)
 
 
 # Global configuration instance

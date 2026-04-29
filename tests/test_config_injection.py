@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock
 
-from vauxhall.config import settings
+from vauxhall.core.config import settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.hooks.client import TelemetryClient
 

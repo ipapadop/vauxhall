@@ -16,8 +16,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.hooks.client import TelemetryClient
-from vauxhall.logging_config import get_logger, setup_logging
 
 logger = get_logger(__name__)
 

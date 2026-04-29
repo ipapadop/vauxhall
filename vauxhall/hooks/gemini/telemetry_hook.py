@@ -125,6 +125,66 @@ def handle_after_tool(
     return state, details
 
 
+def handle_before_agent(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Handle Gemini CLI BeforeAgent events.
+
+    Args:
+        input_data: The hook event data.
+
+    Returns:
+        tuple[str, dict[str, Any]]: (state, details).
+    """
+    state = "Thinking"
+    details = {"prompt": input_data.get("prompt", "Processing...")}
+    return state, details
+
+
+def handle_after_agent(_input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Handle Gemini CLI AfterAgent events.
+
+    Args:
+        _input_data: The hook event data.
+
+    Returns:
+        tuple[str, dict[str, Any]]: (state, details).
+    """
+    state = "Idle"
+    details = {"status": "Ready"}
+    return state, details
+
+
+def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Handle Gemini CLI AfterModel events.
+
+    Args:
+        input_data: The hook event data.
+
+    Returns:
+        tuple[str, dict[str, Any]]: (state, details).
+    """
+    state = "Thinking"
+    details = {"status": "Model replied"}
+    usage = input_data.get("llm_response", {}).get("usageMetadata", {})
+    tokens = usage.get("totalTokenCount")
+    if tokens is not None:
+        details["tokens"] = tokens
+    return state, details
+
+
+def handle_unknown_hook(hook_type: str) -> tuple[str, dict[str, Any]]:
+    """Handle unknown Gemini CLI events.
+
+    Args:
+        hook_type: The unrecognized hook event name.
+
+    Returns:
+        tuple[str, dict[str, Any]]: (state, details).
+    """
+    state = "Idle"
+    details = {"hook": hook_type}
+    return state, details
+
+
 def main() -> None:
     """Main hook entry point."""
     # Gemini CLI hooks pass event data via stdin
@@ -154,25 +214,17 @@ def main() -> None:
         else:
             return
     elif hook_type == "BeforeAgent":
-        state = "Thinking"
-        details = {"prompt": input_data.get("prompt", "Processing...")}
+        state, details = handle_before_agent(input_data)
     elif hook_type == "AfterAgent":
-        state = "Idle"
-        details = {"status": "Ready"}
+        state, details = handle_after_agent(input_data)
     elif hook_type == "AfterModel":
-        state = "Thinking"
-        details = {"status": "Model replied"}
-        usage = input_data.get("llm_response", {}).get("usageMetadata", {})
-        tokens = usage.get("totalTokenCount")
-        if tokens is not None:
-            details["tokens"] = tokens
+        state, details = handle_after_model(input_data)
     elif hook_type == "BeforeTool":
         state, details = handle_before_tool(input_data, time_file)
     elif hook_type == "AfterTool":
         state, details = handle_after_tool(input_data, time_file)
     else:
-        state = "Idle"
-        details = {"hook": hook_type}
+        state, details = handle_unknown_hook(hook_type)
 
     with TelemetryClient() as client:
         client.send(agent=agent_name, workspace=workspace, state=state, **details)

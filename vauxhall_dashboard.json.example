@@ -1,9 +1,6 @@
 {
-  "mqtt": {
-    "host": "localhost",
-    "port": 1883,
-    "keepalive": 60
-  },
+  "mqtt": { "host": "localhost", "port": 1883, "keepalive": 60 },
+  "logging": { "level": "INFO" },
   "dashboard": {
     "host": "127.0.0.1",
     "port": 8080,
@@ -12,8 +9,5 @@
     "width": 1000,
     "height": 800,
     "stale_threshold": 120
-  },
-  "logging": {
-    "level": "INFO"
   }
 }

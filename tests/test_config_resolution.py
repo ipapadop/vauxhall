@@ -6,15 +6,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from vauxhall.core.config import find_config_file, get_env
-
-
-def test_get_env_types() -> None:
-    """Test environment variable type conversion in get_env()."""
-    with patch.dict("os.environ", {"INT_VAR": "123", "BOOL_VAR": "true"}):
-        assert get_env("INT_VAR", 0) == 123
-        assert get_env("BOOL_VAR", False) is True  # noqa: FBT003
-        assert get_env("NONEXISTENT", "default") == "default"
+from vauxhall.core.config import find_config_file
 
 
 def test_find_config_file_cwd(tmp_path: Path) -> None:

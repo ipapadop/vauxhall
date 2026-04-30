@@ -64,23 +64,6 @@ def find_config_file(filename: str) -> Path | None:
     return None
 
 
-def get_env(env_var: str, default: T) -> T:
-    """Get environment variable with type-safe fallback to default."""
-    value = os.environ.get(env_var)
-    if value is None:
-        return default
-
-    # Simple type conversion based on default type
-    if isinstance(default, bool):
-        return value.lower() in ("true", "1", "yes")
-    if isinstance(default, int):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return value
-
-
 class ConfigResolver:
     """Tiered configuration resolver with lazy JSON loading."""
 

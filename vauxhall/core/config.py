@@ -79,3 +79,59 @@ def get_env(env_var: str, default: T) -> T:
         except ValueError:
             return default
     return value
+
+
+class ConfigResolver:
+    """Tiered configuration resolver with lazy JSON loading."""
+
+    def __init__(
+        self, default_filename: str, override_path: Path | None = None
+    ) -> None:
+        """Initialize the resolver.
+
+        Args:
+            default_filename: The name of the config file to search for.
+            override_path: Optional explicit path to a config file.
+        """
+        self.default_filename = default_filename
+        self.override_path = override_path
+        self._json_data: dict[str, Any] | None = None
+
+    def _ensure_json_loaded(self) -> None:
+        """Lazily load JSON data if not already loaded."""
+        if self._json_data is None:
+            config_path = self.override_path or find_config_file(self.default_filename)
+            self._json_data = load_config_data(config_path) if config_path else {}
+
+    def get(self, env_var: str, section: str, key: str, default: T) -> T:
+        """Resolve setting: Env -> JSON -> Default.
+
+        Args:
+            env_var: Environment variable name.
+            section: Section in JSON config.
+            key: Key within the section in JSON config.
+            default: Default value if not found elsewhere.
+
+        Returns:
+            T: The resolved value.
+        """
+        # 1. Env
+        value = os.environ.get(env_var)
+        if value is not None:
+            return self._cast(value, default)
+
+        # 2. JSON
+        self._ensure_json_loaded()
+        assert self._json_data is not None
+        return self._json_data.get(section, {}).get(key, default)
+
+    def _cast(self, value: str, default: T) -> T:
+        """Cast string value to the type of default."""
+        if isinstance(default, bool):
+            return value.lower() in ("true", "1", "yes")
+        if isinstance(default, int):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return value  # type: ignore[return-value]

@@ -42,12 +42,16 @@ def load_config_data(config_path: Path) -> dict[str, Any]:
         dict[str, Any]: The configuration data, or an empty dict if the file
             does not exist or is invalid.
     """
-    if config_path.exists():
-        try:
-            with config_path.open(encoding="utf-8") as f:
-                return json.load(f) or {}
-        except Exception:
-            logger.exception("Failed to load configuration from %s", config_path)
+    if not config_path.exists():
+        return {}
+
+    try:
+        with config_path.open(encoding="utf-8") as f:
+            return json.load(f) or {}
+    except json.JSONDecodeError as e:
+        logger.exception("Configuration file %s is not valid JSON: %s", config_path, e)
+    except OSError as e:
+        logger.exception("Could not read configuration file %s: %s", config_path, e)
     return {}
 
 

@@ -14,9 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from vauxhall.core.logging import setup_logging
 from vauxhall.hooks.client import TelemetryClient
-from vauxhall.hooks.config import hook_settings
 
 
 def handle_notification(
@@ -195,8 +193,6 @@ def main() -> None:
         # If no valid JSON on stdin, output empty JSON as required by CLI protocol
         print("{}")
         return
-
-    setup_logging(level=hook_settings.logging.level)
 
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")

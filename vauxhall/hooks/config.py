@@ -3,16 +3,13 @@
 
 """Configuration for Vauxhall hooks."""
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from vauxhall.core.config import (
+    ConfigResolver,
     LoggingConfig,
     MQTTConfig,
-    find_config_file,
-    get_env,
-    load_config_data,
 )
 
 
@@ -39,43 +36,17 @@ class HookConfig:
         Returns:
             HookConfig: The loaded configuration.
         """
-        # 1. Check for Env-Only Optimization
-        env_host = os.environ.get("VAUXHALL_MQTT_HOST")
-        if env_host and config_path is None:
-            # Bypass file loading if critical env var is set
-            return cls(
-                mqtt=MQTTConfig(
-                    host=env_host,
-                    port=get_env("VAUXHALL_MQTT_PORT", 1883),
-                    keepalive=get_env("VAUXHALL_MQTT_KEEPALIVE", 60),
-                ),
-                logging=LoggingConfig(level=get_env("VAUXHALL_LOGGING_LEVEL", "INFO")),
-            )
-
-        # 2. Regular resolution
-        if config_path is None:
-            config_path = find_config_file("vauxhall_hooks.json")
-
-        data = load_config_data(config_path) if config_path else {}
-
+        resolver = ConfigResolver("vauxhall_hooks.json", config_path)
         return cls(
             mqtt=MQTTConfig(
-                host=get_env(
-                    "VAUXHALL_MQTT_HOST", data.get("mqtt", {}).get("host", "localhost")
-                ),
-                port=get_env(
-                    "VAUXHALL_MQTT_PORT", data.get("mqtt", {}).get("port", 1883)
-                ),
-                keepalive=get_env(
-                    "VAUXHALL_MQTT_KEEPALIVE",
-                    data.get("mqtt", {}).get("keepalive", 60),
+                host=resolver.get("VAUXHALL_MQTT_HOST", "mqtt", "host", "localhost"),
+                port=resolver.get("VAUXHALL_MQTT_PORT", "mqtt", "port", 1883),
+                keepalive=resolver.get(
+                    "VAUXHALL_MQTT_KEEPALIVE", "mqtt", "keepalive", 60
                 ),
             ),
             logging=LoggingConfig(
-                level=get_env(
-                    "VAUXHALL_LOGGING_LEVEL",
-                    data.get("logging", {}).get("level", "INFO"),
-                )
+                level=resolver.get("VAUXHALL_LOGGING_LEVEL", "logging", "level", "INFO")
             ),
         )
 

@@ -22,7 +22,7 @@ def test_hook_config_load_env_only() -> None:
     # and no path provided
     with (
         patch.dict(os.environ, env),
-        patch("vauxhall.hooks.config.find_config_file") as mock_find,
+        patch("vauxhall.core.config.find_config_file") as mock_find,
     ):
         config = HookConfig.load()
         mock_find.assert_not_called()
@@ -37,7 +37,7 @@ def test_hook_config_load_search_path(tmp_path: Path) -> None:
     config_file = tmp_path / "vauxhall_hooks.json"
     config_file.write_text('{"mqtt": {"host": "path-host"}}', encoding="utf-8")
 
-    with patch("vauxhall.hooks.config.find_config_file", return_value=config_file):
+    with patch("vauxhall.core.config.find_config_file", return_value=config_file):
         config = HookConfig.load()
         assert config.mqtt.host == "path-host"
 

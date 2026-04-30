@@ -47,12 +47,21 @@ class ColoredFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def setup_logging(level: int = logging.INFO) -> None:
+class _LoggingState:
+    """Internal state to track logging configuration."""
+
+    setup_done: bool = False
+
+
+def setup_logging(level: int | str = logging.INFO) -> None:
     """Set up the default logging configuration with color.
 
     Args:
         level: The logging level to use. Defaults to logging.INFO.
     """
+    if _LoggingState.setup_done:
+        return
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(ColoredFormatter())
 
@@ -61,6 +70,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         handlers=[handler],
         force=True,
     )
+    _LoggingState.setup_done = True
 
 
 def get_logger(name: str) -> logging.Logger:

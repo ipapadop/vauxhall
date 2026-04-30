@@ -8,7 +8,7 @@ import sys
 from unittest.mock import patch
 
 
-def test_logging_initialized_on_import():
+def test_logging_initialized_on_import() -> None:
     """Test that setup_logging is called when vauxhall.hooks.config is imported."""
     # Ensure the module is not in sys.modules so we can trigger the top-level code
     if "vauxhall.hooks.config" in sys.modules:
@@ -19,11 +19,11 @@ def test_logging_initialized_on_import():
         importlib.import_module("vauxhall.hooks.config")
         mock_core_setup.assert_called_once()
         # It should be called with the default level if no env/file is present
-        args, kwargs = mock_core_setup.call_args
+        _args, kwargs = mock_core_setup.call_args
         assert kwargs.get("level") == "INFO"
 
 
-def test_logging_initialized_with_env_level():
+def test_logging_initialized_with_env_level() -> None:
     """Test that setup_logging is called with the level from environment variable."""
     # Ensure the module is not in sys.modules
     if "vauxhall.hooks.config" in sys.modules:
@@ -37,5 +37,5 @@ def test_logging_initialized_with_env_level():
     ):
         importlib.import_module("vauxhall.hooks.config")
         mock_core_setup.assert_called_once()
-        args, kwargs = mock_core_setup.call_args
+        _args, kwargs = mock_core_setup.call_args
         assert kwargs.get("level") == "DEBUG"

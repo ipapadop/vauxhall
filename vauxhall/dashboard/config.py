@@ -60,8 +60,10 @@ class DashboardConfig:
                 dashboard=UIConfig(
                     host=get_env("VAUXHALL_DASHBOARD_HOST", "127.0.0.1"),
                     port=get_env("VAUXHALL_DASHBOARD_PORT", 8080),
-                    debug=get_env("VAUXHALL_DASHBOARD_DEBUG", False),
-                    window_title=get_env("VAUXHALL_DASHBOARD_TITLE", "Vauxhall Agent Dashboard"),
+                    debug=get_env("VAUXHALL_DASHBOARD_DEBUG", default=False),
+                    window_title=get_env(
+                        "VAUXHALL_DASHBOARD_TITLE", "Vauxhall Agent Dashboard"
+                    ),
                     width=get_env("VAUXHALL_DASHBOARD_WIDTH", 1000),
                     height=get_env("VAUXHALL_DASHBOARD_HEIGHT", 800),
                     stale_threshold=get_env("VAUXHALL_DASHBOARD_STALE_THRESHOLD", 120),
@@ -76,34 +78,48 @@ class DashboardConfig:
 
         return cls(
             mqtt=MQTTConfig(
-                host=get_env("VAUXHALL_MQTT_HOST", data.get("mqtt", {}).get("host", "localhost")),
-                port=get_env("VAUXHALL_MQTT_PORT", data.get("mqtt", {}).get("port", 1883)),
+                host=get_env(
+                    "VAUXHALL_MQTT_HOST", data.get("mqtt", {}).get("host", "localhost")
+                ),
+                port=get_env(
+                    "VAUXHALL_MQTT_PORT", data.get("mqtt", {}).get("port", 1883)
+                ),
                 keepalive=get_env(
                     "VAUXHALL_MQTT_KEEPALIVE", data.get("mqtt", {}).get("keepalive", 60)
                 ),
             ),
             logging=LoggingConfig(
-                level=get_env("VAUXHALL_LOGGING_LEVEL", data.get("logging", {}).get("level", "INFO"))
+                level=get_env(
+                    "VAUXHALL_LOGGING_LEVEL",
+                    data.get("logging", {}).get("level", "INFO"),
+                )
             ),
             dashboard=UIConfig(
                 host=get_env(
-                    "VAUXHALL_DASHBOARD_HOST", data.get("dashboard", {}).get("host", "127.0.0.1")
+                    "VAUXHALL_DASHBOARD_HOST",
+                    data.get("dashboard", {}).get("host", "127.0.0.1"),
                 ),
                 port=get_env(
-                    "VAUXHALL_DASHBOARD_PORT", data.get("dashboard", {}).get("port", 8080)
+                    "VAUXHALL_DASHBOARD_PORT",
+                    data.get("dashboard", {}).get("port", 8080),
                 ),
                 debug=get_env(
-                    "VAUXHALL_DASHBOARD_DEBUG", data.get("dashboard", {}).get("debug", False)
+                    "VAUXHALL_DASHBOARD_DEBUG",
+                    default=data.get("dashboard", {}).get("debug", False),
                 ),
                 window_title=get_env(
                     "VAUXHALL_DASHBOARD_TITLE",
-                    data.get("dashboard", {}).get("window_title", "Vauxhall Agent Dashboard"),
+                    data.get("dashboard", {}).get(
+                        "window_title", "Vauxhall Agent Dashboard"
+                    ),
                 ),
                 width=get_env(
-                    "VAUXHALL_DASHBOARD_WIDTH", data.get("dashboard", {}).get("width", 1000)
+                    "VAUXHALL_DASHBOARD_WIDTH",
+                    data.get("dashboard", {}).get("width", 1000),
                 ),
                 height=get_env(
-                    "VAUXHALL_DASHBOARD_HEIGHT", data.get("dashboard", {}).get("height", 800)
+                    "VAUXHALL_DASHBOARD_HEIGHT",
+                    data.get("dashboard", {}).get("height", 800),
                 ),
                 stale_threshold=get_env(
                     "VAUXHALL_DASHBOARD_STALE_THRESHOLD",

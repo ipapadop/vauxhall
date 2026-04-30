@@ -7,7 +7,7 @@ import io
 import json
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from vauxhall.hooks.gemini.telemetry_hook import main
 
@@ -210,14 +210,14 @@ def test_setup_logging_called_with_configured_level() -> None:
         "cwd": "/workspace",
     }
 
-    from unittest.mock import MagicMock
-
     # Mock hook_settings to return a specific logging level
     mock_settings = MagicMock()
     mock_settings.logging.level = "DEBUG"
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.setup_logging") as mock_setup_logging,
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.setup_logging"
+        ) as mock_setup_logging,
         patch("vauxhall.hooks.gemini.telemetry_hook.hook_settings", mock_settings),
         patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"),
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),

@@ -13,12 +13,7 @@ from vauxhall.core.config import ConfigResolver
 def test_config_resolver_tiered_resolution() -> None:
     """Test that ConfigResolver resolves settings in the correct order."""
     # Arrange
-    json_data = {
-        "mqtt": {
-            "host": "mqtt.example.com",
-            "port": 1883
-        }
-    }
+    json_data = {"mqtt": {"host": "mqtt.example.com", "port": 1883}}
 
     # 1. Default
     resolver_default = ConfigResolver("test_config.json")

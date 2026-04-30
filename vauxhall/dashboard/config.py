@@ -3,7 +3,6 @@
 
 """Dashboard configuration for Vauxhall."""
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -63,14 +62,18 @@ class DashboardConfig:
                     "VAUXHALL_DASHBOARD_HOST", "dashboard", "host", "127.0.0.1"
                 ),
                 port=resolver.get("VAUXHALL_DASHBOARD_PORT", "dashboard", "port", 8080),
-                debug=resolver.get("VAUXHALL_DASHBOARD_DEBUG", "dashboard", "debug", False),
+                debug=resolver.get(
+                    "VAUXHALL_DASHBOARD_DEBUG", "dashboard", "debug", False
+                ),
                 window_title=resolver.get(
                     "VAUXHALL_DASHBOARD_TITLE",
                     "dashboard",
                     "window_title",
                     "Vauxhall Agent Dashboard",
                 ),
-                width=resolver.get("VAUXHALL_DASHBOARD_WIDTH", "dashboard", "width", 1000),
+                width=resolver.get(
+                    "VAUXHALL_DASHBOARD_WIDTH", "dashboard", "width", 1000
+                ),
                 height=resolver.get(
                     "VAUXHALL_DASHBOARD_HEIGHT", "dashboard", "height", 800
                 ),

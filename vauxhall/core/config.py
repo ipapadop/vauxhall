@@ -5,7 +5,7 @@
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -111,6 +111,29 @@ class ConfigResolver:
         self._ensure_json_loaded()
         assert self._json_data is not None
         return self._json_data.get(section, {}).get(key, default)
+
+    def resolve_dataclass(self, cls: type[T], section: str, env_prefix: str) -> T:
+        """Automatically resolve all fields for a dataclass.
+
+        Args:
+            cls: The dataclass type to instantiate.
+            section: The section in the JSON config.
+            env_prefix: The prefix for environment variables.
+
+        Returns:
+            T: An instance of the dataclass.
+        """
+        resolved_fields = {}
+        for f in fields(cls):
+            # source of truth for default is the dataclass itself
+            default = f.default if f.default is not MISSING else None
+
+            # convention: PREFIX_FIELDNAME
+            env_var = f"{env_prefix}_{f.name.upper()}"
+
+            resolved_fields[f.name] = self.get(env_var, section, f.name, default)
+
+        return cls(**resolved_fields)
 
     def _cast(self, value: str, default: T) -> T:
         """Cast string value to the type of default."""

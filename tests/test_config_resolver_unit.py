@@ -4,10 +4,20 @@
 """Unit tests for ConfigResolver."""
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.core.config import ConfigResolver
+
+
+@dataclass
+class TestConfig:
+    """Mock config for testing resolve_dataclass."""
+
+    host: str = "localhost"
+    port: int = 1883
+    enabled: bool = True
 
 
 def test_config_resolver_tiered_resolution() -> None:
@@ -84,3 +94,41 @@ def test_config_resolver_casting() -> None:
         assert resolver.get("VAUXHALL_DEBUG", "core", "debug", False) is True
     with patch.dict(os.environ, {"VAUXHALL_DEBUG": "0"}):
         assert resolver.get("VAUXHALL_DEBUG", "core", "debug", True) is False
+
+
+def test_resolve_dataclass() -> None:
+    """Test that ConfigResolver can resolve a full dataclass."""
+    resolver = ConfigResolver("test_config.json")
+
+    # 1. Test with defaults
+    config = resolver.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+    assert config.host == "localhost"
+    assert config.port == 1883
+    assert config.enabled is True
+
+    # 2. Test with JSON override
+    json_data = {"test": {"host": "json.host", "port": 9000}}
+    with (
+        patch("vauxhall.core.config.find_config_file", return_value=Path("dummy.json")),
+        patch("vauxhall.core.config.load_config_data", return_value=json_data),
+    ):
+        resolver_json = ConfigResolver("test_config.json")
+        config = resolver_json.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+        assert config.host == "json.host"
+        assert config.port == 9000
+        assert config.enabled is True
+
+    # 3. Test with Env override
+    with patch.dict(
+        os.environ,
+        {
+            "VAUXHALL_HOST": "env.host",
+            "VAUXHALL_PORT": "1234",
+            "VAUXHALL_ENABLED": "false",
+        },
+    ):
+        resolver_env = ConfigResolver("test_config.json")
+        config = resolver_env.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+        assert config.host == "env.host"
+        assert config.port == 1234
+        assert config.enabled is False

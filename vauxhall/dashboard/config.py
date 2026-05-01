@@ -48,42 +48,12 @@ class DashboardConfig:
         resolver = ConfigResolver("vauxhall_dashboard.json", config_path)
 
         return cls(
-            mqtt=MQTTConfig(
-                host=resolver.get("VAUXHALL_MQTT_HOST", "mqtt", "host", "localhost"),
-                port=resolver.get("VAUXHALL_MQTT_PORT", "mqtt", "port", 1883),
-                keepalive=resolver.get(
-                    "VAUXHALL_MQTT_KEEPALIVE", "mqtt", "keepalive", 60
-                ),
+            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT"),
+            logging=resolver.resolve_dataclass(
+                LoggingConfig, "logging", "VAUXHALL_LOGGING"
             ),
-            logging=LoggingConfig(
-                level=resolver.get("VAUXHALL_LOGGING_LEVEL", "logging", "level", "INFO")
-            ),
-            dashboard=UIConfig(
-                host=resolver.get(
-                    "VAUXHALL_DASHBOARD_HOST", "dashboard", "host", "127.0.0.1"
-                ),
-                port=resolver.get("VAUXHALL_DASHBOARD_PORT", "dashboard", "port", 8080),
-                debug=resolver.get(
-                    "VAUXHALL_DASHBOARD_DEBUG", "dashboard", "debug", False
-                ),
-                window_title=resolver.get(
-                    "VAUXHALL_DASHBOARD_TITLE",
-                    "dashboard",
-                    "window_title",
-                    "Vauxhall Agent Dashboard",
-                ),
-                width=resolver.get(
-                    "VAUXHALL_DASHBOARD_WIDTH", "dashboard", "width", 1000
-                ),
-                height=resolver.get(
-                    "VAUXHALL_DASHBOARD_HEIGHT", "dashboard", "height", 800
-                ),
-                stale_threshold=resolver.get(
-                    "VAUXHALL_DASHBOARD_STALE_THRESHOLD",
-                    "dashboard",
-                    "stale_threshold",
-                    120,
-                ),
+            dashboard=resolver.resolve_dataclass(
+                UIConfig, "dashboard", "VAUXHALL_DASHBOARD"
             ),
         )
 

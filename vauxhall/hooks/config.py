@@ -39,15 +39,9 @@ class HookConfig:
         """
         resolver = ConfigResolver("vauxhall_hooks.json", config_path)
         return cls(
-            mqtt=MQTTConfig(
-                host=resolver.get("VAUXHALL_MQTT_HOST", "mqtt", "host", "localhost"),
-                port=resolver.get("VAUXHALL_MQTT_PORT", "mqtt", "port", 1883),
-                keepalive=resolver.get(
-                    "VAUXHALL_MQTT_KEEPALIVE", "mqtt", "keepalive", 60
-                ),
-            ),
-            logging=LoggingConfig(
-                level=resolver.get("VAUXHALL_LOGGING_LEVEL", "logging", "level", "INFO")
+            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT"),
+            logging=resolver.resolve_dataclass(
+                LoggingConfig, "logging", "VAUXHALL_LOGGING"
             ),
         )
 

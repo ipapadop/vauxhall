@@ -12,7 +12,7 @@ from vauxhall.core.config import ConfigResolver
 
 
 @dataclass
-class TestConfig:
+class MockConfig:
     """Mock config for testing resolve_dataclass."""
 
     host: str = "localhost"
@@ -101,7 +101,7 @@ def test_resolve_dataclass() -> None:
     resolver = ConfigResolver("test_config.json")
 
     # 1. Test with defaults
-    config = resolver.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+    config = resolver.resolve_dataclass(MockConfig, "test", "VAUXHALL")
     assert config.host == "localhost"
     assert config.port == 1883
     assert config.enabled is True
@@ -113,7 +113,7 @@ def test_resolve_dataclass() -> None:
         patch("vauxhall.core.config.load_config_data", return_value=json_data),
     ):
         resolver_json = ConfigResolver("test_config.json")
-        config = resolver_json.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+        config = resolver_json.resolve_dataclass(MockConfig, "test", "VAUXHALL")
         assert config.host == "json.host"
         assert config.port == 9000
         assert config.enabled is True
@@ -128,7 +128,7 @@ def test_resolve_dataclass() -> None:
         },
     ):
         resolver_env = ConfigResolver("test_config.json")
-        config = resolver_env.resolve_dataclass(TestConfig, "test", "VAUXHALL")
+        config = resolver_env.resolve_dataclass(MockConfig, "test", "VAUXHALL")
         assert config.host == "env.host"
         assert config.port == 1234
         assert config.enabled is False

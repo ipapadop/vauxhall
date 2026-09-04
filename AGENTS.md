@@ -23,11 +23,11 @@ delivered = client.send(
     agent="MyAgent",
     workspace="/path/to/project",
     state="Acting",
-    env="local", # Optional: "local" or "remote"
+    env="local",  # Optional: "local" or "remote"
     tool="grep",
     cmd="grep -r 'TODO' .",
-    tokens=1245,   # Optional: Token count for the operation
-    duration=12.4  # Optional: Duration in seconds
+    tokens=1245,  # Optional: Token count for the operation
+    duration=12.4,  # Optional: Duration in seconds
 )
 
 # Send an "Idle" state when finished
@@ -150,6 +150,8 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
     - `ruff format .` to ensure consistent formatting.
     - `ruff check .` to identify potential issues.
     - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
+    - Every Python file must begin with the project's SPDX copyright and license headers.
+    - Use the exact Ruff version declared by the project so local and CI results agree.
 3.  **Testing**: Before committing, all existing and new tests MUST pass.
     - Run `.venv/bin/pytest` to verify.
     - With Node.js 20.19 or newer, run `npm test` to verify frontend rendering behavior.

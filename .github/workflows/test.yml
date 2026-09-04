@@ -11,6 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Test frontend
+        run: |
+          npm ci
+          npm test
       - name: Set up Python
         uses: actions/setup-python@v6
         with:

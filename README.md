@@ -19,6 +19,7 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
 - **Resilient Design**: Non-blocking hooks and robust backend error boundaries ensure stability without impacting agent performance.
+- **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
 - **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.
 
@@ -88,8 +89,11 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 ## Development
 
+Frontend tests require Node.js 20.19 or newer.
+
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
 - **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
+- **Frontend tests**: Run `npm ci` once, then `npm test` after changing dashboard JavaScript.
 - **Packaging**: Run `python -m build --wheel` when changing distribution metadata or bundled assets.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.
 

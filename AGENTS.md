@@ -87,6 +87,8 @@ The `log-area` on each card is a real-time append-only stream of the **last 5 ev
 
 This area is non-scrolling to keep the dashboard clean.
 
+All values received through telemetry are treated as untrusted text and must not be inserted into executable HTML.
+
 ### Session History & Audit
 The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
@@ -146,6 +148,7 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
     - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
 3.  **Testing**: Before committing, all existing and new tests MUST pass.
     - Run `.venv/bin/pytest` to verify.
+    - With Node.js 20.19 or newer, run `npm test` to verify frontend rendering behavior.
     - Always add unit tests for new features or bug fixes.
     - The packaging test builds a real wheel and verifies that dashboard UI assets are included.
 4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:

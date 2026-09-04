@@ -184,16 +184,8 @@ def handle_unknown_hook(hook_type: str) -> tuple[str, dict[str, Any]]:
     return state, details
 
 
-def main() -> None:
-    """Main hook entry point."""
-    # Gemini CLI hooks pass event data via stdin
-    try:
-        input_data = json.load(sys.stdin)
-    except Exception:
-        # If no valid JSON on stdin, output empty JSON as required by CLI protocol
-        print("{}")
-        return
-
+def _send_telemetry(input_data: dict[str, Any]) -> None:
+    """Translate one Gemini hook event and publish its telemetry."""
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")
     )
@@ -225,6 +217,16 @@ def main() -> None:
 
     with TelemetryClient() as client:
         client.send(agent=agent_name, workspace=workspace, state=state, **details)
+
+
+def main() -> None:
+    """Process a hook event without disrupting the Gemini CLI protocol."""
+    try:
+        input_data = json.load(sys.stdin)
+        if isinstance(input_data, dict):
+            _send_telemetry(input_data)
+    except Exception:
+        pass
     print("{}")
 
 

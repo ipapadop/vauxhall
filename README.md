@@ -18,7 +18,7 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
-- **Resilient Design**: Telemetry sends use bounded delivery acknowledgments and fail-safe error boundaries so broker failures do not crash agents.
+- **Resilient Design**: Telemetry sends use bounded delivery acknowledgments and fail-safe error boundaries, while Gemini hooks always return valid protocol JSON even when telemetry fails.
 - **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
 - **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.

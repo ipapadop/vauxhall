@@ -100,6 +100,8 @@ The dashboard automatically maintains a full buffer of the last 20 operations pe
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
 
+Telemetry is best-effort: the hook always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. This prevents monitoring problems from interrupting Gemini CLI.
+
 #### Automated Installation (Recommended)
 You can automatically register the hooks in your current workspace by running:
 

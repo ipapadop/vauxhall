@@ -28,7 +28,7 @@ dev = [
     "vauxhall[dashboard]",
 ]
 lint = [
-    "ruff>=0.14.0",
+    "ruff==0.16.6",
 ]
 test = [
     "build>=1.2.2",
@@ -49,6 +49,8 @@ include = ["vauxhall*"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+required-version = "==0.16.6"
+extend-exclude = ["docs/superpowers"]
 
 [tool.ruff.lint]
 select = ["ALL",]
@@ -78,6 +80,9 @@ extend-select = ["I"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 ignore-var-parameters = true  # ignore missing documentation for *args and **kwargs parameters
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "(?i)SPDX-FileCopyrightText: \\d{4}"
 
 [tool.ruff.format]
 docstring-code-format = true

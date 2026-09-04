@@ -92,7 +92,7 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 Frontend tests require Node.js 20.19 or newer.
 
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
-- **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
+- **Ruff**: Use the project-pinned Ruff version and run `ruff format .` plus `ruff check --fix .` before committing. Python files must retain their SPDX copyright and license headers.
 - **Frontend tests**: Run `npm ci` once, then `npm test` after changing dashboard JavaScript.
 - **Packaging**: Run `python -m build --wheel` when changing distribution metadata or bundled assets.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.

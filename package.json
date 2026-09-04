@@ -1,0 +1,14 @@
+{
+  "name": "vauxhall-dashboard-ui",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "test": "node --test --test-isolation=none tests/frontend/*.test.js"
+  },
+  "devDependencies": {
+    "linkedom": "0.18.13"
+  }
+}

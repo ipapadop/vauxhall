@@ -43,6 +43,9 @@ package = true
 [tool.setuptools.package-data]
 "vauxhall.dashboard" = ["ui/*", "ui/js/*"]
 
+[tool.setuptools.packages.find]
+include = ["vauxhall*"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"

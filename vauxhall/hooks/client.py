@@ -139,7 +139,7 @@ class TelemetryClient:
                 self.client.loop_start()
                 self._loop_running = True
 
-            publish_result = self.client.publish(topic, payload)
+            publish_result = self.client.publish(topic, payload, qos=1)
             publish_result.wait_for_publish(PUBLISH_TIMEOUT_SECONDS)
             delivered = publish_result.is_published()
         except Exception:

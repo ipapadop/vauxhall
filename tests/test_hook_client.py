@@ -40,6 +40,7 @@ class FakeMQTTClient:
         self.events: list[str] = []
         self.publish_result = publish_result or FakePublishResult()
         self.fail_connect = fail_connect
+        self.publish_qos: int | None = None
 
     def connect(self, host: str, port: int, *, keepalive: int) -> None:
         """Record a connection attempt and optionally fail it."""
@@ -51,9 +52,10 @@ class FakeMQTTClient:
         """Record network-loop startup."""
         self.events.append("loop_start")
 
-    def publish(self, topic: str, payload: str) -> FakePublishResult:
+    def publish(self, topic: str, payload: str, *, qos: int = 0) -> FakePublishResult:
         """Record publication and return its delivery result."""
         self.events.append("publish")
+        self.publish_qos = qos
         return self.publish_result
 
     def disconnect(self) -> None:
@@ -82,6 +84,7 @@ def test_one_shot_send_waits_for_delivery_and_cleans_up() -> None:
         client = TelemetryClient(host="test_host", port=1234)
 
     assert client.send("Gemini", "/home/user/project", "Acting", tool="grep")
+    assert mqtt_client.publish_qos == 1
     assert mqtt_client.publish_result.wait_timeout == 1.0
     assert mqtt_client.events == [
         "connect",

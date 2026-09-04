@@ -19,7 +19,7 @@ from vauxhall.hooks.client import TelemetryClient
 client = TelemetryClient(host="localhost", port=1883)
 
 # Send an "Acting" state with tool details, metrics, and environment context
-client.send(
+delivered = client.send(
     agent="MyAgent",
     workspace="/path/to/project",
     state="Acting",
@@ -33,6 +33,8 @@ client.send(
 # Send an "Idle" state when finished
 client.send("MyAgent", "/path/to/project", "Idle")
 ```
+
+`send()` returns `True` only when MQTT acknowledges the publication. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection.
 
 ### 2. Manual MQTT (Any Language)
 You can publish JSON messages to the following topic structure:

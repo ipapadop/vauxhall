@@ -4,9 +4,65 @@
 """Tests for the telemetry hook client."""
 
 import json
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 from vauxhall.hooks.client import TelemetryClient, format_message
+
+
+class FakePublishResult:
+    """Controllable MQTT publication result."""
+
+    def __init__(self, *, published: bool = True) -> None:
+        """Initialize the result with its final publication state."""
+        self.published = published
+        self.wait_timeout: float | None = None
+
+    def wait_for_publish(self, timeout: float) -> None:
+        """Record the bounded delivery wait."""
+        self.wait_timeout = timeout
+
+    def is_published(self) -> bool:
+        """Report whether the message was delivered."""
+        return self.published
+
+
+class FakeMQTTClient:
+    """Small deterministic substitute for the external MQTT client."""
+
+    def __init__(
+        self,
+        publish_result: FakePublishResult | None = None,
+        *,
+        fail_connect: bool = False,
+    ) -> None:
+        """Initialize the client with controllable publish and connect results."""
+        self.events: list[str] = []
+        self.publish_result = publish_result or FakePublishResult()
+        self.fail_connect = fail_connect
+
+    def connect(self, host: str, port: int, *, keepalive: int) -> None:
+        """Record a connection attempt and optionally fail it."""
+        self.events.append("connect")
+        if self.fail_connect:
+            raise OSError
+
+    def loop_start(self) -> None:
+        """Record network-loop startup."""
+        self.events.append("loop_start")
+
+    def publish(self, topic: str, payload: str) -> FakePublishResult:
+        """Record publication and return its delivery result."""
+        self.events.append("publish")
+        return self.publish_result
+
+    def disconnect(self) -> None:
+        """Record disconnect."""
+        self.events.append("disconnect")
+
+    def loop_stop(self) -> None:
+        """Record network-loop shutdown."""
+        self.events.append("loop_stop")
 
 
 def test_format_message() -> None:
@@ -19,48 +75,67 @@ def test_format_message() -> None:
     assert data["details"]["tool"] == "grep"
 
 
-def test_telemetry_client_fail_silently() -> None:
-    """Test that TelemetryClient.send fails silently when broker is unreachable."""
-    client = TelemetryClient(host="nonexistent.local", port=1883)
-    # This should not raise an exception
-    client.send("Gemini", "/home/user/project", "Acting", tool="grep")
+def test_one_shot_send_waits_for_delivery_and_cleans_up() -> None:
+    """An ad-hoc send confirms delivery and closes MQTT in protocol order."""
+    mqtt_client = FakeMQTTClient()
+    with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
+        client = TelemetryClient(host="test_host", port=1234)
+
+    assert client.send("Gemini", "/home/user/project", "Acting", tool="grep")
+    assert mqtt_client.publish_result.wait_timeout == 1.0
+    assert mqtt_client.events == [
+        "connect",
+        "loop_start",
+        "publish",
+        "disconnect",
+        "loop_stop",
+    ]
 
 
-@patch("vauxhall.hooks.client.mqtt.Client")
-def test_telemetry_client_send_calls(mock_client_class: MagicMock) -> None:
-    """Test that TelemetryClient.send calls all expected methods."""
-    mock_client = mock_client_class.return_value
-    mock_publish_result = MagicMock()
-    mock_client.publish.return_value = mock_publish_result
+def test_send_returns_false_when_publish_times_out() -> None:
+    """A publication not acknowledged within the deadline is unsuccessful."""
+    mqtt_client = FakeMQTTClient(FakePublishResult(published=False))
+    with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
+        client = TelemetryClient()
 
-    client = TelemetryClient(host="test_host", port=1234)
-    client.send("Gemini", "/home/user/project", "Acting", env="local", tool="grep")
-
-    mock_client.connect.assert_called_once_with("test_host", 1234, keepalive=60)
-    mock_client.publish.assert_called_once()
-    mock_publish_result.wait_for_publish.assert_called_once()
-    mock_client.disconnect.assert_called_once()
+    assert not client.send("Gemini", "/home/user/project", "Acting")
+    assert mqtt_client.events[-2:] == ["disconnect", "loop_stop"]
 
 
-def test_telemetry_client_context_manager() -> None:
-    """Verify the context manager establishes a persistent connection."""
-    with patch("vauxhall.hooks.client.mqtt.Client") as mock_mqtt:
-        mock_mqtt_instance = MagicMock()
-        mock_mqtt.return_value = mock_mqtt_instance
+def test_send_handles_serialization_failure() -> None:
+    """Invalid detail values fail silently without touching the broker."""
+    mqtt_client = FakeMQTTClient()
+    with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
+        client = TelemetryClient()
 
-        with TelemetryClient() as client:
-            assert client.is_connected
-            mock_mqtt_instance.connect.assert_called_once()
-            mock_mqtt_instance.loop_start.assert_called_once()
+    assert not client.send("Gemini", "/home/user/project", "Acting", path=Path())
+    assert mqtt_client.events == []
 
-            client.send("Agent", "/path", "Acting")
 
-            # publish should be called, but not a new connect/disconnect
-            mock_mqtt_instance.publish.assert_called_once()
-            assert mock_mqtt_instance.connect.call_count == 1
-            mock_mqtt_instance.disconnect.assert_not_called()
+def test_context_manager_waits_for_delivery_and_cleans_up() -> None:
+    """Persistent sends confirm delivery and defer cleanup until context exit."""
+    mqtt_client = FakeMQTTClient()
+    with (
+        patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client),
+        TelemetryClient() as client,
+    ):
+        assert client.is_connected
+        assert client.send("Agent", "/path", "Acting")
+        assert mqtt_client.publish_result.wait_timeout == 1.0
+        assert mqtt_client.events == ["connect", "loop_start", "publish"]
 
-        # After context, it should disconnect
+    assert not client.is_connected
+    assert mqtt_client.events[-2:] == ["disconnect", "loop_stop"]
+
+
+def test_failed_context_connection_is_not_retried_by_send() -> None:
+    """A failed managed connection remains failed for that context."""
+    mqtt_client = FakeMQTTClient(fail_connect=True)
+    with (
+        patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client),
+        TelemetryClient() as client,
+    ):
         assert not client.is_connected
-        mock_mqtt_instance.loop_stop.assert_called_once()
-        mock_mqtt_instance.disconnect.assert_called_once()
+        assert not client.send("Agent", "/path", "Acting")
+
+    assert mqtt_client.events == ["connect"]

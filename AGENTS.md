@@ -34,7 +34,7 @@ delivered = client.send(
 client.send("MyAgent", "/path/to/project", "Idle")
 ```
 
-`send()` returns `True` only when MQTT acknowledges the publication. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection.
+`send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection.
 
 ### 2. Manual MQTT (Any Language)
 You can publish JSON messages to the following topic structure:

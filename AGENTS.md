@@ -147,6 +147,7 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
 3.  **Testing**: Before committing, all existing and new tests MUST pass.
     - Run `.venv/bin/pytest` to verify.
     - Always add unit tests for new features or bug fixes.
+    - The packaging test builds a real wheel and verifies that dashboard UI assets are included.
 4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
     - `README.md`: Update features, architecture, and usage instructions.
     - `AGENTS.md`: Update integration methods, states, and metadata features.

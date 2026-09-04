@@ -81,7 +81,7 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based dashboard application (Python logic + Vanilla JS UI).
+- `vauxhall/dashboard/`: The Pyloid-based dashboard application and its packaged Vanilla JS UI assets.
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.
@@ -90,6 +90,7 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
 - **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
+- **Packaging**: Run `python -m build --wheel` when changing distribution metadata or bundled assets.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.
 
 ## License

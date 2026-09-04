@@ -13,6 +13,8 @@ from vauxhall.hooks.config import hook_settings as settings
 
 logger = get_logger(__name__)
 
+PUBLISH_TIMEOUT_SECONDS = 1.0
+
 
 def format_message(
     agent: str, workspace: str, state: str, env: str | None = None, **details: object
@@ -59,23 +61,44 @@ class TelemetryClient:
         self.port = port if port is not None else settings.mqtt.port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.is_connected = False
+        self._managed = False
+        self._loop_running = False
 
     def __enter__(self) -> Self:
         """Enter the context manager, establishing a persistent connection."""
+        self._managed = True
         try:
             self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
-            self.client.loop_start()
             self.is_connected = True
+            self.client.loop_start()
+            self._loop_running = True
         except Exception:
             logger.debug("Failed to connect telemetry client inside context manager")
+            self._close_connection()
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Exit the context manager, closing the connection."""
+        self._close_connection()
+        self._managed = False
+
+    def _close_connection(self) -> None:
+        """Close MQTT transport without allowing cleanup failures to escape."""
         if self.is_connected:
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.is_connected = False
+            try:
+                self.client.disconnect()
+            except Exception:
+                logger.debug("Failed to disconnect telemetry client")
+            finally:
+                self.is_connected = False
+
+        if self._loop_running:
+            try:
+                self.client.loop_stop()
+            except Exception:
+                logger.debug("Failed to stop telemetry client network loop")
+            finally:
+                self._loop_running = False
 
     def send(
         self,
@@ -84,7 +107,7 @@ class TelemetryClient:
         state: str,
         env: str | None = None,
         **details: object,
-    ) -> None:
+    ) -> bool:
         """Send a telemetry message.
 
         Formats the message and publishes it to the agent's activity topic.
@@ -96,22 +119,38 @@ class TelemetryClient:
             state: The current state of the agent.
             env: Optional execution environment (local, remote).
             **details: Additional key-value pairs for message details.
+
+        Returns:
+            True when the broker acknowledges publication; otherwise False.
         """
-        payload = format_message(agent, workspace, state, env, **details)
-        topic = f"vauxhall/agents/{agent.lower()}/activity"
+        one_shot = not self._managed
         try:
+            payload = format_message(agent, workspace, state, env, **details)
+            topic = f"vauxhall/agents/{agent.lower()}/activity"
+
+            if self._managed and not self.is_connected:
+                return False
+
             if not self.is_connected:
-                # Fallback for ad-hoc sends without context manager
                 self.client.connect(
                     self.host, self.port, keepalive=settings.mqtt.keepalive
                 )
-                publish_result = self.client.publish(topic, payload)
-                publish_result.wait_for_publish()
-                self.client.disconnect()
-            else:
-                # Use persistent connection
-                self.client.publish(topic, payload)
-            logger.debug("Successfully sent telemetry for %s to %s", agent, topic)
+                self.is_connected = True
+                self.client.loop_start()
+                self._loop_running = True
+
+            publish_result = self.client.publish(topic, payload)
+            publish_result.wait_for_publish(PUBLISH_TIMEOUT_SECONDS)
+            delivered = publish_result.is_published()
         except Exception:
             logger.debug("Failed to send telemetry for %s", agent)
-            # Fail silently per spec
+            return False
+        else:
+            if delivered:
+                logger.debug("Successfully sent telemetry for %s to %s", agent, topic)
+            else:
+                logger.debug("Timed out sending telemetry for %s", agent)
+            return delivered
+        finally:
+            if one_shot:
+                self._close_connection()

@@ -6,10 +6,77 @@
 import io
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.hooks.gemini.telemetry_hook import main
+
+
+def test_ignored_notification_outputs_valid_json() -> None:
+    """An irrelevant notification still satisfies the Gemini hook protocol."""
+    hook_data = {
+        "session_id": "test-session",
+        "transcript_path": "/workspace/transcript.json",
+        "cwd": "/workspace",
+        "hook_event_name": "Notification",
+        "timestamp": "2026-09-04T12:00:00Z",
+        "notification_type": "Info",
+        "message": "Informational message",
+    }
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
+        input=json.dumps(hook_data),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert completed.stderr == ""
+
+
+def test_non_object_input_outputs_valid_json() -> None:
+    """A valid JSON value with the wrong schema cannot break the hook protocol."""
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
+        input="[]",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert completed.stderr == ""
+
+
+def test_telemetry_initialization_failure_outputs_valid_json() -> None:
+    """Telemetry setup failures remain invisible to the calling Gemini process."""
+    hook_data = {
+        "session_id": "test-session",
+        "transcript_path": "/workspace/transcript.json",
+        "cwd": "/workspace",
+        "hook_event_name": "BeforeAgent",
+        "timestamp": "2026-09-04T12:00:00Z",
+        "prompt": "Review the code",
+    }
+    output = io.StringIO()
+
+    with (
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=output),
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient",
+            side_effect=RuntimeError,
+        ),
+    ):
+        main()
+
+    assert output.getvalue() == "{}\n"
 
 
 def test_notification_tool_permission() -> None:

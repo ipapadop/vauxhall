@@ -18,7 +18,8 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
-- **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Gemini hooks always return valid protocol JSON even when telemetry fails.
+- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, completion, and idle state.
+- **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Codex and Gemini hooks always return valid protocol JSON even when telemetry fails.
 - **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
 - **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.
@@ -69,7 +70,17 @@ python3 -m vauxhall.dashboard.app
 ```
 
 ### 3. Integrate with Agents
-Vauxhall supports multiple agents through customizable hooks. See [AGENTS.md](AGENTS.md) for detailed integration instructions for Gemini CLI and other tools.
+Vauxhall supports multiple agents through customizable hooks. From the Vauxhall source checkout, install the built-in integration for the current workspace:
+
+```bash
+# Codex
+python3 vauxhall/hooks/codex/install.py
+
+# Gemini CLI
+python3 vauxhall/hooks/gemini/install.py
+```
+
+The Codex installer writes `.codex/hooks.json`, rejects invalid existing structures without replacing them, and gives each telemetry handler a three-second timeout backed by a one-second MQTT connection limit. It shell-quotes POSIX paths and uses encoded PowerShell commands on Windows. Open `/hooks` in Codex after installation to review and trust the new project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and generic-agent integration.
 
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script to publish mock telemetry data for multiple agents:
@@ -83,7 +94,7 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 ## Project Structure
 
 - `vauxhall/dashboard/`: The Pyloid-based dashboard application and its packaged Vanilla JS UI assets.
-- `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
+- `vauxhall/hooks/`: Reusable telemetry client plus Codex and Gemini hook implementations and installers.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.
 

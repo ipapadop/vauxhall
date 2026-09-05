@@ -9,8 +9,8 @@ import zipfile
 from pathlib import Path
 
 
-def test_wheel_contains_dashboard_ui(tmp_path: Path) -> None:
-    """Ensure dashboard installations include every frontend asset."""
+def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
+    """Ensure installations include dashboard assets and agent hooks."""
     project_root = Path(__file__).parents[1]
     wheel_dir = tmp_path / "wheel"
 
@@ -43,4 +43,7 @@ def test_wheel_contains_dashboard_ui(tmp_path: Path) -> None:
         "vauxhall/dashboard/ui/js/ui.js",
         "vauxhall/dashboard/ui/logo.svg",
         "vauxhall/dashboard/ui/style.css",
+        "vauxhall/hooks/codex/__init__.py",
+        "vauxhall/hooks/codex/install.py",
+        "vauxhall/hooks/codex/telemetry_hook.py",
     } <= packaged_files

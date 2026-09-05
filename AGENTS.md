@@ -5,6 +5,7 @@ Vauxhall is designed to be agent-agnostic. You can integrate any AI agent or CLI
 ## Supported Agents
 
 Currently, Vauxhall includes built-in support or templates for:
+- **Codex**: Full lifecycle, tool, permission, and turn-completion hooks.
 - **Gemini CLI**: Full pre/post command hooks.
 - **Generic Agents**: Any agent can be simulated or integrated using the `TelemetryClient`.
 
@@ -95,6 +96,60 @@ All values received through telemetry are treated as untrusted text and must not
 The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
 ## Specific Agent Instructions
+
+### Codex
+
+Vauxhall provides a unified Codex command hook for lifecycle events, tool executions, permission requests, and turn completion. It maps Codex events as follows:
+
+| Codex event | Vauxhall state |
+| :--- | :--- |
+| `SessionStart`, `UserPromptSubmit` | `Thinking` |
+| `PreToolUse` | `Acting` |
+| `PermissionRequest` and `request_user_input` | `Waiting for Input` |
+| `PostToolUse` | `Thinking` |
+| `Stop`, `Interrupt`, `SessionEnd` | `Idle` |
+
+Telemetry is best-effort. The hook lazy-loads telemetry inside its failure boundary and reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
+
+#### Automated Installation (Recommended)
+
+From the Vauxhall source checkout, run:
+
+```bash
+python3 vauxhall/hooks/codex/install.py
+```
+
+The installer refreshes `.vauxhall-venv`, installs `vauxhall[hooks]`, preserves unrelated configuration in `.codex/hooks.json`, replaces existing Vauxhall Codex handlers, and registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop`, `Interrupt`, and `SessionEnd`. Existing invalid JSON or nested hook structure is backed up and left unchanged. Hook commands use shell quoting on POSIX and UTF-16LE Base64-encoded PowerShell on Windows so workspace-path metacharacters are not interpreted by the shell. Each handler has an explicit three-second timeout, and MQTT connection setup is limited to one second; handlers remain synchronous so tool-start and tool-completion telemetry retain lifecycle order.
+
+Project hooks require trust before Codex runs them. Open `/hooks` in Codex after installation, review the definitions, and trust them.
+
+#### Manual Configuration
+
+Add the command handler to each desired event in `.codex/hooks.json`. For example:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.codex.telemetry_hook",
+            "statusMessage": "Sending Vauxhall telemetry",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Codex passes one JSON event object on stdin. The hook reads `cwd`, `hook_event_name`, tool metadata, prompt text, and permission descriptions, then publishes the corresponding Vauxhall telemetry event.
+
+On Windows, use the automated installer rather than adapting the POSIX command above; it generates the encoded PowerShell command required for safe path handling.
 
 ### Gemini CLI
 

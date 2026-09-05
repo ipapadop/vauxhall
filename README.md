@@ -18,7 +18,8 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy a `cd` command to your clipboard for quick workspace access with visual "Copied!" feedback.
-- **Resilient Design**: Non-blocking hooks and robust backend error boundaries ensure stability without impacting agent performance.
+- **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Gemini hooks always return valid protocol JSON even when telemetry fails.
+- **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
 - **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.
 
@@ -81,15 +82,19 @@ python3 scripts/simulate_agent.py -n 5 -t 20
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based dashboard application (Python logic + Vanilla JS UI).
+- `vauxhall/dashboard/`: The Pyloid-based dashboard application and its packaged Vanilla JS UI assets.
 - `vauxhall/hooks/`: Reusable telemetry client and agent-specific hook implementations.
 - `scripts/`: Utility scripts for simulation and verification.
 - `tests/`: Comprehensive test suite for UI and network components.
 
 ## Development
 
+Frontend tests require Node.js 20.19 or newer.
+
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
-- **Ruff**: Always run `ruff format .` and `ruff check --fix .` before committing.
+- **Ruff**: Use the project-pinned Ruff version and run `ruff format .` plus `ruff check --fix .` before committing. Python files must retain their SPDX copyright and license headers.
+- **Frontend tests**: Run `npm ci` once, then `npm test` after changing dashboard JavaScript.
+- **Packaging**: Run `python -m build --wheel` when changing distribution metadata or bundled assets.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.
 
 ## License

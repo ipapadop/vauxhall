@@ -16,8 +16,10 @@
  * @returns {HTMLElement} The created card.
  */
 export function createCard(data, pyloidIpc, openHistoryCallback) {
-    // Guess environment if not provided
-    const env = data.env || (data.workspace.startsWith('/home') || data.workspace.match(/^[A-Z]:\\/) ? 'local' : 'remote');
+    const agent = String(data.agent ?? '');
+    const workspace = String(data.workspace ?? '');
+    const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
+    const env = configuredEnv || (workspace.startsWith('/home') || workspace.match(/^[A-Z]:\\/i) ? 'local' : 'remote');
     
     const card = document.createElement('div');
     card.className = 'agent-card';
@@ -26,10 +28,10 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
         <div class="agent-header">
             <div class="agent-info">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="env-badge env-${env}" title="Execution environment">${env}</span>
-                    <div class="agent-name" title="Agent name">${data.agent}</div>
+                    <span class="env-badge" title="Execution environment"></span>
+                    <div class="agent-name" title="Agent name"></div>
                 </div>
-                <div class="agent-workspace" title="Current workspace path">${data.workspace}</div>
+                <div class="agent-workspace" title="Current workspace path"></div>
             </div>
             <div class="status-badge" title="Current agent state">Idle</div>
         </div>
@@ -43,13 +45,19 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
             <span class="history-icon" title="View historical operations">🕒</span>
         </div>
     `;
+
+    const envBadge = card.querySelector('.env-badge');
+    envBadge.classList.add(`env-${env}`);
+    envBadge.textContent = env;
+    card.querySelector('.agent-name').textContent = agent;
+    card.querySelector('.agent-workspace').textContent = workspace;
     
     // Setup History Modal Trigger
     const historyIcon = card.querySelector('.history-icon');
     if (historyIcon) {
         historyIcon.addEventListener('click', (e) => {
             e.stopPropagation();
-            const key = `${data.agent}:${data.workspace}`;
+            const key = `${agent}:${workspace}`;
             openHistoryCallback(key);
         });
     }
@@ -57,7 +65,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     // Setup Workspace Copy Trigger
     card.addEventListener('click', () => {
         if (pyloidIpc && pyloidIpc.DashboardIPC) {
-            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${data.workspace}`).then((success) => {
+            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${workspace}`).then((success) => {
                 if (success) {
                     showCopyFeedback(card);
                 }
@@ -71,47 +79,67 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
 /**
  * Formats the telemetry data into a human-readable action string.
  * @param {object} data - The telemetry data object (containing state and details).
- * @returns {string} A formatted string describing the action.
+ * @returns {Array<{text: string, className?: string}>} Display segments.
  */
-function getDetailsString(data) {
-    if (!data) return "";
-    const details = data.details || {};
+function getDetailsSegments(data) {
+    if (!data) return [];
+    const details = data.details && typeof data.details === 'object' ? data.details : {};
     const state = data.state;
+    const segment = (value, className) => ({ text: String(value), className });
 
     // Prioritize prompt for waiting states
     if (state === 'Waiting for Input' || state === 'Input Required' || state === 'Waiting') {
-        if (details.prompt) return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
-        if (details.message) return details.message;
+        if (details.prompt) return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
+        if (details.message) return [segment(details.message)];
     }
 
     if (details.error) {
-        return `<span class="log-error">Error:</span> ${details.error}`;
+        return [segment('Error:', 'log-error'), segment(` ${details.error}`)];
     }
 
     if (details.tool) {
         // If it's a known placeholder, and we have something better, use it
         if (details.tool === 'unknown' || details.tool === 'unknown_tool') {
-             if (details.prompt) return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
-             if (details.status) return details.status;
+             if (details.prompt) return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
+             if (details.status) return [segment(details.status)];
         }
 
         // For AfterTool (Thinking state), show "Completed"
         if (state === 'Thinking' && details.status === 'completed') {
-            return `<span class="log-completed">Completed:</span> <span class="log-tool">${details.tool}</span>`;
+            return [segment('Completed:', 'log-completed'), segment(` ${details.tool}`, 'log-tool')];
         }
 
-        return `<span class="log-acting">Running:</span> <span class="log-tool">${details.tool}</span>${details.cmd ? ' <span class="log-cmd">' + details.cmd + '</span>' : ''}`;
+        const segments = [segment('Running:', 'log-acting'), segment(` ${details.tool}`, 'log-tool')];
+        if (details.cmd) segments.push(segment(` ${details.cmd}`, 'log-cmd'));
+        return segments;
     }
 
     if (details.prompt) {
-        return `<span class="log-prompt">Prompt:</span> ${details.prompt}`;
+        return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
     }
 
     if (details.status) {
-        return details.status;
+        return [segment(details.status)];
     }
 
-    return "";
+    return [];
+}
+
+function getDetailsString(data) {
+    return getDetailsSegments(data).map(segment => segment.text).join('');
+}
+
+function appendDetails(container, data) {
+    getDetailsSegments(data).forEach(({ text, className }) => {
+        if (className) {
+            const span = document.createElement('span');
+            span.className = className;
+            span.textContent = text;
+            container.appendChild(span);
+        } else {
+            container.appendChild(document.createTextNode(text));
+        }
+    });
 }
 
 /**
@@ -146,18 +174,31 @@ export function updateCard(card, data) {
     }
 
     // Accumulate metrics
-    if (details.tokens) card.latestTokens = details.tokens;
-    if (details.duration) card.latestDuration = details.duration;
+    if (typeof details.tokens === 'number' && Number.isFinite(details.tokens) && details.tokens > 0) {
+        card.latestTokens = details.tokens;
+    }
+    if (typeof details.duration === 'number' && Number.isFinite(details.duration) && details.duration > 0) {
+        card.latestDuration = details.duration;
+    }
 
     // Update Footer Metric Badges
     if (metricsArea) {
-        metricsArea.innerHTML = '';
+        metricsArea.replaceChildren();
         if (card.latestTokens) {
             const t = card.latestTokens > 1000 ? (card.latestTokens/1000).toFixed(1) + 'k' : card.latestTokens;
-            metricsArea.innerHTML += `<span class="metric-badge tokens" data-value="${card.latestTokens}" title="Tokens used in last operation">${t}</span>`;
+            const badge = document.createElement('span');
+            badge.className = 'metric-badge tokens';
+            badge.dataset.value = String(card.latestTokens);
+            badge.title = 'Tokens used in last operation';
+            badge.textContent = String(t);
+            metricsArea.appendChild(badge);
         }
         if (card.latestDuration) {
-            metricsArea.innerHTML += `<span class="metric-badge" title="Duration of last operation">${card.latestDuration}s</span>`;
+            const badge = document.createElement('span');
+            badge.className = 'metric-badge';
+            badge.title = 'Duration of last operation';
+            badge.textContent = `${card.latestDuration}s`;
+            metricsArea.appendChild(badge);
         }
     }
 
@@ -175,12 +216,16 @@ export function updateCard(card, data) {
         });
 
         if (logArea.textContent === "Ready...") {
-            logArea.innerHTML = "";
+            logArea.replaceChildren();
         }
 
         const logLine = document.createElement('div');
         logLine.className = 'log-line';
-        logLine.innerHTML = `<span style="color: var(--text-dim)">[${time}]</span> ${newLogMessage}`;
+        const timestamp = document.createElement('span');
+        timestamp.style.color = 'var(--text-dim)';
+        timestamp.textContent = `[${time}] `;
+        logLine.appendChild(timestamp);
+        appendDetails(logLine, data);
         
         logArea.prepend(logLine);
 
@@ -369,14 +414,29 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
         return matchesSearch && matchesState;
     });
 
-    // Re-render timeline items
-    body.innerHTML = filteredHistory.map(item => `
-        <div class="history-item">
-            <span class="history-time">${item.time}</span>
-            <span class="history-state">${item.state}</span>
-            <span class="history-details">${getDetailsString(item)}</span>
-        </div>
-    `).reverse().join(''); // Chronological order (oldest top, newest bottom)
+    // Re-render timeline items in chronological order (oldest top, newest bottom)
+    body.replaceChildren();
+    [...filteredHistory].reverse().forEach(item => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+
+        const time = document.createElement('span');
+        time.className = 'history-time';
+        time.textContent = String(item.time ?? '');
+        historyItem.appendChild(time);
+
+        const state = document.createElement('span');
+        state.className = 'history-state';
+        state.textContent = String(item.state ?? '');
+        historyItem.appendChild(state);
+
+        const details = document.createElement('span');
+        details.className = 'history-details';
+        appendDetails(details, item);
+        historyItem.appendChild(details);
+
+        body.appendChild(historyItem);
+    });
 
     const isInteracting = body.matches(':hover') || isInteractingWithModal;
 
@@ -389,7 +449,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
         // Live update: Only follow tail if user was already at the bottom and isn't hovering
         body.scrollTop = body.scrollHeight;
     } else {
-        // Freeze mode: Restore scroll position to prevent jumping during innerHTML refresh
+        // Freeze mode: Restore scroll position to prevent jumping during DOM refresh
         body.scrollTop = oldScrollTop;
     }
 }

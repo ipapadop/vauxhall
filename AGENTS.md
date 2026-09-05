@@ -19,20 +19,22 @@ from vauxhall.hooks.client import TelemetryClient
 client = TelemetryClient(host="localhost", port=1883)
 
 # Send an "Acting" state with tool details, metrics, and environment context
-client.send(
+delivered = client.send(
     agent="MyAgent",
     workspace="/path/to/project",
     state="Acting",
-    env="local", # Optional: "local" or "remote"
+    env="local",  # Optional: "local" or "remote"
     tool="grep",
     cmd="grep -r 'TODO' .",
-    tokens=1245,   # Optional: Token count for the operation
-    duration=12.4  # Optional: Duration in seconds
+    tokens=1245,  # Optional: Token count for the operation
+    duration=12.4,  # Optional: Duration in seconds
 )
 
 # Send an "Idle" state when finished
 client.send("MyAgent", "/path/to/project", "Idle")
 ```
+
+`send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection.
 
 ### 2. Manual MQTT (Any Language)
 You can publish JSON messages to the following topic structure:
@@ -87,6 +89,8 @@ The `log-area` on each card is a real-time append-only stream of the **last 5 ev
 
 This area is non-scrolling to keep the dashboard clean.
 
+All values received through telemetry are treated as untrusted text and must not be inserted into executable HTML.
+
 ### Session History & Audit
 The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
@@ -95,6 +99,8 @@ The dashboard automatically maintains a full buffer of the last 20 operations pe
 ### Gemini CLI
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
+
+Telemetry is best-effort: the hook always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. This prevents monitoring problems from interrupting Gemini CLI.
 
 #### Automated Installation (Recommended)
 You can automatically register the hooks in your current workspace by running:
@@ -144,9 +150,13 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
     - `ruff format .` to ensure consistent formatting.
     - `ruff check .` to identify potential issues.
     - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
+    - Every Python file must begin with the project's SPDX copyright and license headers.
+    - Use the exact Ruff version declared by the project so local and CI results agree.
 3.  **Testing**: Before committing, all existing and new tests MUST pass.
     - Run `.venv/bin/pytest` to verify.
+    - With Node.js 20.19 or newer, run `npm test` to verify frontend rendering behavior.
     - Always add unit tests for new features or bug fixes.
+    - The packaging test builds a real wheel and verifies that dashboard UI assets are included.
 4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
     - `README.md`: Update features, architecture, and usage instructions.
     - `AGENTS.md`: Update integration methods, states, and metadata features.

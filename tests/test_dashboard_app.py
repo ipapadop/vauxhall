@@ -28,6 +28,17 @@ from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 class TestDashboardComponents(unittest.TestCase):
     """Tests for IPC and Subscriber components."""
 
+    def valid_telemetry(self) -> dict[str, Any]:
+        """Return one valid schema-v1 dashboard update."""
+        return {
+            "schema_version": 1,
+            "agent": "TestAgent",
+            "workspace": "/path",
+            "session_id": "native:session-1",
+            "state": "Acting",
+            "details": {},
+        }
+
     def setUp(self) -> None:
         """Set up the test environment."""
         self.mock_app = MagicMock()
@@ -52,7 +63,7 @@ class TestDashboardComponents(unittest.TestCase):
         """Verify that telemetry queued when IPC is not ready and flushed on drain."""
         self.dashboard.ipc.is_ready = False
 
-        valid_data = {"agent": "TestAgent", "workspace": "/path", "state": "Acting"}
+        valid_data = self.valid_telemetry()
         self.dashboard.on_telemetry(valid_data)
 
         # Should be queued, not invoked
@@ -64,6 +75,36 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.drain_queue()
         self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
         assert len(self.dashboard.pending_updates) == 0
+
+    def test_on_telemetry_rejects_unversioned_and_unsupported_messages(self) -> None:
+        """Only supported schema-v1 telemetry may reach dashboard state."""
+        self.dashboard.ipc.is_ready = False
+        unversioned = self.valid_telemetry()
+        del unversioned["schema_version"]
+        unsupported = {**self.valid_telemetry(), "schema_version": 2}
+
+        with self.assertLogs("vauxhall.dashboard.app", level="WARNING") as logs:
+            self.dashboard.on_telemetry(unversioned)
+            self.dashboard.on_telemetry(unsupported)
+
+        assert self.dashboard.pending_updates == []
+        self.dashboard.window.invoke.assert_not_called()
+        assert "schema_version is required" in logs.output[0]
+        assert "unsupported schema_version; expected 1" in logs.output[1]
+
+    def test_on_telemetry_rejection_log_does_not_include_payload(self) -> None:
+        """Protocol warnings must not leak prompt or command content."""
+        invalid = {
+            **self.valid_telemetry(),
+            "schema_version": 2,
+            "details": {"prompt": "private prompt", "cmd": "private command"},
+        }
+
+        with self.assertLogs("vauxhall.dashboard.app", level="WARNING") as logs:
+            self.dashboard.on_telemetry(invalid)
+
+        assert "private prompt" not in logs.output[0]
+        assert "private command" not in logs.output[0]
 
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""
@@ -90,9 +131,12 @@ class TestDashboardComponents(unittest.TestCase):
         # Create a mock message
         msg: Any = MagicMock()
         data = {
+            "schema_version": 1,
             "agent": "Gemini",
             "workspace": "/home/user/project",
+            "session_id": "native:session-1",
             "state": "Running",
+            "details": {},
         }
         msg.payload = json.dumps(data).encode()
 

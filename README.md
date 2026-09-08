@@ -12,6 +12,7 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 
 - **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen with color-coded indicators.
 - **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously, proportional to your window size.
+- **Session-aware Cards**: Dashboard cards are identified by agent, workspace, and session ID, so concurrent sessions for the same agent in one workspace remain distinct.
 - **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
 - **Real-time Activity Log**: A concise, non-scrolling view of the last 5 events per agent with timestamps (`[HH:mm:ss]`).
 - **Audit History**: Deep-dive into agent behavior with a **resizable history modal** (🕒) that supports real-time updates and smart auto-scrolling (freezes on hover for easy reading).
@@ -90,7 +91,53 @@ three-second timeout backed by a one-second MQTT connection limit. Both
 installers shell-quote POSIX paths and use encoded PowerShell commands on
 Windows. Open `/hooks` in Codex after installation to review and trust the new
 project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual
-configuration, and generic-agent integration.
+configuration, and generic-agent integration. Codex and Gemini preserve their
+native session identities, so separate native sessions create separate
+dashboard cards even when they use the same agent name and workspace.
+
+### Telemetry schema
+
+Vauxhall accepts only telemetry schema version 1. Every payload requires
+`schema_version`, `agent`, `workspace`, `session_id`, and `state`.
+`session_id` is an opaque value that must remain stable throughout one session
+and must be unique among concurrent sessions for the same agent and workspace.
+Generic producers should generate one UUID when the session starts and reuse it
+for every event:
+
+```python
+from uuid import uuid4
+
+from vauxhall.hooks.client import TelemetryClient
+
+session_id = str(uuid4())
+client = TelemetryClient(host="localhost", port=1883)
+client.send(
+    agent="MyAgent",
+    workspace="/path/to/project",
+    session_id=session_id,
+    state="Acting",
+    tool="grep",
+)
+```
+
+Producers in other languages can publish schema-v1 JSON to
+`vauxhall/agents/<agent_name>/activity`:
+
+```json
+{
+  "schema_version": 1,
+  "agent": "AgentName",
+  "workspace": "/absolute/path/to/workspace",
+  "session_id": "0195db69-a702-73dc-a223-7556293f8cba",
+  "state": "Acting",
+  "details": {}
+}
+```
+
+The built-in hooks resolve session identity in this order: the agent's native
+session ID, a hash of its transcript path, then `VAUXHALL_SESSION_ID`. They skip
+an event when none of those sources is available. Unversioned, incomplete, or
+unsupported payloads are logged and dropped by the dashboard.
 
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script to publish mock telemetry data for multiple agents:

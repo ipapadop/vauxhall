@@ -71,6 +71,8 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
         "vauxhall/dashboard/ui/js/ui.js",
         "vauxhall/dashboard/ui/logo.svg",
         "vauxhall/dashboard/ui/style.css",
+        "vauxhall/core/telemetry.py",
+        "vauxhall/hooks/identity.py",
         "vauxhall/hooks/codex/__init__.py",
         "vauxhall/hooks/codex/install.py",
         "vauxhall/hooks/codex/telemetry_hook.py",

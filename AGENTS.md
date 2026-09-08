@@ -15,14 +15,18 @@ Currently, Vauxhall includes built-in support or templates for:
 If your agent supports Python-based hooks or you are wrapping a CLI tool in Python, use the `TelemetryClient`.
 
 ```python
+from uuid import uuid4
+
 from vauxhall.hooks.client import TelemetryClient
 
+session_id = str(uuid4())
 client = TelemetryClient(host="localhost", port=1883)
 
 # Send an "Acting" state with tool details, metrics, and environment context
 delivered = client.send(
     agent="MyAgent",
     workspace="/path/to/project",
+    session_id=session_id,
     state="Acting",
     env="local",  # Optional: "local" or "remote"
     tool="grep",
@@ -32,7 +36,12 @@ delivered = client.send(
 )
 
 # Send an "Idle" state when finished
-client.send("MyAgent", "/path/to/project", "Idle")
+client.send(
+    agent="MyAgent",
+    workspace="/path/to/project",
+    session_id=session_id,
+    state="Idle",
+)
 ```
 
 `send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection. Importing the client and configuration modules does not configure or replace the host application's root logging; dashboard and hook entry points configure Vauxhall logging when they run.
@@ -44,20 +53,31 @@ You can publish JSON messages to the following topic structure:
 **Message Format:**
 ```json
 {
+  "schema_version": 1,
   "agent": "AgentName",
   "workspace": "/absolute/path/to/workspace",
-  "state": "Acting", 
-  "env": "remote", 
-  "details": {
-    "tool": "tool_name",
-    "cmd": "command executed",
-    "tokens": 1234,
-    "duration": 5.2,
-    "prompt": "User prompt if waiting",
-    "error": "Error message if failed"
-  }
+  "session_id": "0195db69-a702-73dc-a223-7556293f8cba",
+  "state": "Acting",
+  "details": {}
 }
 ```
+
+Optional `env` and operation values such as `tool`, `cmd`, `tokens`,
+`duration`, `prompt`, and `error` may also be sent; operation values belong in
+the `details` object.
+
+## Telemetry schema
+
+Version 1 is the only accepted telemetry schema. The `schema_version`, `agent`,
+`workspace`, `session_id`, and `state` fields are required. `session_id` is
+opaque, must remain stable throughout one session, and must be unique among
+concurrent sessions for the same agent and workspace. Generic producers should
+generate one UUID at session startup and pass it on every event.
+
+The built-in hooks resolve a session ID from the agent's native ID first, then
+from a hash of its transcript path, and finally from `VAUXHALL_SESSION_ID`. If
+none is available, the hook skips the event. The dashboard logs and drops
+unversioned, incomplete, and unsupported payloads.
 
 ## Supported States & UI Indicators
 
@@ -73,6 +93,10 @@ The dashboard uses the `state` field to color-code agent cards:
 | `Idle` | None | Agent is finished or standby. |
 
 ## Metadata & Features
+
+Dashboard cards are identified by the combination of `agent`, `workspace`, and
+`session_id`. Separate sessions therefore create separate cards even when the
+agent name and workspace are identical.
 
 ### Environment Badges
 Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, the dashboard attempts to guess the environment based on the `workspace` path:
@@ -112,6 +136,12 @@ Vauxhall provides a unified Codex command hook for lifecycle events, tool execut
 | `Stop`, `Interrupt`, `SessionEnd` | `Idle` |
 
 Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
+
+The hook preserves Codex's native session identity, so separate native Codex
+sessions in one workspace create separate dashboard cards. If no native ID is
+available, it uses the shared fallback chain described in
+[Telemetry schema](#telemetry-schema) and skips events that have no stable
+session identity.
 
 #### Automated Installation (Recommended)
 
@@ -170,6 +200,12 @@ On Windows, use the automated installer rather than adapting the POSIX command a
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
 
 Telemetry is best-effort: the hook configures logging inside its failure boundary and always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. Logs go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
+
+The hook preserves Gemini's native session identity, so separate native Gemini
+sessions in one workspace create separate dashboard cards. If no native ID is
+available, it uses the shared fallback chain described in
+[Telemetry schema](#telemetry-schema) and skips events that have no stable
+session identity.
 
 #### Automated Installation (Recommended)
 After installing `vauxhall[hooks]`, register the hooks in the current Gemini

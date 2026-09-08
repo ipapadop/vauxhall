@@ -25,6 +25,14 @@ def _create_telemetry_client() -> "TelemetryClient":
     return client
 
 
+def _setup_logging() -> None:
+    """Configure logging inside the hook protocol failure boundary."""
+    from vauxhall.core.logging import setup_logging  # noqa: PLC0415
+    from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
+
+    setup_logging(level=hook_settings.logging.level)
+
+
 def _tool_time_file(input_data: dict[str, Any]) -> Path | None:
     """Return a collision-resistant timing file for one Codex tool call."""
     session_id = input_data.get("session_id")
@@ -138,6 +146,7 @@ def main() -> None:
     """Process one Codex hook event without disrupting its protocol."""
     try:
         with redirect_stdout(sys.stderr):
+            _setup_logging()
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 _send_telemetry(input_data)

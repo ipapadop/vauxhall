@@ -1,41 +1,28 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <giannis.papadopoulos@gmail.com>
 # SPDX-License-Identifier: MIT
 
-"""Test for automatic logging initialization in hook config."""
+"""Tests for logging behavior when Vauxhall is imported as a library."""
 
-import importlib
+import subprocess
 import sys
-from unittest.mock import patch
 
 
-def test_logging_initialized_on_import() -> None:
-    """Test that setup_logging is called when vauxhall.hooks.config is imported."""
-    # Ensure the module is not in sys.modules so we can trigger the top-level code
-    if "vauxhall.hooks.config" in sys.modules:
-        del sys.modules["vauxhall.hooks.config"]
+def test_importing_telemetry_client_preserves_host_logging() -> None:
+    """Importing the client must not replace an application's root handlers."""
+    code = """
+import logging
 
-    # Patch setup_logging in the core module before importing config
-    with patch("vauxhall.core.logging.setup_logging") as mock_core_setup:
-        importlib.import_module("vauxhall.hooks.config")
-        mock_core_setup.assert_called_once()
-        # It should be called with the default level if no env/file is present
-        _args, kwargs = mock_core_setup.call_args
-        assert kwargs.get("level") == "INFO"
+root = logging.getLogger()
+handler = logging.NullHandler()
+root.handlers = [handler]
 
+import vauxhall.hooks.client
 
-def test_logging_initialized_with_env_level() -> None:
-    """Test that setup_logging is called with the level from environment variable."""
-    # Ensure the module is not in sys.modules
-    if "vauxhall.hooks.config" in sys.modules:
-        del sys.modules["vauxhall.hooks.config"]
+print(root.handlers == [handler])
+"""
 
-    env = {"VAUXHALL_LOGGING_LEVEL": "DEBUG"}
-    with (
-        patch.dict(sys.modules, {}),  # More isolation
-        patch.dict("os.environ", env),
-        patch("vauxhall.core.logging.setup_logging") as mock_core_setup,
-    ):
-        importlib.import_module("vauxhall.hooks.config")
-        mock_core_setup.assert_called_once()
-        _args, kwargs = mock_core_setup.call_args
-        assert kwargs.get("level") == "DEBUG"
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "True"

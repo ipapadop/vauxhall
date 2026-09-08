@@ -65,7 +65,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     // Setup Workspace Copy Trigger
     card.addEventListener('click', () => {
         if (pyloidIpc && pyloidIpc.DashboardIPC) {
-            pyloidIpc.DashboardIPC.copy_to_clipboard(`cd ${workspace}`).then((success) => {
+            pyloidIpc.DashboardIPC.copy_to_clipboard(workspace).then((success) => {
                 if (success) {
                     showCopyFeedback(card);
                 }

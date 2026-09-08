@@ -5,6 +5,7 @@
 
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -52,6 +53,34 @@ def test_non_object_input_outputs_valid_json() -> None:
     assert completed.returncode == 0
     assert completed.stdout == "{}\n"
     assert completed.stderr == ""
+
+
+def test_gemini_hook_initializes_debug_logging_without_contaminating_stdout() -> None:
+    """Configured hook logs must go to stderr and preserve protocol stdout."""
+    hook_data = {
+        "hook_event_name": "BeforeAgent",
+        "cwd": "/workspace",
+        "prompt": "Review the code",
+    }
+    environment = {
+        **os.environ,
+        "VAUXHALL_LOGGING_LEVEL": "DEBUG",
+        "VAUXHALL_MQTT_HOST": "127.0.0.1",
+        "VAUXHALL_MQTT_PORT": "1",
+    }
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
+        input=json.dumps(hook_data),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert "Failed to connect telemetry client" in completed.stderr
 
 
 def test_telemetry_initialization_failure_outputs_valid_json() -> None:

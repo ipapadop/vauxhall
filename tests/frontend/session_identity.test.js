@@ -22,7 +22,7 @@ test('agent identity includes session and cannot collide on delimiters', () => {
     assert.equal(first, '["A:B","C","D"]');
 });
 
-test('same agent and workspace sessions create separate cards', async () => {
+test('same agent and workspace sessions create separate cards', async (t) => {
     const { document, window } = parseHTML(`
         <html><body>
             <div id="js-status"></div>
@@ -47,6 +47,10 @@ test('same agent and workspace sessions create separate cards', async () => {
     globalThis.document = document;
     globalThis.window = window;
     globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+    const originalSetInterval = globalThis.setInterval;
+    t.after(() => {
+        globalThis.setInterval = originalSetInterval;
+    });
     globalThis.setInterval = () => 0;
     clearAgents();
 
@@ -60,9 +64,24 @@ test('same agent and workspace sessions create separate cards', async () => {
     };
     onAgentUpdate({ ...base, session_id: 'native:one' });
     onAgentUpdate({ ...base, session_id: 'native:two' });
+    const firstCard = agents['["Codex","/workspace","native:one"]'];
+    const secondCard = agents['["Codex","/workspace","native:two"]'];
+
+    onAgentUpdate({
+        ...base,
+        session_id: 'native:one',
+        state: 'Acting',
+        details: { tool: 'shell' },
+    });
 
     assert.equal(document.getElementById('agent-grid').children.length, 2);
     assert.equal(Object.keys(agents).length, 2);
+    assert.equal(firstCard.querySelector('.status-badge').textContent, 'Acting');
+    assert.equal(firstCard.history.length, 2);
+    assert.equal(firstCard.history[0].state, 'Acting');
+    assert.equal(secondCard.querySelector('.status-badge').textContent, 'Thinking');
+    assert.equal(secondCard.history.length, 1);
+    assert.equal(secondCard.history[0].state, 'Thinking');
     assert.deepEqual(
         [...document.querySelectorAll('.agent-session')].map((element) => element.textContent),
         ['Session: native:one', 'Session: native:two'],

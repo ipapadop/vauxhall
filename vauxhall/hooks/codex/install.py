@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from vauxhall import __version__
+
 HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
 HOOK_EVENTS = (
     "SessionStart",
@@ -63,12 +65,11 @@ def build_hook_command(venv_python: Path) -> str:
     return shlex.join(arguments)
 
 
-def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
+def setup_venv(venv_dir: Path) -> Path:
     """Create an isolated environment containing the Vauxhall hooks package.
 
     Args:
         venv_dir: Destination for the virtual environment.
-        repo_root: Root of the Vauxhall source repository.
 
     Returns:
         Path to the environment's Python executable.
@@ -84,15 +85,10 @@ def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    print("Installing dependencies into venv...")
+    requirement = f"vauxhall[hooks]=={__version__}"
+    print(f"Installing {requirement}...")
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "--upgrade", "pip"],
-        check=True,
-        capture_output=True,
-    )
-    print(f"Installing vauxhall[hooks] from {repo_root}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-e", f"{repo_root}[hooks]"],
+        [str(venv_python), "-m", "pip", "install", requirement],
         check=True,
         capture_output=True,
     )
@@ -190,8 +186,6 @@ def install() -> None:
     print("-----------------------------")
 
     cwd = Path.cwd()
-    install_script_dir = Path(__file__).parent.absolute()
-    repo_root = install_script_dir.parents[2]
     venv_dir = cwd / ".vauxhall-venv"
     target_hooks = cwd / ".codex" / "hooks.json"
     try:
@@ -200,7 +194,7 @@ def install() -> None:
         print(f"Error: {error}")
         sys.exit(1)
 
-    venv_python = setup_venv(venv_dir, repo_root)
+    venv_python = setup_venv(venv_dir)
     config.setdefault("description", "Vauxhall telemetry hooks for Codex.")
     purge_vauxhall_hooks(config)
 

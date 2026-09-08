@@ -9,10 +9,46 @@ build-backend = "setuptools.build_meta"
 name = "vauxhall"
 version = "0.1.0"
 description = "Vauxhall Agent Dashboard & Hooks"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Yiannis Papadopoulos", email = "giannis.papadopoulos@gmail.com"},
+]
+maintainers = [
+    {name = "Yiannis Papadopoulos", email = "giannis.papadopoulos@gmail.com"},
+]
+keywords = ["ai-agents", "dashboard", "hooks", "monitoring", "mqtt", "telemetry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: System :: Monitoring",
+]
 dependencies = [
     "paho-mqtt>=2.0.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/ipapadop/vauxhall"
+Documentation = "https://github.com/ipapadop/vauxhall#readme"
+Issues = "https://github.com/ipapadop/vauxhall/issues"
+Changelog = "https://github.com/ipapadop/vauxhall/releases"
+Security = "https://github.com/ipapadop/vauxhall/security/advisories"
+
+[project.scripts]
+vauxhall = "vauxhall.dashboard.app:main"
+vauxhall-install-codex = "vauxhall.hooks.codex.install:install"
+vauxhall-install-gemini = "vauxhall.hooks.gemini.install:install"
 
 [project.optional-dependencies]
 dashboard = [
@@ -34,6 +70,7 @@ test = [
     "build>=1.2.2",
     "pytest>=9.0.1",
     "setuptools>=77.0.0",
+    "twine>=6.2.0",
     "wheel>=0.45.1",
 ]
 

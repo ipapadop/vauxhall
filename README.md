@@ -46,6 +46,9 @@ Vauxhall uses a **Producer-Consumer** pattern over MQTT:
 pip install "vauxhall[dashboard]"
 ```
 
+The package supports Python 3.10 and newer on any operating system supported by
+its dependencies.
+
 ### For Remote Agents (Minimum Dependencies)
 ```bash
 pip install "vauxhall[hooks]"
@@ -62,25 +65,32 @@ mosquitto
 
 ### 2. Run the Dashboard
 ```bash
-# Using uv (recommended for development)
-uv run python3 -m vauxhall.dashboard.app
-
-# Or using standard python
-python3 -m vauxhall.dashboard.app
+vauxhall
 ```
 
+From a source checkout, `uv run vauxhall` starts the same entry point.
+
 ### 3. Integrate with Agents
-Vauxhall supports multiple agents through customizable hooks. From the Vauxhall source checkout, install the built-in integration for the current workspace:
+Vauxhall supports multiple agents through customizable hooks. Install the desired integration in the agent workspace:
 
 ```bash
 # Codex
-python3 vauxhall/hooks/codex/install.py
+vauxhall-install-codex
 
 # Gemini CLI
-python3 vauxhall/hooks/gemini/install.py
+vauxhall-install-gemini
 ```
 
-The Codex installer writes `.codex/hooks.json`, rejects invalid existing structures without replacing them, and gives each telemetry handler a three-second timeout backed by a one-second MQTT connection limit. It shell-quotes POSIX paths and uses encoded PowerShell commands on Windows. Open `/hooks` in Codex after installation to review and trust the new project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and generic-agent integration.
+Each installer creates `.vauxhall-venv` and installs the same immutable Vauxhall
+release that provided the command. Registered hooks invoke the packaged
+telemetry module, so moving or deleting the source checkout does not break
+them. The Codex installer writes `.codex/hooks.json`, rejects invalid existing
+structures without replacing them, and gives each telemetry handler a
+three-second timeout backed by a one-second MQTT connection limit. Both
+installers shell-quote POSIX paths and use encoded PowerShell commands on
+Windows. Open `/hooks` in Codex after installation to review and trust the new
+project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual
+configuration, and generic-agent integration.
 
 ### 4. Simulation
 To see the dashboard in action without running actual agents, use the simulation script to publish mock telemetry data for multiple agents:
@@ -105,7 +115,7 @@ Frontend tests require Node.js 20.19 or newer.
 Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
 - **Ruff**: Use the project-pinned Ruff version and run `ruff format .` plus `ruff check --fix .` before committing. Python files must retain their SPDX copyright and license headers.
 - **Frontend tests**: Run `npm ci` once, then `npm test` after changing dashboard JavaScript.
-- **Packaging**: Run `python -m build --wheel` when changing distribution metadata or bundled assets.
+- **Packaging**: Run `python -m build` and `twine check dist/*` when changing distribution metadata, entry points, or bundled assets.
 - **Docs**: Always update `README.md` and `AGENTS.md` after every change.
 
 ## License

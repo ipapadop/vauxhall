@@ -8,7 +8,7 @@ import importlib
 import json
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -90,6 +90,38 @@ def test_hook_command_uses_windows_argument_quoting() -> None:
         "& '/Program Files/Vauxhall & %TEMP%/(owner''s)/python.exe' "
         "-m vauxhall.hooks.codex.telemetry_hook"
     )
+
+
+def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
+    """Hook environments must install an immutable published release."""
+    installer = _installer()
+    venv_dir = tmp_path / "hooks-venv"
+    if installer.os.name == "nt":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    with patch.object(installer.subprocess, "run") as run:
+        result = installer.setup_venv(venv_dir)
+
+    assert result == venv_python
+    assert run.call_args_list == [
+        call(
+            [installer.sys.executable, "-m", "venv", str(venv_dir)],
+            check=True,
+        ),
+        call(
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "vauxhall[hooks]==0.1.0",
+            ],
+            check=True,
+            capture_output=True,
+        ),
+    ]
 
 
 def test_install_writes_project_codex_hooks(tmp_path: Path) -> None:

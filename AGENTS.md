@@ -115,13 +115,25 @@ Telemetry is best-effort. The hook lazy-loads telemetry and configures logging i
 
 #### Automated Installation (Recommended)
 
-From the Vauxhall source checkout, run:
+After installing `vauxhall[hooks]`, run this command from the Codex workspace:
 
 ```bash
-python3 vauxhall/hooks/codex/install.py
+vauxhall-install-codex
 ```
 
-The installer refreshes `.vauxhall-venv`, installs `vauxhall[hooks]`, preserves unrelated configuration in `.codex/hooks.json`, replaces existing Vauxhall Codex handlers, and registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop`, `Interrupt`, and `SessionEnd`. Existing invalid JSON or nested hook structure is backed up and left unchanged. Hook commands use shell quoting on POSIX and UTF-16LE Base64-encoded PowerShell on Windows so workspace-path metacharacters are not interpreted by the shell. Each handler has an explicit three-second timeout, and MQTT connection setup is limited to one second; handlers remain synchronous so tool-start and tool-completion telemetry retain lifecycle order.
+The installer refreshes `.vauxhall-venv`, installs the exact immutable
+`vauxhall[hooks]` release that supplied the command, preserves unrelated
+configuration in `.codex/hooks.json`, replaces existing Vauxhall Codex
+handlers, and registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+`PermissionRequest`, `PostToolUse`, `Stop`, `Interrupt`, and `SessionEnd`.
+Existing invalid JSON or nested hook structure is backed up and left unchanged.
+Hook commands execute `python -m vauxhall.hooks.codex.telemetry_hook` from the
+isolated environment. They use shell quoting on POSIX and UTF-16LE
+Base64-encoded PowerShell on Windows so workspace-path metacharacters are not
+interpreted by the shell. Each handler has an explicit three-second timeout,
+and MQTT connection setup is limited to one second; handlers remain synchronous
+so tool-start and tool-completion telemetry retain lifecycle order. The
+installed hooks do not depend on the checkout from which Vauxhall was built.
 
 Project hooks require trust before Codex runs them. Open `/hooks` in Codex after installation, review the definitions, and trust them.
 
@@ -160,18 +172,23 @@ Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lif
 Telemetry is best-effort: the hook configures logging inside its failure boundary and always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. Logs go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
 
 #### Automated Installation (Recommended)
-You can automatically register the hooks in your current workspace by running:
+After installing `vauxhall[hooks]`, register the hooks in the current Gemini
+workspace by running:
 
 ```bash
-python3 vauxhall/hooks/gemini/install.py
+vauxhall-install-gemini
 ```
 
 This script will:
 1.  **Isolated Environment**: Create a dedicated virtual environment (`.vauxhall-venv`) in the current directory to isolate telemetry dependencies. If the directory exists, it is refreshed.
-2.  **Dependency Management**: Automatically install `paho-mqtt` and the `vauxhall-hooks` package into the isolated venv.
+2.  **Dependency Management**: Install the exact immutable `vauxhall[hooks]` release that supplied the command into the isolated venv.
 3.  **Clean Installation**: Purge any existing hooks starting with `vauxhall-` to ensure a clean state before registering new ones.
-4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register the hooks using the absolute path to the isolated venv's Python interpreter.
+4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register `python -m vauxhall.hooks.gemini.telemetry_hook` using the absolute path to the isolated venv's Python interpreter.
 5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, etc.) and clear descriptions for easy identification.
+
+The generated hooks are independent of the checkout from which Vauxhall was
+built. POSIX paths are shell-quoted, and Windows commands use UTF-16LE
+Base64-encoded PowerShell so path metacharacters are not interpreted.
 
 #### Manual Configuration
 If you prefer to configure it manually, add the following to your `.gemini/settings.json`:
@@ -186,7 +203,7 @@ If you prefer to configure it manually, add the following to your `.gemini/setti
           {
             "name": "vauxhall-telemetry",
             "type": "command",
-            "command": "python3 /path/to/vauxhall/hooks/gemini/telemetry_hook.py"
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.gemini.telemetry_hook"
           }
         ]
       }
@@ -213,7 +230,7 @@ To ensure the stability and readability of the Vauxhall ecosystem, all contribut
     - Run `.venv/bin/pytest` to verify.
     - With Node.js 20.19 or newer, run `npm test` to verify frontend rendering behavior.
     - Always add unit tests for new features or bug fixes.
-    - The packaging test builds a real wheel and verifies that dashboard UI assets are included.
+    - The packaging tests build real wheels, verify metadata and dashboard UI assets, install the wheel into clean environments, and run both public hook installers outside the source checkout.
 4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
     - `README.md`: Update features, architecture, and usage instructions.
     - `AGENTS.md`: Update integration methods, states, and metadata features.

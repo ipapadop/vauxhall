@@ -32,6 +32,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                     <div class="agent-name" title="Agent name"></div>
                 </div>
                 <div class="agent-workspace" title="Current workspace path"></div>
+                <div class="agent-session" title="Agent session identifier"></div>
             </div>
             <div class="status-badge" title="Current agent state">Idle</div>
         </div>
@@ -51,14 +52,17 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     envBadge.textContent = env;
     card.querySelector('.agent-name').textContent = agent;
     card.querySelector('.agent-workspace').textContent = workspace;
+    const sessionId = String(data.session_id ?? '');
+    const sessionElement = card.querySelector('.agent-session');
+    sessionElement.textContent = `Session: ${sessionId}`;
+    sessionElement.title = sessionId;
     
     // Setup History Modal Trigger
     const historyIcon = card.querySelector('.history-icon');
     if (historyIcon) {
         historyIcon.addEventListener('click', (e) => {
             e.stopPropagation();
-            const key = `${agent}:${workspace}`;
-            openHistoryCallback(key);
+            openHistoryCallback();
         });
     }
     

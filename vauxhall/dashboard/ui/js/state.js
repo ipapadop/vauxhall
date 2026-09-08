@@ -8,7 +8,15 @@
  * @description Manages the global state of the dashboard, including agent tracking and history.
  */
 
-export const agents = {}; // (agent:workspace) -> DOM element
+export const agents = {}; // JSON [agent, workspace, session_id] -> DOM element
+
+export function agentKey(data) {
+    return JSON.stringify([
+        String(data.agent ?? ''),
+        String(data.workspace ?? ''),
+        String(data.session_id ?? ''),
+    ]);
+}
 
 /**
  * Ensures an agent's history buffer is initialized and updated.

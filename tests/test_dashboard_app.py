@@ -50,12 +50,16 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.ipc.is_ready = True
 
         # Missing workspace
-        self.dashboard.on_telemetry({"agent": "TestAgent", "state": "Idle"})
+        missing_workspace = self.valid_telemetry()
+        del missing_workspace["workspace"]
+        self.dashboard.on_telemetry(missing_workspace)
         self.dashboard.window.invoke.assert_not_called()
         assert len(self.dashboard.pending_updates) == 0
 
         # Missing state
-        self.dashboard.on_telemetry({"agent": "TestAgent", "workspace": "/path"})
+        missing_state = self.valid_telemetry()
+        del missing_state["state"]
+        self.dashboard.on_telemetry(missing_state)
         self.dashboard.window.invoke.assert_not_called()
         assert len(self.dashboard.pending_updates) == 0
 
@@ -76,6 +80,16 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
         assert len(self.dashboard.pending_updates) == 0
 
+    def test_on_telemetry_forwards_valid_data_immediately(self) -> None:
+        """Verify that valid telemetry reaches ready frontend IPC immediately."""
+        self.dashboard.ipc.is_ready = True
+        valid_data = self.valid_telemetry()
+
+        self.dashboard.on_telemetry(valid_data)
+
+        self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
+        assert self.dashboard.pending_updates == []
+
     def test_on_telemetry_rejects_unversioned_and_unsupported_messages(self) -> None:
         """Only supported schema-v1 telemetry may reach dashboard state."""
         self.dashboard.ipc.is_ready = False
@@ -93,18 +107,40 @@ class TestDashboardComponents(unittest.TestCase):
         assert "unsupported schema_version; expected 1" in logs.output[1]
 
     def test_on_telemetry_rejection_log_does_not_include_payload(self) -> None:
-        """Protocol warnings must not leak prompt or command content."""
+        """Protocol warnings must not leak any raw payload content."""
         invalid = {
             **self.valid_telemetry(),
             "schema_version": 2,
-            "details": {"prompt": "private prompt", "cmd": "private command"},
+            "agent": "sentinel-agent",
+            "workspace": "sentinel-workspace",
+            "session_id": "sentinel-session",
+            "state": "sentinel-state",
+            "details": {
+                "prompt": "sentinel-prompt",
+                "cmd": "sentinel-command",
+            },
+            "extra": "sentinel-extra",
         }
 
         with self.assertLogs("vauxhall.dashboard.app", level="WARNING") as logs:
             self.dashboard.on_telemetry(invalid)
 
-        assert "private prompt" not in logs.output[0]
-        assert "private command" not in logs.output[0]
+        assert logs.output == [
+            (
+                "WARNING:vauxhall.dashboard.app:Rejected telemetry: "
+                "unsupported schema_version; expected 1"
+            )
+        ]
+        for sentinel in (
+            "sentinel-agent",
+            "sentinel-workspace",
+            "sentinel-session",
+            "sentinel-state",
+            "sentinel-prompt",
+            "sentinel-command",
+            "sentinel-extra",
+        ):
+            assert sentinel not in logs.output[0]
 
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""

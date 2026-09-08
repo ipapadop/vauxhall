@@ -5,6 +5,7 @@
 
 import json
 import unittest
+from copy import deepcopy
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -84,10 +85,16 @@ class TestDashboardComponents(unittest.TestCase):
         """Verify that valid telemetry reaches ready frontend IPC immediately."""
         self.dashboard.ipc.is_ready = True
         valid_data = self.valid_telemetry()
+        expected_data = deepcopy(valid_data)
 
         self.dashboard.on_telemetry(valid_data)
 
-        self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
+        self.dashboard.window.invoke.assert_called_once_with(
+            "agent-update", expected_data
+        )
+        forwarded_data = self.dashboard.window.invoke.call_args.args[1]
+        assert forwarded_data == expected_data
+        assert forwarded_data is not expected_data
         assert self.dashboard.pending_updates == []
 
     def test_on_telemetry_rejects_unversioned_and_unsupported_messages(self) -> None:
@@ -108,9 +115,10 @@ class TestDashboardComponents(unittest.TestCase):
 
     def test_on_telemetry_rejection_log_does_not_include_payload(self) -> None:
         """Protocol warnings must not leak any raw payload content."""
+        schema_sentinel = 2718281828
         invalid = {
             **self.valid_telemetry(),
-            "schema_version": 2,
+            "schema_version": schema_sentinel,
             "agent": "sentinel-agent",
             "workspace": "sentinel-workspace",
             "session_id": "sentinel-session",
@@ -132,6 +140,7 @@ class TestDashboardComponents(unittest.TestCase):
             )
         ]
         for sentinel in (
+            str(schema_sentinel),
             "sentinel-agent",
             "sentinel-workspace",
             "sentinel-session",

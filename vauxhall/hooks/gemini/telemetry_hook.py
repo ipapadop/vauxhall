@@ -11,10 +11,19 @@ passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
 import json
 import sys
 import time
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
 from vauxhall.hooks.client import TelemetryClient
+
+
+def _setup_logging() -> None:
+    """Configure logging inside the hook protocol failure boundary."""
+    from vauxhall.core.logging import setup_logging  # noqa: PLC0415
+    from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
+
+    setup_logging(level=hook_settings.logging.level)
 
 
 def handle_notification(
@@ -222,9 +231,11 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
     try:
-        input_data = json.load(sys.stdin)
-        if isinstance(input_data, dict):
-            _send_telemetry(input_data)
+        with redirect_stdout(sys.stderr):
+            _setup_logging()
+            input_data = json.load(sys.stdin)
+            if isinstance(input_data, dict):
+                _send_telemetry(input_data)
     except Exception:
         pass
     print("{}")

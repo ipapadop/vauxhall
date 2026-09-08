@@ -11,7 +11,6 @@ from vauxhall.core.config import (
     LoggingConfig,
     MQTTConfig,
 )
-from vauxhall.core.logging import setup_logging
 
 
 @dataclass
@@ -59,4 +58,3 @@ class DashboardConfig:
 
 
 dashboard_settings = DashboardConfig.load()
-setup_logging(level=dashboard_settings.logging.level)

@@ -11,7 +11,6 @@ from vauxhall.core.config import (
     LoggingConfig,
     MQTTConfig,
 )
-from vauxhall.core.logging import setup_logging
 
 
 @dataclass
@@ -47,4 +46,3 @@ class HookConfig:
 
 
 hook_settings = HookConfig.load()
-setup_logging(level=hook_settings.logging.level)

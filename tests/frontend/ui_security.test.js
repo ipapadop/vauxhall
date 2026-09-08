@@ -88,3 +88,36 @@ test('history details are rendered without creating markup', () => {
     assert.equal(history.querySelector('.history-state').textContent, ATTACK);
     assert.match(history.textContent, new RegExp(ATTACK));
 });
+
+test('workspace copy passes the raw path to the clipboard bridge', () => {
+    const workspaces = [
+        '/tmp/project with spaces',
+        "/tmp/project's files",
+        '/tmp/project; rm -rf victim',
+        '/tmp/$(touch victim)',
+        '/tmp/project\nnext-command',
+        'C:\\Users\\Agent Workspace',
+        '',
+    ];
+
+    for (const workspace of workspaces) {
+        let copiedText = null;
+        const ipc = {
+            DashboardIPC: {
+                copy_to_clipboard(text) {
+                    copiedText = text;
+                    return Promise.resolve(true);
+                },
+            },
+        };
+        const card = createCard(
+            { agent: 'Agent', workspace, env: 'local' },
+            ipc,
+            () => {},
+        );
+
+        card.click();
+
+        assert.equal(copiedText, workspace);
+    }
+});

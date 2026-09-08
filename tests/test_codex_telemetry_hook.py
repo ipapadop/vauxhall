@@ -72,6 +72,7 @@ def test_codex_hook_keeps_debug_logs_off_stdout() -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == "{}\n"
+    assert "Failed to connect telemetry client" in completed.stderr
 
 
 def test_codex_hook_survives_telemetry_import_failure() -> None:

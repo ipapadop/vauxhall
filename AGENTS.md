@@ -35,7 +35,7 @@ delivered = client.send(
 client.send("MyAgent", "/path/to/project", "Idle")
 ```
 
-`send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection.
+`send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection. Importing the client and configuration modules does not configure or replace the host application's root logging; dashboard and hook entry points configure Vauxhall logging when they run.
 
 ### 2. Manual MQTT (Any Language)
 You can publish JSON messages to the following topic structure:
@@ -92,6 +92,8 @@ This area is non-scrolling to keep the dashboard clean.
 
 All values received through telemetry are treated as untrusted text and must not be inserted into executable HTML.
 
+Clicking an agent card copies the raw `workspace` value to the clipboard. The dashboard must not concatenate this untrusted value into a shell command.
+
 ### Session History & Audit
 The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
@@ -109,7 +111,7 @@ Vauxhall provides a unified Codex command hook for lifecycle events, tool execut
 | `PostToolUse` | `Thinking` |
 | `Stop`, `Interrupt`, `SessionEnd` | `Idle` |
 
-Telemetry is best-effort. The hook lazy-loads telemetry inside its failure boundary and reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
+Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
 
 #### Automated Installation (Recommended)
 
@@ -155,7 +157,7 @@ On Windows, use the automated installer rather than adapting the POSIX command a
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
 
-Telemetry is best-effort: the hook always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. This prevents monitoring problems from interrupting Gemini CLI.
+Telemetry is best-effort: the hook configures logging inside its failure boundary and always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. Logs go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
 
 #### Automated Installation (Recommended)
 You can automatically register the hooks in your current workspace by running:

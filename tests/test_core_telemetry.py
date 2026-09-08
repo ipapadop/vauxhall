@@ -39,6 +39,26 @@ def test_schema_version_one_accepts_required_identity_fields() -> None:
         ),
         (
             {
+                "schema_version": True,
+                "agent": "Codex",
+                "workspace": "/workspace",
+                "session_id": "native:session-1",
+                "state": "Thinking",
+            },
+            "unsupported schema_version; expected 1",
+        ),
+        (
+            {
+                "schema_version": 1.0,
+                "agent": "Codex",
+                "workspace": "/workspace",
+                "session_id": "native:session-1",
+                "state": "Thinking",
+            },
+            "unsupported schema_version; expected 1",
+        ),
+        (
+            {
                 "schema_version": 1,
                 "agent": "Codex",
                 "workspace": "/workspace",

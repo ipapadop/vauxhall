@@ -15,7 +15,10 @@ def telemetry_validation_error(payload: object) -> str | None:
         return "telemetry payload must be a JSON object"
     if "schema_version" not in payload:
         return "schema_version is required"
-    if payload["schema_version"] != SCHEMA_VERSION:
+    if (
+        type(payload["schema_version"]) is not int
+        or payload["schema_version"] != SCHEMA_VERSION
+    ):
         return f"unsupported schema_version; expected {SCHEMA_VERSION}"
     for field in REQUIRED_STRING_FIELDS:
         value = payload.get(field)

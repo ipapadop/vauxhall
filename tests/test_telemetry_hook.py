@@ -59,6 +59,7 @@ def test_gemini_hook_initializes_debug_logging_without_contaminating_stdout() ->
     """Configured hook logs must go to stderr and preserve protocol stdout."""
     hook_data = {
         "hook_event_name": "BeforeAgent",
+        "session_id": "session-123",
         "cwd": "/workspace",
         "prompt": "Review the code",
     }
@@ -115,6 +116,7 @@ def test_notification_tool_permission() -> None:
         "notification_type": "ToolPermission",
         "message": "Confirm deletion?",
         "details": {"tool_name": "run_shell_command"},
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
 
@@ -132,6 +134,7 @@ def test_notification_tool_permission() -> None:
         mock_instance.send.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
+            session_id="native:session-123",
             state="Waiting for Input",
             prompt="Confirm deletion?",
             tool="run_shell_command",
@@ -144,6 +147,7 @@ def test_ask_user_tool() -> None:
         "hook_event_name": "BeforeTool",
         "tool_name": "ask_user",
         "tool_input": {"questions": [{"question": "Continue?"}]},
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
 
@@ -161,6 +165,7 @@ def test_ask_user_tool() -> None:
         mock_instance.send.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
+            session_id="native:session-123",
             state="Waiting for Input",
             prompt="Continue?",
         )
@@ -172,6 +177,7 @@ def test_ask_question_tool() -> None:
         "hook_event_name": "BeforeTool",
         "tool_name": "ask_question",
         "tool_input": {"question": "What is next?"},
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
 
@@ -189,6 +195,7 @@ def test_ask_question_tool() -> None:
         mock_instance.send.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
+            session_id="native:session-123",
             state="Waiting for Input",
             prompt="What is next?",
         )
@@ -199,6 +206,7 @@ def test_after_model_tokens() -> None:
     hook_data = {
         "hook_event_name": "AfterModel",
         "llm_response": {"usageMetadata": {"totalTokenCount": 1234}},
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
 
@@ -216,6 +224,7 @@ def test_after_model_tokens() -> None:
         mock_instance.send.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
+            session_id="native:session-123",
             state="Thinking",
             status="Model replied",
             tokens=1234,
@@ -230,12 +239,14 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
     before_data = {
         "hook_event_name": "BeforeTool",
         "tool_name": "ls",
+        "session_id": "session-123",
         "cwd": str(workspace),
     }
 
     after_data = {
         "hook_event_name": "AfterTool",
         "tool_name": "ls",
+        "session_id": "session-123",
         "cwd": str(workspace),
     }
 
@@ -263,6 +274,7 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
         mock_instance.send.assert_called_with(
             agent="Gemini",
             workspace=str(workspace),
+            session_id="native:session-123",
             state="Thinking",
             tool="ls",
             status="completed",
@@ -277,6 +289,7 @@ def test_unknown_tool_before_tool() -> None:
     """Verify that an unknown tool in BeforeTool does not send 'tool' key."""
     hook_data = {
         "hook_event_name": "BeforeTool",
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
 
@@ -296,3 +309,19 @@ def test_unknown_tool_before_tool() -> None:
         kwargs = mock_instance.send.call_args.kwargs
         assert "tool" not in kwargs
         assert kwargs["state"] == "Acting"
+
+
+def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
+    """Telemetry must be skipped when the hook has no stable identity source."""
+    hook_data = {"hook_event_name": "BeforeAgent", "cwd": "/workspace"}
+    with (
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        main()
+
+    mock_client_class.assert_not_called()

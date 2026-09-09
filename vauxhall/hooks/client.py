@@ -4,7 +4,7 @@
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
-from typing import Self
+from typing import TypeVar
 
 import paho.mqtt.client as mqtt
 
@@ -15,6 +15,8 @@ from vauxhall.hooks.config import hook_settings as settings
 logger = get_logger(__name__)
 
 PUBLISH_TIMEOUT_SECONDS = 1.0
+# ``typing.Self`` is unavailable on the supported Python 3.10 runtime.
+_TelemetryClientT = TypeVar("_TelemetryClientT", bound="TelemetryClient")
 
 
 def format_message(
@@ -76,7 +78,7 @@ class TelemetryClient:
         self._managed = False
         self._loop_running = False
 
-    def __enter__(self) -> Self:
+    def __enter__(self: _TelemetryClientT) -> _TelemetryClientT:  # noqa: PYI019
         """Enter the context manager, establishing a persistent connection."""
         self._managed = True
         try:

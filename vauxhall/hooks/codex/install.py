@@ -16,6 +16,9 @@ from typing import Any
 from vauxhall import __version__
 
 HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
+WINDOWS_ENCODED_COMMAND_PREFIX = (
+    "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+)
 HOOK_EVENTS = (
     "SessionStart",
     "UserPromptSubmit",
@@ -58,10 +61,7 @@ def build_hook_command(venv_python: Path) -> str:
         python_path = str(venv_python).replace("'", "''")
         script = f"& '{python_path}' -m {HOOK_MODULE}"
         encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
-        return (
-            "powershell.exe -NoProfile -NonInteractive "
-            f"-EncodedCommand {encoded_script}"
-        )
+        return f"{WINDOWS_ENCODED_COMMAND_PREFIX}{encoded_script}"
     return shlex.join(arguments)
 
 
@@ -145,16 +145,32 @@ def purge_vauxhall_hooks(config: dict[str, Any]) -> None:
             group["hooks"] = [
                 handler
                 for handler in group["hooks"]
-                if not (
-                    isinstance(handler, dict)
-                    and HOOK_MODULE in str(handler.get("command", ""))
-                )
+                if not _is_vauxhall_handler(handler)
             ]
         hooks[event] = [
             group for group in groups if isinstance(group, dict) and group.get("hooks")
         ]
         if not hooks[event]:
             del hooks[event]
+
+
+def _is_vauxhall_handler(handler: object) -> bool:
+    """Return whether a handler invokes Vauxhall's Codex hook module."""
+    if not isinstance(handler, dict) or handler.get("type") != "command":
+        return False
+    command = handler.get("command")
+    if not isinstance(command, str):
+        return False
+    if HOOK_MODULE in command:
+        return True
+    if not command.startswith(WINDOWS_ENCODED_COMMAND_PREFIX):
+        return False
+    encoded_script = command.removeprefix(WINDOWS_ENCODED_COMMAND_PREFIX)
+    try:
+        script = base64.b64decode(encoded_script, validate=True).decode("utf-16-le")
+    except (UnicodeError, ValueError):
+        return False
+    return HOOK_MODULE in script
 
 
 def register_hook(config: dict[str, Any], event: str, command: str) -> None:

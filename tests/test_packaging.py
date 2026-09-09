@@ -79,6 +79,43 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
     } <= packaged_files
 
 
+def test_wheel_hook_client_imports_without_typing_self(tmp_path: Path) -> None:
+    """The packaged hooks must import on runtimes where typing lacks Self."""
+    wheel_path = _build_wheel(tmp_path / "wheel")
+    runtime_check = """
+import builtins
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import paho.mqtt.client
+import vauxhall
+
+real_import = builtins.__import__
+
+
+def python_310_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "typing" and "Self" in fromlist:
+        raise ImportError("cannot import name 'Self' from 'typing'")
+    return real_import(name, globals, locals, fromlist, level)
+
+
+builtins.__import__ = python_310_import
+import vauxhall.hooks.client as client
+
+print(client.__file__)
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", runtime_check, str(wheel_path)],
+        check=True,
+        capture_output=True,
+        cwd=tmp_path,
+        text=True,
+    )
+
+    assert str(wheel_path) in result.stdout
+
+
 def test_wheel_and_sdist_pass_strict_twine_check(tmp_path: Path) -> None:
     """Both publication artifacts must pass Twine without warnings."""
     project_root = Path(__file__).parents[1]

@@ -92,6 +92,59 @@ def test_hook_command_uses_windows_argument_quoting() -> None:
     )
 
 
+def test_windows_reinstall_replaces_vauxhall_handlers(tmp_path: Path) -> None:
+    """Repeated Windows installation must replace only Vauxhall handlers."""
+    installer = _installer()
+    hooks_file = tmp_path / ".codex" / "hooks.json"
+    hooks_file.parent.mkdir()
+    prefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+    custom_script = "& 'C:/custom/python.exe' -m custom.telemetry"
+    custom_command = (
+        prefix + base64.b64encode(custom_script.encode("utf-16-le")).decode()
+    )
+    custom_handler = {"type": "command", "command": custom_command}
+    hooks_file.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "*", "hooks": [custom_handler]},
+                    ]
+                }
+            }
+        )
+    )
+
+    with (
+        patch.object(installer.Path, "cwd", return_value=tmp_path),
+        patch.object(
+            installer,
+            "setup_venv",
+            return_value=Path("C:/Vauxhall/python.exe"),
+        ),
+        patch.object(installer.os, "name", "nt"),
+    ):
+        installer.install()
+        installer.install()
+
+    config = json.loads(hooks_file.read_text())
+    for event in installer.HOOK_EVENTS:
+        handlers = [
+            handler for group in config["hooks"][event] for handler in group["hooks"]
+        ]
+        encoded_commands = [
+            handler["command"].removeprefix(prefix)
+            for handler in handlers
+            if handler["command"].startswith(prefix)
+        ]
+        scripts = [
+            base64.b64decode(command).decode("utf-16-le")
+            for command in encoded_commands
+        ]
+        assert sum(installer.HOOK_MODULE in script for script in scripts) == 1
+    assert custom_handler in config["hooks"]["PreToolUse"][0]["hooks"]
+
+
 def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
     """Hook environments must install an immutable published release."""
     installer = _installer()

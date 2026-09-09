@@ -92,6 +92,38 @@ def test_purge_preserves_commands_that_only_mention_hook_module(command: str) ->
     assert config["hooks"]["PreToolUse"][0]["hooks"] == [handler]
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "echo -m vauxhall.hooks.codex.telemetry_hook",
+            id="plain",
+        ),
+        pytest.param(
+            "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+            + base64.b64encode(
+                ("& 'Write-Output' -m vauxhall.hooks.codex.telemetry_hook").encode(
+                    "utf-16-le"
+                )
+            ).decode(),
+            id="windows-encoded",
+        ),
+    ],
+)
+def test_purge_preserves_non_python_hook_shaped_commands(command: str) -> None:
+    """A hook-shaped command must invoke Python before purge removes it."""
+    handler = {"type": "command", "command": command}
+    config = {
+        "hooks": {
+            "PreToolUse": [{"matcher": "*", "hooks": [handler]}],
+        }
+    }
+
+    _installer().purge_vauxhall_hooks(config)
+
+    assert config["hooks"]["PreToolUse"][0]["hooks"] == [handler]
+
+
 def test_hook_command_uses_posix_shell_quoting() -> None:
     """POSIX hook commands must quote metacharacters in the Python path."""
     installer = _installer()

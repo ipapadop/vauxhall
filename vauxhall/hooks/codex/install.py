@@ -179,11 +179,15 @@ def _is_vauxhall_invocation(command: str) -> bool:
         arguments = shlex.split(command)
     except ValueError:
         return False
-    plain_invocation = len(arguments) == 3 and bool(arguments[0])
-    powershell_invocation = (
-        len(arguments) == 4 and arguments[0] == "&" and bool(arguments[1])
-    )
-    return (plain_invocation or powershell_invocation) and arguments[-2:] == [
+    if len(arguments) == 3:
+        executable = arguments[0]
+    elif len(arguments) == 4 and arguments[0] == "&":
+        executable = arguments[1]
+    else:
+        return False
+    executable_name = executable.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    is_python = executable_name.casefold() in {"python", "python.exe"}
+    return is_python and arguments[-2:] == [
         "-m",
         HOOK_MODULE,
     ]

@@ -60,6 +60,38 @@ def test_purge_vauxhall_hooks_preserves_other_commands() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "python -c \"print('vauxhall.hooks.codex.telemetry_hook')\"",
+            id="plain",
+        ),
+        pytest.param(
+            "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+            + base64.b64encode(
+                (
+                    "Write-Output 'vauxhall.hooks.codex.telemetry_hook is configured'"
+                ).encode("utf-16-le")
+            ).decode(),
+            id="windows-encoded",
+        ),
+    ],
+)
+def test_purge_preserves_commands_that_only_mention_hook_module(command: str) -> None:
+    """Module-name text without the generated invocation must remain."""
+    handler = {"type": "command", "command": command}
+    config = {
+        "hooks": {
+            "PreToolUse": [{"matcher": "*", "hooks": [handler]}],
+        }
+    }
+
+    _installer().purge_vauxhall_hooks(config)
+
+    assert config["hooks"]["PreToolUse"][0]["hooks"] == [handler]
+
+
 def test_hook_command_uses_posix_shell_quoting() -> None:
     """POSIX hook commands must quote metacharacters in the Python path."""
     installer = _installer()

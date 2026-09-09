@@ -161,7 +161,7 @@ def _is_vauxhall_handler(handler: object) -> bool:
     command = handler.get("command")
     if not isinstance(command, str):
         return False
-    if HOOK_MODULE in command:
+    if _is_vauxhall_invocation(command):
         return True
     if not command.startswith(WINDOWS_ENCODED_COMMAND_PREFIX):
         return False
@@ -170,7 +170,23 @@ def _is_vauxhall_handler(handler: object) -> bool:
         script = base64.b64decode(encoded_script, validate=True).decode("utf-16-le")
     except (UnicodeError, ValueError):
         return False
-    return HOOK_MODULE in script
+    return _is_vauxhall_invocation(script)
+
+
+def _is_vauxhall_invocation(command: str) -> bool:
+    """Return whether a shell command has a generated Vauxhall hook shape."""
+    try:
+        arguments = shlex.split(command)
+    except ValueError:
+        return False
+    plain_invocation = len(arguments) == 3 and bool(arguments[0])
+    powershell_invocation = (
+        len(arguments) == 4 and arguments[0] == "&" and bool(arguments[1])
+    )
+    return (plain_invocation or powershell_invocation) and arguments[-2:] == [
+        "-m",
+        HOOK_MODULE,
+    ]
 
 
 def register_hook(config: dict[str, Any], event: str, command: str) -> None:

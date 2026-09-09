@@ -143,6 +143,11 @@ available, it uses the shared fallback chain described in
 [Telemetry schema](#telemetry-schema) and skips events that have no stable
 session identity.
 
+Gemini tool-duration timing files are keyed by the resolved session identity
+and, when present, `tool_call_id`. This prevents concurrent sessions in one
+workspace from overwriting each other's start times and also separates
+concurrent tool calls within a session when Gemini supplies an invocation ID.
+
 #### Automated Installation (Recommended)
 
 After installing `vauxhall[hooks]`, run this command from the Codex workspace:

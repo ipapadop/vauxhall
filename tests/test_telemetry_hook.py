@@ -285,6 +285,79 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
     shutil.rmtree(workspace)
 
 
+def test_tool_durations_are_isolated_by_session_and_tool_call(tmp_path: Path) -> None:
+    """Concurrent Gemini tool calls must retain their own start times."""
+    workspace = tmp_path / "vauxhall-concurrent-tools"
+    (workspace / ".gemini").mkdir(parents=True)
+    events = [
+        {
+            "hook_event_name": "BeforeTool",
+            "tool_name": "alpha",
+            "session_id": "session-one",
+            "tool_call_id": "call-one",
+            "cwd": str(workspace),
+        },
+        {
+            "hook_event_name": "BeforeTool",
+            "tool_name": "beta",
+            "session_id": "session-one",
+            "tool_call_id": "call-two",
+            "cwd": str(workspace),
+        },
+        {
+            "hook_event_name": "BeforeTool",
+            "tool_name": "gamma",
+            "session_id": "session-two",
+            "tool_call_id": "call-one",
+            "cwd": str(workspace),
+        },
+        {
+            "hook_event_name": "AfterTool",
+            "tool_name": "alpha",
+            "session_id": "session-one",
+            "tool_call_id": "call-one",
+            "cwd": str(workspace),
+        },
+        {
+            "hook_event_name": "AfterTool",
+            "tool_name": "beta",
+            "session_id": "session-one",
+            "tool_call_id": "call-two",
+            "cwd": str(workspace),
+        },
+        {
+            "hook_event_name": "AfterTool",
+            "tool_name": "gamma",
+            "session_id": "session-two",
+            "tool_call_id": "call-one",
+            "cwd": str(workspace),
+        },
+    ]
+
+    with (
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
+        patch("sys.stdout", new=io.StringIO()),
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.time.time",
+            side_effect=[1000.0, 1001.0, 1002.0, 1003.0, 1005.0, 1008.0],
+        ),
+    ):
+        mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
+        for event in events:
+            with patch("sys.stdin", io.StringIO(json.dumps(event))):
+                main()
+
+    completed = {
+        call.kwargs["tool"]: call.kwargs.get("duration")
+        for call in mock_instance.send.call_args_list
+        if call.kwargs["state"] == "Thinking"
+    }
+    assert completed == {"alpha": 3.0, "beta": 4.0, "gamma": 6.0}
+
+
 def test_unknown_tool_before_tool() -> None:
     """Verify that an unknown tool in BeforeTool does not send 'tool' key."""
     hook_data = {

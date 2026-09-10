@@ -12,8 +12,13 @@ from contextlib import redirect_stdout, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vauxhall.core.logging import get_logger
+from vauxhall.hooks.identity import resolve_session_id
+
 if TYPE_CHECKING:
     from vauxhall.hooks.client import TelemetryClient
+
+logger = get_logger(__name__)
 
 
 def _create_telemetry_client() -> "TelemetryClient":
@@ -138,8 +143,19 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     else:
         return
 
+    session_id = resolve_session_id(input_data)
+    if session_id is None:
+        logger.warning("Skipping telemetry: no stable session identity is available")
+        return
+
     with _create_telemetry_client() as client:
-        client.send(agent="Codex", workspace=workspace, state=state, **details)
+        client.send(
+            agent="Codex",
+            workspace=workspace,
+            session_id=session_id,
+            state=state,
+            **details,
+        )
 
 
 def main() -> None:

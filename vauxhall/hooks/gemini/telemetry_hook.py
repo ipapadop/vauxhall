@@ -8,6 +8,7 @@ AfterAgent, BeforeTool, AfterTool, and Notification). It processes the event JSO
 passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
 """
 
+import hashlib
 import json
 import sys
 import time
@@ -15,7 +16,23 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
+from vauxhall.core.logging import get_logger
 from vauxhall.hooks.client import TelemetryClient
+from vauxhall.hooks.identity import resolve_session_id
+
+logger = get_logger(__name__)
+
+
+def _tool_time_file(
+    workspace: str, session_id: str, input_data: dict[str, Any]
+) -> Path:
+    """Return a collision-resistant timing file for one Gemini tool call."""
+    tool_call_id = input_data.get("tool_call_id")
+    identity = session_id
+    if isinstance(tool_call_id, str) and tool_call_id.strip():
+        identity = f"{identity}\0{tool_call_id.strip()}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()
+    return Path(workspace) / ".gemini" / f".vauxhall_tool_start.{digest}.time"
 
 
 def _setup_logging() -> None:
@@ -199,18 +216,25 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
         "hook_event_name", input_data.get("hook_type", "BeforeTool")
     )
     workspace = input_data.get("cwd", input_data.get("workspace", str(Path.cwd())))
-    time_file = Path(workspace) / ".gemini" / ".vauxhall_tool_start.time"
     agent_name = "Gemini"
 
     state = "Idle"
     details: dict[str, Any] = {}
+    notification_result: tuple[str, dict[str, Any]] | None = None
 
     if hook_type == "Notification":
-        result = handle_notification(input_data)
-        if result:
-            state, details = result
-        else:
+        notification_result = handle_notification(input_data)
+        if notification_result is None:
             return
+
+    session_id = resolve_session_id(input_data)
+    if session_id is None:
+        logger.warning("Skipping telemetry: no stable session identity is available")
+        return
+
+    time_file = _tool_time_file(workspace, session_id, input_data)
+    if notification_result is not None:
+        state, details = notification_result
     elif hook_type == "BeforeAgent":
         state, details = handle_before_agent(input_data)
     elif hook_type == "AfterAgent":
@@ -225,7 +249,13 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
         state, details = handle_unknown_hook(hook_type)
 
     with TelemetryClient() as client:
-        client.send(agent=agent_name, workspace=workspace, state=state, **details)
+        client.send(
+            agent=agent_name,
+            workspace=workspace,
+            session_id=session_id,
+            state=state,
+            **details,
+        )
 
 
 def main() -> None:

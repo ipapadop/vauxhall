@@ -51,6 +51,7 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
         transitions: The number of event transitions to simulate for this agent.
     """
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
+    session_id = f"simulation:{agent_idx}"
     workspace = str(Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}")
 
     envs = ["local", "remote"]
@@ -72,6 +73,7 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
             client.send(
                 agent=agent_name,
                 workspace=workspace,
+                session_id=session_id,
                 state=op["state"],
                 env=env,
                 **details,

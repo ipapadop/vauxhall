@@ -3,20 +3,39 @@
 
 """Installation utility for Vauxhall Gemini CLI hooks."""
 
+import base64
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from vauxhall import __version__
 
-def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
+HOOK_MODULE = "vauxhall.hooks.gemini.telemetry_hook"
+
+
+def build_hook_command(venv_python: Path) -> str:
+    """Build a platform-appropriate command for the Gemini hook."""
+    arguments = [str(venv_python), "-m", HOOK_MODULE]
+    if os.name == "nt":
+        python_path = str(venv_python).replace("'", "''")
+        script = f"& '{python_path}' -m {HOOK_MODULE}"
+        encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
+        return (
+            "powershell.exe -NoProfile -NonInteractive "
+            f"-EncodedCommand {encoded_script}"
+        )
+    return shlex.join(arguments)
+
+
+def setup_venv(venv_dir: Path) -> Path:
     """Create a virtual environment and install dependencies.
 
     Args:
         venv_dir: Path to the virtual environment directory.
-        repo_root: Path to the root of the vauxhall repository.
 
     Returns:
         Path: The path to the venv's Python executable.
@@ -34,17 +53,10 @@ def setup_venv(venv_dir: Path, repo_root: Path) -> Path:
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    # Install Dependencies
-    print("Installing dependencies into venv...")
+    requirement = f"vauxhall[hooks]=={__version__}"
+    print(f"Installing {requirement}...")
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "--upgrade", "pip"],
-        check=True,
-        capture_output=True,
-    )
-    # Install the vauxhall package in editable mode with hooks extra
-    print(f"Installing vauxhall[hooks] from {repo_root}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-e", f"{repo_root}[hooks]"],
+        [str(venv_python), "-m", "pip", "install", requirement],
         check=True,
         capture_output=True,
     )
@@ -151,17 +163,10 @@ def install() -> None:
 
     # 1. Paths and Environment Setup
     cwd = Path.cwd()
-    install_script_dir = Path(__file__).parent.absolute()
-    hook_script = install_script_dir / "telemetry_hook.py"
-    repo_root = install_script_dir.parents[2]
     venv_dir = cwd / ".vauxhall-venv"
 
-    if not hook_script.exists():
-        print(f"Error: Could not find hook script at {hook_script}")
-        sys.exit(1)
-
     # 2. Setup Venv
-    venv_python = setup_venv(venv_dir, repo_root)
+    venv_python = setup_venv(venv_dir)
 
     # 3. Load settings
     target_settings = cwd / ".gemini" / "settings.json"
@@ -170,7 +175,7 @@ def install() -> None:
     # 4. Prepare hooks
     purge_vauxhall_hooks(settings)
 
-    hook_command = f"{venv_python.absolute()} {hook_script.absolute()}"
+    hook_command = build_hook_command(venv_python.absolute())
     hook_configs = {
         "BeforeAgent": {
             "name": "vauxhall-thinking",

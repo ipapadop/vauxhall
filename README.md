@@ -19,7 +19,7 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy its raw workspace path to your clipboard with visual "Copied!" feedback. Vauxhall does not turn untrusted telemetry into a shell command.
-- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, completion, and idle state. Tool-duration tracking is isolated by session and, when supplied by the agent, tool-call identity.
+- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, truthful tool outcomes (completion, failure, cancellation, or unavailable result), and idle state without publishing tool-result content. Tool-duration tracking is isolated by session and, when supplied by the agent, tool-call identity.
 - **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Codex and Gemini hooks always return valid protocol JSON even when telemetry fails. Importing the reusable client or configuration modules preserves the host application's logging; executable entry points configure Vauxhall logging explicitly.
 - **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
@@ -117,10 +117,12 @@ release that provided the command. Registered hooks invoke the packaged
 telemetry module, so moving or deleting the source checkout does not break
 them. The Codex installer writes `.codex/hooks.json`, rejects invalid existing
 structures without replacing them, and gives each telemetry handler a
-three-second timeout backed by a one-second MQTT connection limit. Both
+three-second timeout backed by a one-second MQTT connection limit. The Gemini
+installer also registers a `SessionEnd` hook. Both integrations publish
+normalized tool outcomes only, never arbitrary tool responses. Both
 installers shell-quote POSIX paths and use encoded PowerShell commands on
 Windows. Open `/hooks` in Codex after installation to review and trust the new
-project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual
+project hooks. See [AGENTS.md](AGENTS.md) for event mappings, protocol references, manual
 configuration, and generic-agent integration. Codex and Gemini preserve their
 native session identities, so separate native sessions create separate
 dashboard cards even when they use the same agent name and workspace.

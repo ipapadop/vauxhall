@@ -4,8 +4,11 @@
 """Tests for the Vauxhall hook installer."""
 
 import base64
+import json
 from pathlib import Path
 from unittest.mock import call, patch
+
+import pytest
 
 from vauxhall.hooks.gemini import install as installer
 
@@ -121,4 +124,26 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
             check=True,
             capture_output=True,
         ),
+    ]
+
+
+def test_install_registers_session_end_handler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gemini installation must register Vauxhall's SessionEnd lifecycle hook."""
+    monkeypatch.chdir(tmp_path)
+    venv_python = tmp_path / ".vauxhall-venv" / "bin" / "python"
+
+    with patch.object(installer, "setup_venv", return_value=venv_python):
+        installer.install()
+
+    settings = json.loads((tmp_path / ".gemini" / "settings.json").read_text())
+    session_end_hooks = settings["hooks"]["SessionEnd"][0]["hooks"]
+    assert session_end_hooks == [
+        {
+            "name": "vauxhall-session-end",
+            "type": "command",
+            "command": installer.build_hook_command(venv_python.absolute()),
+            "description": "Vauxhall telemetry for Gemini session end",
+        }
     ]

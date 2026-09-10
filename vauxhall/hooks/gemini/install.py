@@ -185,6 +185,10 @@ def install() -> None:
             "name": "vauxhall-idle",
             "description": "Vauxhall telemetry for Gemini idle state",
         },
+        "SessionEnd": {
+            "name": "vauxhall-session-end",
+            "description": "Vauxhall telemetry for Gemini session end",
+        },
         "BeforeTool": {
             "name": "vauxhall-acting",
             "description": "Vauxhall telemetry for Gemini tool execution",

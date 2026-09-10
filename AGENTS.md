@@ -132,8 +132,18 @@ Vauxhall provides a unified Codex command hook for lifecycle events, tool execut
 | `SessionStart`, `UserPromptSubmit` | `Thinking` |
 | `PreToolUse` | `Acting` |
 | `PermissionRequest` and `request_user_input` | `Waiting for Input` |
-| `PostToolUse` | `Thinking` |
-| `Stop`, `Interrupt`, `SessionEnd` | `Idle` |
+| `PostToolUse` | `Thinking`, `Error`, or `Idle`, based on the tool result |
+| `Stop`, `SessionEnd` | `Idle` (`Ready`) |
+| `Interrupt` | `Idle` (`interrupted`) |
+
+Tool outcomes follow the documented [Codex hooks](https://developers.openai.com/codex/hooks/) result fields:
+
+| Integration | Success evidence | Failure evidence | Cancellation evidence | Interruption evidence |
+| :--- | :--- | :--- | :--- | :--- |
+| Codex | tool-specific `tool_response.exit_code == 0` or `isError == false` | non-zero `exit_code` or `isError == true` | structured cancellation marker when supplied by a tool | `Interrupt` hook event |
+| Gemini | `tool_response` object with no `error` | non-null `tool_response.error` | structured cancellation marker inside response/error | no tool-interrupt field; `SessionEnd.reason` covers CLI exit/clear/logout/input exit |
+
+Arbitrary `tool_response` content is never sent as telemetry. Unknown or malformed result shapes use `result unavailable` rather than claiming success.
 
 Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
 
@@ -224,7 +234,7 @@ until issue #3.
 
 ### Gemini CLI
 
-Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.
+Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications. It implements documented [Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) fields, including `AfterTool.tool_response` and `SessionEnd.reason`. A session end reports one of `session exited`, `session cleared`, `logged out`, `input closed`, or the conservative fallback `session ended`; raw reason values are not published.
 
 Telemetry is best-effort: the hook configures logging inside its failure boundary and always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. Logs go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
 
@@ -247,7 +257,7 @@ This script will:
 2.  **Dependency Management**: Install the exact immutable `vauxhall[hooks]` release that supplied the command into the isolated venv.
 3.  **Clean Installation**: Purge any existing hooks starting with `vauxhall-` to ensure a clean state before registering new ones.
 4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register `python -m vauxhall.hooks.gemini.telemetry_hook` using the absolute path to the isolated venv's Python interpreter.
-5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, etc.) and clear descriptions for easy identification.
+5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, `vauxhall-session-end`, etc.) and clear descriptions for easy identification.
 
 The generated hooks are independent of the checkout from which Vauxhall was
 built. POSIX paths are shell-quoted, and Windows commands use UTF-16LE

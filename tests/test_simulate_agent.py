@@ -25,6 +25,7 @@ def test_simulate_agent_success(mock_client_class: MagicMock) -> None:
     _args, kwargs = mock_client.send.call_args
 
     assert kwargs["agent"] == "Gemini-1.5-Pro-1"
+    assert kwargs["session_id"] == "simulation:1"
     assert "workspace" in kwargs
     assert "state" in kwargs
 

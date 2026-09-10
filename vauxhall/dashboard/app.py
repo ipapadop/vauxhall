@@ -10,6 +10,7 @@ from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
 
 from vauxhall.core.logging import get_logger, setup_logging
+from vauxhall.core.telemetry import telemetry_validation_error
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
@@ -53,10 +54,9 @@ class DashboardApp:
             data: The telemetry data dictionary.
         """
         try:
-            # Basic schema validation
-            required_fields = ["agent", "workspace", "state"]
-            if not all(field in data for field in required_fields):
-                logger.warning("Received malformed telemetry: %s", data)
+            error = telemetry_validation_error(data)
+            if error is not None:
+                logger.warning("Rejected telemetry: %s", error)
                 return
 
             if self.ipc.is_ready:

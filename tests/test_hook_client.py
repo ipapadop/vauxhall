@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from vauxhall.hooks.client import TelemetryClient, format_message
 
 
@@ -68,13 +70,29 @@ class FakeMQTTClient:
 
 
 def test_format_message() -> None:
-    """Test that message formatting returns a valid JSON with expected fields."""
-    msg = format_message("Gemini", "/home/user/project", "Acting", tool="grep")
-    data = json.loads(msg)
-    assert data["agent"] == "Gemini"
-    assert data["workspace"] == "/home/user/project"
-    assert data["state"] == "Acting"
-    assert data["details"]["tool"] == "grep"
+    """Formatted telemetry must include schema and session identity."""
+    message = format_message(
+        "Gemini",
+        "/home/user/project",
+        "Acting",
+        "native:session-1",
+        tool="grep",
+    )
+
+    assert json.loads(message) == {
+        "schema_version": 1,
+        "agent": "Gemini",
+        "workspace": "/home/user/project",
+        "session_id": "native:session-1",
+        "state": "Acting",
+        "details": {"tool": "grep"},
+    }
+
+
+def test_format_message_rejects_empty_session_id() -> None:
+    """A producer cannot emit telemetry without stable session identity."""
+    with pytest.raises(ValueError, match="session_id must be a non-empty string"):
+        format_message("Gemini", "/workspace", "Acting", "")
 
 
 def test_one_shot_send_waits_for_delivery_and_cleans_up() -> None:
@@ -83,7 +101,13 @@ def test_one_shot_send_waits_for_delivery_and_cleans_up() -> None:
     with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
         client = TelemetryClient(host="test_host", port=1234)
 
-    assert client.send("Gemini", "/home/user/project", "Acting", tool="grep")
+    assert client.send(
+        "Gemini",
+        "/home/user/project",
+        "Acting",
+        "native:test-session",
+        tool="grep",
+    )
     assert mqtt_client.publish_qos == 1
     assert mqtt_client.publish_result.wait_timeout == 1.0
     assert mqtt_client.events == [
@@ -101,7 +125,9 @@ def test_send_returns_false_when_publish_times_out() -> None:
     with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
         client = TelemetryClient()
 
-    assert not client.send("Gemini", "/home/user/project", "Acting")
+    assert not client.send(
+        "Gemini", "/home/user/project", "Acting", "native:test-session"
+    )
     assert mqtt_client.events[-2:] == ["disconnect", "loop_stop"]
 
 
@@ -111,7 +137,13 @@ def test_send_handles_serialization_failure() -> None:
     with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
         client = TelemetryClient()
 
-    assert not client.send("Gemini", "/home/user/project", "Acting", path=Path())
+    assert not client.send(
+        "Gemini",
+        "/home/user/project",
+        "Acting",
+        "native:test-session",
+        path=Path(),
+    )
     assert mqtt_client.events == []
 
 
@@ -123,7 +155,7 @@ def test_context_manager_waits_for_delivery_and_cleans_up() -> None:
         TelemetryClient() as client,
     ):
         assert client.is_connected
-        assert client.send("Agent", "/path", "Acting")
+        assert client.send("Agent", "/path", "Acting", "native:test-session")
         assert mqtt_client.publish_result.wait_timeout == 1.0
         assert mqtt_client.events == ["connect", "loop_start", "publish"]
 
@@ -139,6 +171,6 @@ def test_failed_context_connection_is_not_retried_by_send() -> None:
         TelemetryClient() as client,
     ):
         assert not client.is_connected
-        assert not client.send("Agent", "/path", "Acting")
+        assert not client.send("Agent", "/path", "Acting", "native:test-session")
 
     assert mqtt_client.events == ["connect"]

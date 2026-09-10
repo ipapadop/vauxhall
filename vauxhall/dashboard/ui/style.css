@@ -157,6 +157,14 @@ header {
     overflow: hidden;
 }
 
+.agent-session {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .status-badge {
     font-size: 0.75em;
     padding: 2px 8px;

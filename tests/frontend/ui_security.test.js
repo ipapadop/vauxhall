@@ -31,6 +31,7 @@ test('agent identity and environment are rendered as inert text', () => {
         {
             agent: ATTACK,
             workspace: `/home/user/${ATTACK}`,
+            session_id: ATTACK,
             env: `local${ATTACK}`,
         },
         null,
@@ -40,6 +41,7 @@ test('agent identity and environment are rendered as inert text', () => {
     assert.equal(Boolean(card.querySelector('.injected')), false);
     assert.equal(card.querySelector('.agent-name').textContent, ATTACK);
     assert.equal(card.querySelector('.agent-workspace').textContent, `/home/user/${ATTACK}`);
+    assert.equal(card.querySelector('.agent-session').textContent, `Session: ${ATTACK}`);
     assert.equal(card.querySelector('.env-badge').textContent, 'local');
     assert.equal(card.querySelector('.env-badge').className, 'env-badge env-local');
 });

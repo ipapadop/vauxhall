@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 
@@ -124,11 +124,11 @@ function init() {
 
         initIPC({
             onAgentUpdate: (data) => {
-                const key = `${data.agent}:${data.workspace}`;
+                const key = agentKey(data);
                 let card = agents[key];
 
                 if (!card) {
-                    card = createCard(data, window.ipc, (key) => {
+                    card = createCard(data, window.ipc, () => {
                         currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);
                     });

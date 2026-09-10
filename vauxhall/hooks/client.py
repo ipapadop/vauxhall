@@ -4,20 +4,28 @@
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
-from typing import Self
+from typing import TypeVar
 
 import paho.mqtt.client as mqtt
 
 from vauxhall.core.logging import get_logger
+from vauxhall.core.telemetry import SCHEMA_VERSION, telemetry_validation_error
 from vauxhall.hooks.config import hook_settings as settings
 
 logger = get_logger(__name__)
 
 PUBLISH_TIMEOUT_SECONDS = 1.0
+# ``typing.Self`` is unavailable on the supported Python 3.10 runtime.
+_TelemetryClientT = TypeVar("_TelemetryClientT", bound="TelemetryClient")
 
 
 def format_message(
-    agent: str, workspace: str, state: str, env: str | None = None, **details: object
+    agent: str,
+    workspace: str,
+    state: str,
+    session_id: str,
+    env: str | None = None,
+    **details: object,
 ) -> str:
     """Format a telemetry message as a JSON string.
 
@@ -25,6 +33,7 @@ def format_message(
         agent: The name of the agent.
         workspace: The workspace directory path.
         state: The current state of the agent.
+        session_id: Stable identity for the agent session.
         env: Optional execution environment (local, remote).
         **details: Additional key-value pairs for message details.
 
@@ -32,14 +41,19 @@ def format_message(
         str: A JSON-formatted string containing the telemetry data.
     """
     payload_dict = {
+        "schema_version": SCHEMA_VERSION,
         "agent": agent,
         "workspace": workspace,
+        "session_id": session_id,
         "state": state,
         "details": details,
     }
     if env:
         payload_dict["env"] = env
 
+    error = telemetry_validation_error(payload_dict)
+    if error is not None:
+        raise ValueError(error)
     return json.dumps(payload_dict)
 
 
@@ -64,7 +78,7 @@ class TelemetryClient:
         self._managed = False
         self._loop_running = False
 
-    def __enter__(self) -> Self:
+    def __enter__(self: _TelemetryClientT) -> _TelemetryClientT:  # noqa: PYI019
         """Enter the context manager, establishing a persistent connection."""
         self._managed = True
         try:
@@ -105,6 +119,7 @@ class TelemetryClient:
         agent: str,
         workspace: str,
         state: str,
+        session_id: str,
         env: str | None = None,
         **details: object,
     ) -> bool:
@@ -117,6 +132,7 @@ class TelemetryClient:
             agent: The name of the agent.
             workspace: The workspace directory path.
             state: The current state of the agent.
+            session_id: Stable identity for the agent session.
             env: Optional execution environment (local, remote).
             **details: Additional key-value pairs for message details.
 
@@ -125,7 +141,9 @@ class TelemetryClient:
         """
         one_shot = not self._managed
         try:
-            payload = format_message(agent, workspace, state, env, **details)
+            payload = format_message(
+                agent, workspace, state, session_id, env, **details
+            )
             topic = f"vauxhall/agents/{agent.lower()}/activity"
 
             if self._managed and not self.is_connected:

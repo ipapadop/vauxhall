@@ -8,7 +8,7 @@ import importlib
 import json
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -60,6 +60,70 @@ def test_purge_vauxhall_hooks_preserves_other_commands() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "python -c \"print('vauxhall.hooks.codex.telemetry_hook')\"",
+            id="plain",
+        ),
+        pytest.param(
+            "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+            + base64.b64encode(
+                (
+                    "Write-Output 'vauxhall.hooks.codex.telemetry_hook is configured'"
+                ).encode("utf-16-le")
+            ).decode(),
+            id="windows-encoded",
+        ),
+    ],
+)
+def test_purge_preserves_commands_that_only_mention_hook_module(command: str) -> None:
+    """Module-name text without the generated invocation must remain."""
+    handler = {"type": "command", "command": command}
+    config = {
+        "hooks": {
+            "PreToolUse": [{"matcher": "*", "hooks": [handler]}],
+        }
+    }
+
+    _installer().purge_vauxhall_hooks(config)
+
+    assert config["hooks"]["PreToolUse"][0]["hooks"] == [handler]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "echo -m vauxhall.hooks.codex.telemetry_hook",
+            id="plain",
+        ),
+        pytest.param(
+            "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+            + base64.b64encode(
+                ("& 'Write-Output' -m vauxhall.hooks.codex.telemetry_hook").encode(
+                    "utf-16-le"
+                )
+            ).decode(),
+            id="windows-encoded",
+        ),
+    ],
+)
+def test_purge_preserves_non_python_hook_shaped_commands(command: str) -> None:
+    """A hook-shaped command must invoke Python before purge removes it."""
+    handler = {"type": "command", "command": command}
+    config = {
+        "hooks": {
+            "PreToolUse": [{"matcher": "*", "hooks": [handler]}],
+        }
+    }
+
+    _installer().purge_vauxhall_hooks(config)
+
+    assert config["hooks"]["PreToolUse"][0]["hooks"] == [handler]
+
+
 def test_hook_command_uses_posix_shell_quoting() -> None:
     """POSIX hook commands must quote metacharacters in the Python path."""
     installer = _installer()
@@ -90,6 +154,91 @@ def test_hook_command_uses_windows_argument_quoting() -> None:
         "& '/Program Files/Vauxhall & %TEMP%/(owner''s)/python.exe' "
         "-m vauxhall.hooks.codex.telemetry_hook"
     )
+
+
+def test_windows_reinstall_replaces_vauxhall_handlers(tmp_path: Path) -> None:
+    """Repeated Windows installation must replace only Vauxhall handlers."""
+    installer = _installer()
+    hooks_file = tmp_path / ".codex" / "hooks.json"
+    hooks_file.parent.mkdir()
+    prefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+    custom_script = "& 'C:/custom/python.exe' -m custom.telemetry"
+    custom_command = (
+        prefix + base64.b64encode(custom_script.encode("utf-16-le")).decode()
+    )
+    custom_handler = {"type": "command", "command": custom_command}
+    hooks_file.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "*", "hooks": [custom_handler]},
+                    ]
+                }
+            }
+        )
+    )
+
+    with (
+        patch.object(installer.Path, "cwd", return_value=tmp_path),
+        patch.object(
+            installer,
+            "setup_venv",
+            return_value=Path("C:/Vauxhall/python.exe"),
+        ),
+        patch.object(installer.os, "name", "nt"),
+    ):
+        installer.install()
+        installer.install()
+
+    config = json.loads(hooks_file.read_text())
+    for event in installer.HOOK_EVENTS:
+        handlers = [
+            handler for group in config["hooks"][event] for handler in group["hooks"]
+        ]
+        encoded_commands = [
+            handler["command"].removeprefix(prefix)
+            for handler in handlers
+            if handler["command"].startswith(prefix)
+        ]
+        scripts = [
+            base64.b64decode(command).decode("utf-16-le")
+            for command in encoded_commands
+        ]
+        assert sum(installer.HOOK_MODULE in script for script in scripts) == 1
+    assert custom_handler in config["hooks"]["PreToolUse"][0]["hooks"]
+
+
+def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
+    """Hook environments must install an immutable published release."""
+    installer = _installer()
+    venv_dir = tmp_path / "hooks-venv"
+    if installer.os.name == "nt":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    with patch.object(installer.subprocess, "run") as run:
+        result = installer.setup_venv(venv_dir)
+
+    assert result == venv_python
+    assert run.call_args_list == [
+        call(
+            [installer.sys.executable, "-m", "venv", str(venv_dir)],
+            check=True,
+        ),
+        call(
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "vauxhall[hooks]==0.1.0",
+            ],
+            check=True,
+            capture_output=True,
+        ),
+    ]
 
 
 def test_install_writes_project_codex_hooks(tmp_path: Path) -> None:

@@ -5,4 +5,5 @@ pyloid>=0.1.0
 pytest>=7.0.0
 ruff==0.16.6
 setuptools>=77.0.0
+twine>=6.2.0
 wheel>=0.45.1

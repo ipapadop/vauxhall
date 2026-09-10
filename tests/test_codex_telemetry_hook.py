@@ -52,6 +52,7 @@ def test_codex_hook_keeps_debug_logs_off_stdout() -> None:
     hook_data = {
         "hook_event_name": "SessionStart",
         "source": "startup",
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
     environment = {
@@ -89,6 +90,7 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
             {
                 "hook_event_name": "SessionStart",
                 "source": "startup",
+                "session_id": "session-123",
                 "cwd": "/workspace",
             }
         ),
@@ -108,11 +110,13 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
             {
                 "hook_event_name": "UserPromptSubmit",
                 "prompt": "Review the code",
+                "session_id": "session-123",
                 "cwd": "/workspace",
             },
             {
                 "agent": "Codex",
                 "workspace": "/workspace",
+                "session_id": "native:session-123",
                 "state": "Thinking",
                 "prompt": "Review the code",
             },
@@ -129,6 +133,7 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
             {
                 "agent": "Codex",
                 "workspace": "/workspace",
+                "session_id": "native:session-123",
                 "state": "Acting",
                 "tool": "Bash",
                 "cmd": "git status --short",
@@ -142,11 +147,13 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
                     "command": "npm install",
                     "description": "Allow dependency installation?",
                 },
+                "session_id": "session-123",
                 "cwd": "/workspace",
             },
             {
                 "agent": "Codex",
                 "workspace": "/workspace",
+                "session_id": "native:session-123",
                 "state": "Waiting for Input",
                 "tool": "Bash",
                 "prompt": "Allow dependency installation?",
@@ -157,11 +164,13 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
                 "hook_event_name": "Stop",
                 "turn_id": "turn-123",
                 "stop_hook_active": False,
+                "session_id": "session-123",
                 "cwd": "/workspace",
             },
             {
                 "agent": "Codex",
                 "workspace": "/workspace",
+                "session_id": "native:session-123",
                 "state": "Idle",
                 "status": "Ready",
             },
@@ -214,6 +223,7 @@ def test_codex_request_user_input_is_waiting() -> None:
     client.send.assert_called_once_with(
         agent="Codex",
         workspace="/workspace",
+        session_id="native:session-123",
         state="Waiting for Input",
         prompt="Which environment?",
     )
@@ -271,6 +281,7 @@ def test_codex_apply_patch_does_not_publish_patch_contents() -> None:
     assert client.send.call_args.kwargs == {
         "agent": "Codex",
         "workspace": "/workspace",
+        "session_id": "native:session-123",
         "state": "Acting",
         "tool": "apply_patch",
     }
@@ -317,6 +328,7 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
     client.send.assert_called_with(
         agent="Codex",
         workspace=str(tmp_path),
+        session_id="native:session-duration",
         state="Thinking",
         tool="Bash",
         status="completed",
@@ -329,6 +341,7 @@ def test_codex_telemetry_failure_preserves_hook_protocol() -> None:
     hook_data = {
         "hook_event_name": "SessionStart",
         "source": "startup",
+        "session_id": "session-123",
         "cwd": "/workspace",
     }
     output = StringIO()
@@ -344,3 +357,19 @@ def test_codex_telemetry_failure_preserves_hook_protocol() -> None:
         main()
 
     assert output.getvalue() == "{}\n"
+
+
+def test_codex_hook_skips_event_without_stable_session_identity() -> None:
+    """Telemetry must be skipped when the hook has no stable identity source."""
+    hook_data = {"hook_event_name": "SessionStart", "cwd": "/workspace"}
+    with (
+        patch(
+            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
+        ) as client_factory,
+        patch("sys.stdin", StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=StringIO()),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        main()
+
+    client_factory.assert_not_called()

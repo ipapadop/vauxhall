@@ -71,6 +71,36 @@ vauxhall
 
 From a source checkout, `uv run vauxhall` starts the same entry point.
 
+### Configuration
+
+Dashboard configuration is loaded from `vauxhall_dashboard.json` in the current
+directory, then `~/.config/vauxhall/vauxhall_dashboard.json`. Environment
+variables take precedence over file values, which take precedence over the
+defaults below. Hooks use the same MQTT and logging fields with
+`vauxhall_hooks.json` in the same search paths.
+
+| Section | Field | Environment variable | Default | Valid values |
+| --- | --- | --- | --- | --- |
+| `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
+| `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
+| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535 |
+| `logging` | `level` | `VAUXHALL_LOGGING_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
+| `dashboard` | `port` | `VAUXHALL_DASHBOARD_PORT` | `8080` | Integer 1–65535 |
+| `dashboard` | `debug` | `VAUXHALL_DASHBOARD_DEBUG` | `false` | Boolean (`true`/`false`, `1`/`0`, or `yes`/`no`) |
+| `dashboard` | `window_title` | `VAUXHALL_DASHBOARD_WINDOW_TITLE` | `Vauxhall Agent Dashboard` | Non-empty string |
+| `dashboard` | `width` | `VAUXHALL_DASHBOARD_WIDTH` | `1000` | Integer 320–16384 |
+| `dashboard` | `height` | `VAUXHALL_DASHBOARD_HEIGHT` | `800` | Integer 320–16384 |
+| `dashboard` | `stale_threshold` | `VAUXHALL_DASHBOARD_STALE_THRESHOLD` | `120` | Integer 1–86400 seconds |
+| `dashboard` | `pending_update_limit` | `VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` | `500` | Integer 1–10000 |
+| `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
+| `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
+
+Configuration is strict: malformed JSON, non-object sections, wrong scalar
+types, invalid ranges, and invalid environment values abort dashboard startup
+or hook initialization. Errors identify the environment variable or absolute
+configuration path, logical field, invalid value, and expected constraint.
+MQTT authentication and TLS settings are intentionally deferred to issue #3.
+
 ### 3. Integrate with Agents
 Vauxhall supports multiple agents through customizable hooks. Install the desired integration in the agent workspace:
 

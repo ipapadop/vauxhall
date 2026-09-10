@@ -88,6 +88,7 @@ class DashboardApp:
             title=settings.dashboard.window_title,
             width=settings.dashboard.width,
             height=settings.dashboard.height,
+            dev_tools=settings.dashboard.debug,
             IPCs=[self.ipc],
         )
 
@@ -97,7 +98,7 @@ class DashboardApp:
         ui_dir = Path(__file__).parent / "ui"
 
         ui_dir_abs = ui_dir.resolve()
-        url = pyloid_serve(str(ui_dir_abs))
+        url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
         logger.info("Serving UI from %s at %s", ui_dir_abs, url)
 
         self.window.load_url(url)

@@ -200,6 +200,28 @@ Codex passes one JSON event object on stdin. The hook reads `cwd`, `hook_event_n
 
 On Windows, use the automated installer rather than adapting the POSIX command above; it generates the encoded PowerShell command required for safe path handling.
 
+## Configuration
+
+Dashboard settings load from `vauxhall_dashboard.json` in the current working
+directory, then `~/.config/vauxhall/`; hook settings use
+`vauxhall_hooks.json` in the same paths. Environment variables override file
+values, which override dataclass defaults. The dashboard exposes
+`VAUXHALL_DASHBOARD_PORT`, `VAUXHALL_DASHBOARD_DEBUG`,
+`VAUXHALL_DASHBOARD_WINDOW_TITLE`, `VAUXHALL_DASHBOARD_WIDTH`,
+`VAUXHALL_DASHBOARD_HEIGHT`, `VAUXHALL_DASHBOARD_STALE_THRESHOLD`,
+`VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT`,
+`VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS`, and
+`VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES`. MQTT and logging settings are shared:
+`VAUXHALL_MQTT_HOST`, `VAUXHALL_MQTT_PORT`,
+`VAUXHALL_MQTT_KEEPALIVE`, and `VAUXHALL_LOGGING_LEVEL`.
+
+Explicit values are strictly validated. Malformed JSON, non-object sections,
+wrong scalar types, invalid ranges, and invalid environment values abort
+dashboard startup or hook initialization with a source-aware error naming the
+environment variable or absolute file path, logical field, invalid value, and
+expected constraint. MQTT authentication and TLS fields remain out of scope
+until issue #3.
+
 ### Gemini CLI
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications.

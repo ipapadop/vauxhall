@@ -7,7 +7,9 @@ import json
 import unittest
 from copy import deepcopy
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
+
+import pytest
 
 # Mock dependencies that might not be available or should be isolated
 sys_modules_patch = patch.dict(
@@ -63,6 +65,32 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.on_telemetry(missing_state)
         self.dashboard.window.invoke.assert_not_called()
         assert len(self.dashboard.pending_updates) == 0
+
+    @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+    def test_run_uses_configured_pyloid_window_settings(
+        self, mock_serve: MagicMock
+    ) -> None:
+        """Dashboard startup passes its supported settings to Pyloid."""
+        self.dashboard.mqtt = MagicMock()
+        with patch("vauxhall.dashboard.app.settings") as mock_settings:
+            mock_settings.dashboard.window_title = "Configured dashboard"
+            mock_settings.dashboard.width = 1280
+            mock_settings.dashboard.height = 720
+            mock_settings.dashboard.debug = True
+            mock_settings.dashboard.port = 9090
+
+            self.mock_app.run.side_effect = KeyboardInterrupt
+            with pytest.raises(KeyboardInterrupt):
+                self.dashboard.run()
+
+        self.mock_app.create_window.assert_called_once_with(
+            title="Configured dashboard",
+            width=1280,
+            height=720,
+            dev_tools=True,
+            IPCs=[self.dashboard.ipc],
+        )
+        mock_serve.assert_called_once_with(ANY, port=9090)
 
     def test_on_telemetry_queuing(self) -> None:
         """Verify that telemetry queued when IPC is not ready and flushed on drain."""

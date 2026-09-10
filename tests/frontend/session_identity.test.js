@@ -41,6 +41,7 @@ test('same agent and workspace sessions create separate cards', async (t) => {
     window.ipc = {
         DashboardIPC: {
             ping: async () => false,
+            get_max_active_agents: async () => 100,
             copy_to_clipboard: async () => true,
         },
     };
@@ -152,4 +153,69 @@ test('configured capacity retains existing cards and closes an evicted card moda
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.equal(agents[firstKey], undefined);
     assert.equal(document.getElementById('history-modal').style.display, 'none');
+});
+
+test('capacity loads before readiness delivers queued events', async (t) => {
+    const { document, window } = parseHTML(`
+        <html><body>
+            <div id="agent-grid"></div>
+            <div id="history-modal"></div>
+        </body></html>
+    `);
+    let onAgentUpdate;
+    let resolveMaximum;
+    let setReadyCalls = 0;
+    const maximum = new Promise(resolve => {
+        resolveMaximum = resolve;
+    });
+    const base = {
+        schema_version: 1,
+        agent: 'Codex',
+        workspace: '/workspace',
+        state: 'Thinking',
+        details: {},
+    };
+    window.pyloid = {
+        event: {
+            listen(name, callback) {
+                if (name === 'agent-update') onAgentUpdate = callback;
+            },
+        },
+    };
+    window.ipc = {
+        DashboardIPC: {
+            ping: async () => true,
+            set_ready: async () => {
+                setReadyCalls += 1;
+                onAgentUpdate({ ...base, session_id: 'queued:one' });
+                onAgentUpdate({ ...base, session_id: 'queued:two' });
+                return true;
+            },
+            get_stale_threshold: async () => 120,
+            get_max_active_agents: () => maximum,
+            copy_to_clipboard: async () => true,
+        },
+    };
+    globalThis.document = document;
+    globalThis.window = window;
+    globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+    const originalSetInterval = globalThis.setInterval;
+    t.after(() => {
+        globalThis.setInterval = originalSetInterval;
+        clearAgents();
+    });
+    globalThis.setInterval = () => 0;
+    clearAgents();
+
+    await import(`../../vauxhall/dashboard/ui/app.js?queued-capacity=${Date.now()}`);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(setReadyCalls, 0);
+
+    resolveMaximum(1);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(setReadyCalls, 1);
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+    assert.equal(Object.keys(agents).length, 1);
 });

@@ -12,7 +12,7 @@ import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, remo
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 
-function init() {
+async function init() {
     console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');
     const grid = document.getElementById('agent-grid');
@@ -123,6 +123,15 @@ function init() {
     try {
         if (!window.pyloid) return;
 
+        if (window.ipc && window.ipc.DashboardIPC) {
+            try {
+                maxActiveAgents = await window.ipc.DashboardIPC.get_max_active_agents();
+                console.log(`Maximum active agents set to ${maxActiveAgents}`);
+            } catch (err) {
+                console.error("Failed to fetch maximum active agents:", err);
+            }
+        }
+
         initIPC({
             onAgentUpdate: (data) => {
                 const key = agentKey(data);
@@ -175,12 +184,6 @@ function init() {
                         console.log(`Stale threshold set to ${staleThresholdMs}ms`);
                     }).catch(err => {
                         console.error("Failed to fetch stale threshold:", err);
-                    });
-                    window.ipc.DashboardIPC.get_max_active_agents().then(maximum => {
-                        maxActiveAgents = maximum;
-                        console.log(`Maximum active agents set to ${maxActiveAgents}`);
-                    }).catch(err => {
-                        console.error("Failed to fetch maximum active agents:", err);
                     });
                 }
             },

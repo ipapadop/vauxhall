@@ -119,7 +119,7 @@ All values received through telemetry are treated as untrusted text and must not
 Clicking an agent card copies the raw `workspace` value to the clipboard. The dashboard must not concatenate this untrusted value into a shell command.
 
 ### Session History & Audit
-The dashboard automatically maintains a full buffer of the last 20 operations per agent. Users can view this history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
+The dashboard automatically maintains the last 20 operations per agent. It retains up to 100 active cards by default; when a new identity arrives at capacity, the least-recently-seen card is evicted. Users can view a card's history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
 
 ## Specific Agent Instructions
 

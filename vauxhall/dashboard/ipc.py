@@ -65,6 +65,15 @@ class DashboardIPC(PyloidIPC):
         )
         return settings.dashboard.stale_threshold
 
+    @Bridge(result=int)
+    def get_max_active_agents(self) -> int:
+        """Retrieve the maximum number of active dashboard cards."""
+        logger.debug(
+            "Frontend requested maximum active agents: %d",
+            settings.dashboard.max_active_agents,
+        )
+        return settings.dashboard.max_active_agents
+
     @Bridge(str, result=bool)
     def open_url(self, url: str) -> bool:
         """Opens a URL in the system's default browser.

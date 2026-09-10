@@ -32,6 +32,12 @@ def test_ipc_get_stale_threshold() -> None:
     assert ipc.get_stale_threshold() == settings.dashboard.stale_threshold
 
 
+def test_ipc_get_max_active_agents() -> None:
+    """Verify that get_max_active_agents returns value from settings."""
+    ipc = DashboardIPC()
+    assert ipc.get_max_active_agents() == settings.dashboard.max_active_agents
+
+
 @patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
     """Verify that copy_to_clipboard calls pyperclip."""

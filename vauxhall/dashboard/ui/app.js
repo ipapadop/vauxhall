@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 
@@ -119,6 +119,7 @@ function init() {
 
     // Initialize IPC with Python backend
     let staleThresholdMs = 120000;
+    let maxActiveAgents = 100;
     try {
         if (!window.pyloid) return;
 
@@ -128,6 +129,11 @@ function init() {
                 let card = agents[key];
 
                 if (!card) {
+                    const evictedKey = ensureAgentCapacity(maxActiveAgents);
+                    if (evictedKey === currentHistoryKey) {
+                        closeHistoryModal();
+                        currentHistoryKey = null;
+                    }
                     card = createCard(data, window.ipc, () => {
                         currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);
@@ -169,6 +175,12 @@ function init() {
                         console.log(`Stale threshold set to ${staleThresholdMs}ms`);
                     }).catch(err => {
                         console.error("Failed to fetch stale threshold:", err);
+                    });
+                    window.ipc.DashboardIPC.get_max_active_agents().then(maximum => {
+                        maxActiveAgents = maximum;
+                        console.log(`Maximum active agents set to ${maxActiveAgents}`);
+                    }).catch(err => {
+                        console.error("Failed to fetch maximum active agents:", err);
                     });
                 }
             },

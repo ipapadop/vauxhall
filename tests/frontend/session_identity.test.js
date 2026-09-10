@@ -87,3 +87,69 @@ test('same agent and workspace sessions create separate cards', async (t) => {
         ['Session: native:one', 'Session: native:two'],
     );
 });
+
+test('configured capacity retains existing cards and closes an evicted card modal', async (t) => {
+    const { document, window } = parseHTML(`
+        <html><body>
+            <div id="agent-grid"></div>
+            <div id="history-modal"></div>
+            <div id="modal-agent-name"></div>
+            <input id="modal-search" value="">
+            <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
+            <div id="modal-history-body"></div>
+        </body></html>
+    `);
+    let onAgentUpdate;
+    window.pyloid = {
+        event: {
+            listen(name, callback) {
+                if (name === 'agent-update') onAgentUpdate = callback;
+            },
+        },
+    };
+    window.ipc = {
+        DashboardIPC: {
+            ping: async () => true,
+            set_ready: async () => true,
+            get_stale_threshold: async () => 120,
+            get_max_active_agents: async () => 1,
+            copy_to_clipboard: async () => true,
+        },
+    };
+    globalThis.document = document;
+    globalThis.window = window;
+    globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+    const originalSetInterval = globalThis.setInterval;
+    t.after(() => {
+        globalThis.setInterval = originalSetInterval;
+    });
+    globalThis.setInterval = () => 0;
+    clearAgents();
+
+    await import(`../../vauxhall/dashboard/ui/app.js?capacity=${Date.now()}`);
+    await new Promise(resolve => setImmediate(resolve));
+
+    const base = {
+        schema_version: 1,
+        agent: 'Codex',
+        workspace: '/workspace',
+        state: 'Thinking',
+        details: {},
+    };
+    onAgentUpdate({ ...base, session_id: 'native:one' });
+    const firstKey = '["Codex","/workspace","native:one"]';
+    const firstCard = agents[firstKey];
+    onAgentUpdate({ ...base, session_id: 'native:one', state: 'Acting' });
+
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+    assert.equal(firstCard.history.length, 2);
+
+    firstCard.querySelector('.history-icon').click();
+    assert.equal(document.getElementById('history-modal').style.display, 'block');
+
+    onAgentUpdate({ ...base, session_id: 'native:two' });
+
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+    assert.equal(agents[firstKey], undefined);
+    assert.equal(document.getElementById('history-modal').style.display, 'none');
+});

@@ -253,6 +253,17 @@ Before the frontend is ready, the dashboard retains only the newest
 buffer insertion discards the oldest event. Discard warnings are rate-limited
 at power-of-two discard counts and never include telemetry contents.
 
+## Dashboard Connection Lifecycle
+
+The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
+connection failures or disconnects, and `Disconnected` for intentional
+shutdown. It stops the MQTT client exactly once when the UI loop exits,
+including after an exception or partial startup failure. The dashboard extra
+requires Pyloid 0.27.2 or newer. Its `BrowserWindow` wrapper marshals
+cross-thread commands through `command_signal` and `_handle_command`, allowing
+MQTT callbacks to call `window.invoke()` directly without a second queue;
+Vauxhall does not use those private symbols at runtime.
+
 ### Gemini CLI
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications. It implements documented [Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) fields, including `AfterTool.tool_response` and `SessionEnd.reason`. A session end reports one of `session exited`, `session cleared`, `logged out`, `input closed`, or the conservative fallback `session ended`; raw reason values are not published.

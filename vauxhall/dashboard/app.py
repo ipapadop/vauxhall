@@ -112,19 +112,21 @@ class DashboardApp:
         )
 
         self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
-        self.mqtt.start()
+        try:
+            self.mqtt.start()
 
-        ui_dir = Path(__file__).parent / "ui"
+            ui_dir = Path(__file__).parent / "ui"
 
-        ui_dir_abs = ui_dir.resolve()
-        url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
-        logger.info("Serving UI from %s at %s", ui_dir_abs, url)
+            ui_dir_abs = ui_dir.resolve()
+            url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
+            logger.info("Serving UI from %s at %s", ui_dir_abs, url)
 
-        self.window.load_url(url)
-        self.window.show_and_focus()
-        self.app.run()
-        logger.info("Vauxhall Dashboard shutting down...")
-        self.mqtt.stop()
+            self.window.load_url(url)
+            self.window.show_and_focus()
+            self.app.run()
+        finally:
+            self.mqtt.stop()
+            logger.info("Vauxhall Dashboard shutting down...")
 
 
 def main() -> None:

@@ -112,6 +112,15 @@ only the newest `pending_update_limit` events (500 by default), discarding the
 oldest event when the buffer is full. The core protocol validator enforces the
 same schema and field limits for the dashboard and built-in telemetry client.
 
+The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
+connection failures or disconnects, and `Disconnected` for an intentional
+shutdown. MQTT cleanup always runs when the UI loop exits, including on an
+exception. The dashboard requires Pyloid 0.27.2 or newer: its `BrowserWindow`
+wrapper marshals cross-thread commands through `command_signal` and
+`_handle_command`, so MQTT callbacks can safely call `window.invoke()` without
+a second queue. Vauxhall does not depend on those private Pyloid symbols at
+runtime.
+
 ### 3. Integrate with Agents
 Vauxhall supports multiple agents through customizable hooks. Install the desired integration in the agent workspace:
 

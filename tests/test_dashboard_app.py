@@ -85,8 +85,10 @@ class TestDashboardComponents(unittest.TestCase):
         self, mock_serve: MagicMock
     ) -> None:
         """Dashboard startup passes its supported settings to Pyloid."""
-        self.dashboard.mqtt = MagicMock()
-        with patch("vauxhall.dashboard.app.settings") as mock_settings:
+        with (
+            patch("vauxhall.dashboard.app.DashboardSubscriber"),
+            patch("vauxhall.dashboard.app.settings") as mock_settings,
+        ):
             mock_settings.dashboard.window_title = "Configured dashboard"
             mock_settings.dashboard.width = 1280
             mock_settings.dashboard.height = 720
@@ -303,6 +305,23 @@ def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
     assert dashboard.discarded_pending_updates == 9_997
     warnings = [record for record in caplog.records if record.levelname == "WARNING"]
     assert [record.args[0] for record in warnings] == [2**i for i in range(14)]
+
+
+@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None:
+    """MQTT cleanup runs even when the UI event loop exits exceptionally."""
+    app = MagicMock()
+    app.run.side_effect = RuntimeError("UI failed")
+
+    with (
+        patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type,
+        pytest.raises(RuntimeError, match="UI failed"),
+    ):
+        DashboardApp(app).run()
+
+    mock_serve.assert_called_once()
+    subscriber_type.return_value.start.assert_called_once_with()
+    subscriber_type.return_value.stop.assert_called_once_with()
 
 
 if __name__ == "__main__":

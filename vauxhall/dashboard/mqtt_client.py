@@ -39,9 +39,13 @@ class DashboardSubscriber:
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self._on_message
         self.client.on_connect = self._on_connect
+        self.client.on_connect_fail = self._on_connect_fail
         self.client.on_disconnect = self._on_disconnect
         self.host = host if host is not None else settings.mqtt.host
         self.port = port if port is not None else settings.mqtt.port
+        self._stopping = False
+        self._loop_started = False
+        self._ever_connected = False
 
     def _on_connect(
         self,
@@ -53,6 +57,7 @@ class DashboardSubscriber:
     ) -> None:
         """Internal callback for MQTT connection."""
         if reason_code == 0:
+            self._ever_connected = True
             logger.info("Connected to MQTT broker at %s:%d", self.host, self.port)
             self.status_callback("Connected to Agent Fleet")
             client.subscribe("vauxhall/agents/+/activity")
@@ -60,7 +65,12 @@ class DashboardSubscriber:
             logger.info("Subscribed to agent telemetry topics.")
         else:
             logger.error("Failed to connect to MQTT broker: %s", reason_code)
-            self.status_callback(f"Connection Failed: {reason_code}")
+            self.status_callback(f"Connection failed: {reason_code}. Retrying...")
+
+    def _on_connect_fail(self, client: mqtt.Client, userdata: object) -> None:
+        """Report asynchronous connection failures while retrying."""
+        if not self._stopping:
+            self.status_callback("Connection failed. Retrying...")
 
     def _on_disconnect(
         self,
@@ -71,7 +81,9 @@ class DashboardSubscriber:
         properties: mqtt.Properties | None,
     ) -> None:
         """Internal callback for MQTT disconnection."""
-        logger.warning("Disconnected from MQTT broker: %s", reason_code)
+        if self._stopping:
+            return
+        logger.warning("Disconnected from MQTT broker; retrying")
         self.status_callback("Disconnected. Retrying...")
 
     def _on_message(
@@ -110,16 +122,31 @@ class DashboardSubscriber:
     def start(self) -> None:
         """Connect to the broker and start the background loop."""
         logger.info("Connecting to MQTT broker at %s:%d...", self.host, self.port)
+        self._stopping = False
+        self.status_callback("Connecting...")
         try:
             self.client.connect_async(
                 self.host, self.port, keepalive=settings.mqtt.keepalive
             )
             self.client.loop_start()
+            self._loop_started = True
         except Exception:
-            logger.exception("Failed to initialize async connection to MQTT broker")
+            logger.warning("Failed to initialize async connection to MQTT broker")
+            self.status_callback("Connection failed")
+            if self._loop_started:
+                self.client.loop_stop()
+                self._loop_started = False
+            raise
 
     def stop(self) -> None:
         """Stop the background loop and disconnect from the broker."""
+        if self._stopping:
+            return
+        self._stopping = True
+        if not self._loop_started:
+            return
         logger.info("Disconnecting from MQTT broker...")
-        self.client.loop_stop()
+        self.status_callback("Disconnected")
         self.client.disconnect()
+        self.client.loop_stop()
+        self._loop_started = False

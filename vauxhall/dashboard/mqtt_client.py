@@ -56,6 +56,8 @@ class DashboardSubscriber:
         properties: mqtt.Properties | None,
     ) -> None:
         """Internal callback for MQTT connection."""
+        if self._stopping:
+            return
         if reason_code == 0:
             self._ever_connected = True
             logger.info("Connected to MQTT broker at %s:%d", self.host, self.port)
@@ -146,7 +148,7 @@ class DashboardSubscriber:
         if not self._loop_started:
             return
         logger.info("Disconnecting from MQTT broker...")
-        self.status_callback("Disconnected")
         self.client.disconnect()
         self.client.loop_stop()
         self._loop_started = False
+        self.status_callback("Disconnected")

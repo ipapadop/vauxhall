@@ -4,6 +4,7 @@
 """MQTT subscriber tests for the Vauxhall Dashboard."""
 
 import json
+from threading import Event, Thread
 from typing import Any
 from unittest.mock import MagicMock, call, patch
 
@@ -175,6 +176,32 @@ def test_intentional_disconnect_does_not_report_retry() -> None:
     status_callback.assert_not_called()
 
 
+def test_successful_connack_while_stopping_is_silent() -> None:
+    """A connection callback cannot revive an intentionally stopping subscriber."""
+    status_callback = MagicMock()
+    client = MagicMock()
+    subscriber = DashboardSubscriber(MagicMock(), status_callback)
+    subscriber._stopping = True
+
+    subscriber._on_connect(client, None, {}, 0, None)
+
+    status_callback.assert_not_called()
+    client.subscribe.assert_not_called()
+
+
+def test_refused_connack_while_stopping_is_silent() -> None:
+    """A refusal callback cannot replace the intentional terminal status."""
+    status_callback = MagicMock()
+    client = MagicMock()
+    subscriber = DashboardSubscriber(MagicMock(), status_callback)
+    subscriber._stopping = True
+
+    subscriber._on_connect(client, None, {}, "Not authorized", None)
+
+    status_callback.assert_not_called()
+    client.subscribe.assert_not_called()
+
+
 def test_unexpected_disconnect_before_first_connection_reports_retry() -> None:
     """An initial disconnect remains visible to the dashboard."""
     status_callback = MagicMock()
@@ -210,6 +237,44 @@ def test_stop_reports_disconnected_once(mock_client_class: MagicMock) -> None:
     status_callback.assert_called_once_with("Disconnected")
     mock_client_class.return_value.disconnect.assert_called_once_with()
     mock_client_class.return_value.loop_stop.assert_called_once_with()
+
+
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
+def test_stop_publishes_terminal_status_after_in_progress_connect_callback(
+    mock_client_class: MagicMock,
+) -> None:
+    """A callback that began before stopping cannot overwrite Disconnected."""
+    callback_entered = Event()
+    release_callback = Event()
+    statuses: list[str] = []
+
+    class BlockingSuccessCode:
+        __hash__ = object.__hash__
+
+        def __eq__(self, value: object) -> bool:
+            callback_entered.set()
+            assert release_callback.wait(timeout=1)
+            return value == 0
+
+    client = mock_client_class.return_value
+    subscriber = DashboardSubscriber(MagicMock(), statuses.append)
+    subscriber._loop_started = True
+    callback = Thread(
+        target=subscriber._on_connect,
+        args=(client, None, {}, BlockingSuccessCode(), None),
+    )
+    callback.start()
+    assert callback_entered.wait(timeout=1)
+
+    def join_paho_loop() -> None:
+        release_callback.set()
+        callback.join(timeout=1)
+        assert not callback.is_alive()
+
+    client.loop_stop.side_effect = join_paho_loop
+    subscriber.stop()
+
+    assert statuses == ["Connected to Agent Fleet", "Disconnected"]
 
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")

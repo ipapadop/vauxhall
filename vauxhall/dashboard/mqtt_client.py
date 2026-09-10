@@ -10,6 +10,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 from vauxhall.core.logging import get_logger
+from vauxhall.core.telemetry import validate_telemetry
 from vauxhall.dashboard.config import dashboard_settings as settings
 
 logger = get_logger(__name__)
@@ -83,12 +84,28 @@ class DashboardSubscriber:
             userdata: Private user data.
             msg: The received message.
         """
+        payload = msg.payload
+        if len(payload) > settings.dashboard.max_payload_bytes:
+            logger.warning(
+                "Dropping oversized MQTT message on topic %s (%d bytes)",
+                msg.topic,
+                len(payload),
+            )
+            return
+
         try:
-            data = json.loads(msg.payload.decode())
-            logger.debug("Received MQTT message on topic: %s", msg.topic)
-            self.callback(data)
+            data = json.loads(payload.decode())
         except Exception:
-            logger.exception("Error processing MQTT message")
+            logger.warning("Dropping malformed MQTT message on topic %s", msg.topic)
+            return
+
+        telemetry = validate_telemetry(data)
+        if telemetry is None:
+            logger.warning("Dropping invalid telemetry message on topic %s", msg.topic)
+            return
+
+        logger.debug("Received MQTT message on topic: %s", msg.topic)
+        self.callback(telemetry)
 
     def start(self) -> None:
         """Connect to the broker and start the background loop."""

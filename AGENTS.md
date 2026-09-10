@@ -232,6 +232,27 @@ environment variable or absolute file path, logical field, invalid value, and
 expected constraint. MQTT authentication and TLS fields remain out of scope
 until issue #3.
 
+## Dashboard Telemetry Ingress Limits
+
+The dashboard drops MQTT payloads larger than
+`VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` (65,536 bytes by default) before
+decoding JSON, and drops malformed or unsupported telemetry after decoding.
+Accepted telemetry uses schema version 1: non-empty `agent` (128 characters),
+`workspace` (4,096), `session_id` (256), and one supported `state` (32), with
+optional `env` (`local` or `remote`, 16). `details` allows up to 16 string keys
+of 64 characters and scalar values; string values are capped at 4,096
+characters. Numeric metrics such as `tokens` and `duration` must be numbers,
+not booleans.
+
+The shared `vauxhall.core.telemetry` validator enforces these schema and field
+limits for dashboard ingestion and the built-in telemetry client. Rejection
+reasons never include payload values.
+
+Before the frontend is ready, the dashboard retains only the newest
+`VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` events (500 by default); each full
+buffer insertion discards the oldest event. Discard warnings are rate-limited
+at power-of-two discard counts and never include telemetry contents.
+
 ### Gemini CLI
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications. It implements documented [Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) fields, including `AfterTool.tool_response` and `SessionEnd.reason`. A session end reports one of `session exited`, `session cleared`, `logged out`, `input closed`, or the conservative fallback `session ended`; raw reason values are not published.

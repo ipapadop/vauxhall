@@ -28,6 +28,20 @@ from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
 
+def valid_event(**overrides: object) -> dict[str, object]:
+    """Return a valid version-one dashboard telemetry event."""
+    event: dict[str, object] = {
+        "schema_version": 1,
+        "agent": "Codex",
+        "workspace": "/workspace",
+        "session_id": "session-1",
+        "state": "Thinking",
+        "details": {},
+    }
+    event.update(overrides)
+    return event
+
+
 class TestDashboardComponents(unittest.TestCase):
     """Tests for IPC and Subscriber components."""
 
@@ -123,7 +137,7 @@ class TestDashboardComponents(unittest.TestCase):
         forwarded_data = self.dashboard.window.invoke.call_args.args[1]
         assert forwarded_data == expected_data
         assert forwarded_data is not expected_data
-        assert self.dashboard.pending_updates == []
+        assert not self.dashboard.pending_updates
 
     def test_on_telemetry_rejects_unversioned_and_unsupported_messages(self) -> None:
         """Only supported schema-v1 telemetry may reach dashboard state."""
@@ -136,7 +150,7 @@ class TestDashboardComponents(unittest.TestCase):
             self.dashboard.on_telemetry(unversioned)
             self.dashboard.on_telemetry(unsupported)
 
-        assert self.dashboard.pending_updates == []
+        assert not self.dashboard.pending_updates
         self.dashboard.window.invoke.assert_not_called()
         assert "schema_version is required" in logs.output[0]
         assert "unsupported schema_version; expected 1" in logs.output[1]
@@ -208,7 +222,7 @@ class TestDashboardComponents(unittest.TestCase):
             "agent": "Gemini",
             "workspace": "/home/user/project",
             "session_id": "native:session-1",
-            "state": "Running",
+            "state": "Thinking",
             "details": {},
         }
         msg.payload = json.dumps(data).encode()
@@ -231,6 +245,64 @@ class TestDashboardComponents(unittest.TestCase):
         subscriber._on_message(None, None, msg)
 
         callback.assert_not_called()
+
+
+def test_pending_updates_discards_oldest_when_not_ready(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Retain only the newest pre-ready telemetry events at the queue limit."""
+    monkeypatch.setattr(
+        "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
+    )
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = False
+
+    for sequence in range(1, 6):
+        dashboard.on_telemetry(valid_event(details={"sequence": sequence}))
+
+    assert [event["details"]["sequence"] for event in dashboard.pending_updates] == [
+        3,
+        4,
+        5,
+    ]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelname == "WARNING"
+    ]
+    assert len(warnings) == 2
+    assert all(
+        "discarded oldest pending telemetry update" in warning.lower()
+        for warning in warnings
+    )
+    assert all("sequence" not in warning for warning in warnings)
+
+
+def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep a bounded newest tail during a large pre-ready telemetry burst."""
+    monkeypatch.setattr(
+        "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
+    )
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = False
+
+    for sequence in range(1, 10_001):
+        dashboard.on_telemetry(valid_event(details={"sequence": sequence}))
+
+    assert len(dashboard.pending_updates) == 3
+    assert [event["details"]["sequence"] for event in dashboard.pending_updates] == [
+        9_998,
+        9_999,
+        10_000,
+    ]
+    assert dashboard.discarded_pending_updates == 9_997
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert [record.args[0] for record in warnings] == [2**i for i in range(14)]
 
 
 if __name__ == "__main__":

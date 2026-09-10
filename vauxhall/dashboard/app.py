@@ -3,6 +3,7 @@
 
 """Main entry point for the Vauxhall Dashboard application."""
 
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,10 @@ class DashboardApp:
         self.app = app
         self.window: Any = None
         self.ipc = DashboardIPC(on_ready_callback=self.drain_queue)
-        self.pending_updates: list[dict[str, Any]] = []
+        self.pending_updates: deque[dict[str, Any]] = deque(
+            maxlen=settings.dashboard.pending_update_limit
+        )
+        self.discarded_pending_updates = 0
         self.last_status: str | None = None
         self.mqtt: DashboardSubscriber | None = None
 
@@ -41,17 +45,17 @@ class DashboardApp:
         if self.pending_updates:
             logger.info("Draining %d queued updates.", len(self.pending_updates))
         while self.pending_updates:
-            p = self.pending_updates.pop(0)
+            p = self.pending_updates.popleft()
             self.window.invoke("agent-update", p)
 
-    def on_telemetry(self, data: dict[str, Any]) -> None:
+    def on_telemetry(self, data: object) -> None:
         """Handle telemetry data received from MQTT.
 
         If the frontend is ready, the data is invoked immediately.
         Otherwise, it is queued until the frontend signals readiness.
 
         Args:
-            data: The telemetry data dictionary.
+            data: The decoded telemetry data.
         """
         try:
             error = telemetry_validation_error(data)
@@ -59,13 +63,28 @@ class DashboardApp:
                 logger.warning("Rejected telemetry: %s", error)
                 return
 
+            assert isinstance(data, dict)
+            telemetry = dict(data)
+
             if self.ipc.is_ready:
                 # Drain queue if any (just in case)
                 self.drain_queue()
-                self.window.invoke("agent-update", data)
+                self.window.invoke("agent-update", telemetry)
             else:
-                logger.debug("Queuing telemetry for agent: %s", data.get("agent"))
-                self.pending_updates.append(data)
+                logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
+                if len(self.pending_updates) == self.pending_updates.maxlen:
+                    self.discarded_pending_updates += 1
+                    if (
+                        self.discarded_pending_updates
+                        & (self.discarded_pending_updates - 1)
+                        == 0
+                    ):
+                        logger.warning(
+                            "Discarded oldest pending telemetry update; "
+                            "total discarded: %d",
+                            self.discarded_pending_updates,
+                        )
+                self.pending_updates.append(telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
 

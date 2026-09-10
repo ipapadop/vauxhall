@@ -7,7 +7,24 @@ import json
 from typing import Any
 from unittest.mock import MagicMock, call, patch
 
+import pytest
+
+from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+
+
+def valid_event(**overrides: object) -> dict[str, object]:
+    """Return a valid version-one dashboard telemetry event."""
+    event: dict[str, object] = {
+        "schema_version": 1,
+        "agent": "Codex",
+        "workspace": "/workspace",
+        "session_id": "session-1",
+        "state": "Thinking",
+        "details": {},
+    }
+    event.update(overrides)
+    return event
 
 
 def test_dashboard_subscriber_on_message() -> None:
@@ -16,12 +33,13 @@ def test_dashboard_subscriber_on_message() -> None:
     subscriber = DashboardSubscriber(callback, MagicMock())
 
     msg: Any = MagicMock()
-    msg.payload = json.dumps({"agent": "test", "activity": "working"}).encode()
+    event = valid_event()
+    msg.payload = json.dumps(event).encode()
     msg.topic = "vauxhall/agents/test/activity"
 
     subscriber._on_message(None, None, msg)
 
-    callback.assert_called_once_with({"agent": "test", "activity": "working"})
+    callback.assert_called_once_with(event)
 
 
 def test_dashboard_subscriber_on_message_invalid_json() -> None:
@@ -37,6 +55,26 @@ def test_dashboard_subscriber_on_message_invalid_json() -> None:
     subscriber._on_message(None, None, msg)
 
     callback.assert_not_called()
+
+
+def test_dashboard_subscriber_rejects_oversized_payload_before_json_decoding(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Drop oversized MQTT bytes without decoding or forwarding telemetry."""
+    monkeypatch.setattr(settings.dashboard, "max_payload_bytes", 4)
+    callback = MagicMock()
+    subscriber = DashboardSubscriber(callback, MagicMock())
+    msg: Any = MagicMock()
+    msg.payload = b"12345"
+    msg.topic = "vauxhall/agents/test/activity"
+
+    with patch("vauxhall.dashboard.mqtt_client.json.loads") as mock_loads:
+        subscriber._on_message(None, None, msg)
+
+    mock_loads.assert_not_called()
+    callback.assert_not_called()
+    assert "vauxhall/agents/test/activity" in caplog.text
+    assert "5" in caplog.text
 
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")

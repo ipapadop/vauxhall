@@ -142,6 +142,9 @@ class DashboardApp:
             self.window.show_and_focus()
             self.app.run()
         finally:
+            # The window is gone once the UI loop exits; queue any late updates.
+            with self._updates_lock:
+                self.ipc.is_ready = False
             self.mqtt.stop()
             logger.info("Vauxhall Dashboard shutting down...")
 

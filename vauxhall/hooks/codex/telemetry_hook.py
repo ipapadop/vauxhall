@@ -12,6 +12,7 @@ from contextlib import redirect_stdout, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.hooks.identity import resolve_session_id
 
@@ -206,6 +207,8 @@ def main() -> None:
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 _send_telemetry(input_data)
+    except ConfigurationError as error:
+        print(error, file=sys.stderr)
     except Exception:
         pass
     print("{}")

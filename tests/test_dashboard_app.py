@@ -6,6 +6,7 @@
 import json
 import unittest
 from copy import deepcopy
+from threading import Event, Thread
 from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
@@ -305,6 +306,116 @@ def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
     assert dashboard.discarded_pending_updates == 9_997
     warnings = [record for record in caplog.records if record.levelname == "WARNING"]
     assert [record.args[0] for record in warnings] == [2**i for i in range(14)]
+
+
+def test_readiness_transition_cannot_strand_a_pending_update() -> None:
+    """An event racing frontend readiness must be delivered exactly once."""
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    readiness_read = Event()
+    continue_read = Event()
+    readiness_started = Event()
+    original_ready_callback = dashboard.ipc.on_ready_callback
+
+    class CoordinatedIPC:
+        def __init__(self) -> None:
+            self._is_ready = False
+
+        @property
+        def is_ready(self) -> bool:
+            observed = self._is_ready
+            if not observed:
+                readiness_read.set()
+                if not continue_read.wait(timeout=2):
+                    raise TimeoutError
+            return observed
+
+        @is_ready.setter
+        def is_ready(self, value: bool) -> None:
+            self._is_ready = value
+
+        def set_ready(self) -> bool:
+            self._is_ready = True
+            readiness_started.set()
+            assert original_ready_callback is not None
+            original_ready_callback()
+            return True
+
+    dashboard.ipc = CoordinatedIPC()  # type: ignore[assignment]
+    telemetry_thread = Thread(target=dashboard.on_telemetry, args=(valid_event(),))
+    ready_thread = Thread(target=dashboard.ipc.set_ready)
+
+    telemetry_thread.start()
+    assert readiness_read.wait(timeout=2)
+    ready_thread.start()
+    assert readiness_started.wait(timeout=2)
+    continue_read.set()
+    telemetry_thread.join(timeout=2)
+    ready_thread.join(timeout=2)
+
+    assert not telemetry_thread.is_alive()
+    assert not ready_thread.is_alive()
+    assert not dashboard.pending_updates
+    dashboard.window.invoke.assert_called_once_with("agent-update", valid_event())
+
+
+def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> None:
+    """A live update cannot overtake the queued readiness snapshot."""
+    dashboard = DashboardApp(MagicMock())
+    queued_event = valid_event(state="Thinking")
+    live_event = valid_event(state="Acting")
+    dashboard.on_telemetry(queued_event)
+    queued_dispatch_started = Event()
+    continue_queued_dispatch = Event()
+    live_saw_ready = Event()
+    deliveries: list[str] = []
+    original_ready_callback = dashboard.ipc.on_ready_callback
+
+    class ReadinessObservingIPC:
+        def __init__(self) -> None:
+            self._is_ready = False
+
+        @property
+        def is_ready(self) -> bool:
+            if self._is_ready:
+                live_saw_ready.set()
+            return self._is_ready
+
+        @is_ready.setter
+        def is_ready(self, value: bool) -> None:
+            self._is_ready = value
+
+        def set_ready(self) -> bool:
+            assert original_ready_callback is not None
+            original_ready_callback()
+            if not self._is_ready:
+                self._is_ready = True
+            return True
+
+    def invoke(_channel: str, event: dict[str, object]) -> None:
+        if event["state"] == "Thinking":
+            queued_dispatch_started.set()
+            if not continue_queued_dispatch.wait(timeout=2):
+                raise TimeoutError
+        deliveries.append(str(event["state"]))
+
+    dashboard.ipc = ReadinessObservingIPC()  # type: ignore[assignment]
+    dashboard.window = MagicMock()
+    dashboard.window.invoke.side_effect = invoke
+    ready_thread = Thread(target=dashboard.ipc.set_ready)
+    live_thread = Thread(target=dashboard.on_telemetry, args=(live_event,))
+
+    ready_thread.start()
+    assert queued_dispatch_started.wait(timeout=2)
+    live_thread.start()
+    assert live_saw_ready.wait(timeout=2)
+    continue_queued_dispatch.set()
+    ready_thread.join(timeout=2)
+    live_thread.join(timeout=2)
+
+    assert not ready_thread.is_alive()
+    assert not live_thread.is_alive()
+    assert deliveries == ["Thinking", "Acting"]
 
 
 @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")

@@ -14,11 +14,16 @@ import sys
 import time
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
-from vauxhall.hooks.client import TelemetryClient
 from vauxhall.hooks.identity import resolve_session_id
+
+if TYPE_CHECKING:
+    from vauxhall.hooks.client import TelemetryClient
+else:
+    TelemetryClient = None
 
 logger = get_logger(__name__)
 
@@ -67,6 +72,18 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     if response.get("error") is not None:
         return "Error", "failed", "Tool reported an error"
     return "Thinking", "completed", None
+
+
+def _create_telemetry_client() -> "TelemetryClient":
+    """Create the telemetry client only inside the hook failure boundary."""
+    if TelemetryClient is not None:
+        return TelemetryClient()
+
+    from vauxhall.hooks.client import (  # noqa: PLC0415
+        TelemetryClient as _TelemetryClient,
+    )
+
+    return _TelemetryClient()
 
 
 def _setup_logging() -> None:
@@ -298,7 +315,7 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     else:
         state, details = handle_unknown_hook(hook_type)
 
-    with TelemetryClient() as client:
+    with _create_telemetry_client() as client:
         client.send(
             agent=agent_name,
             workspace=workspace,
@@ -316,6 +333,8 @@ def main() -> None:
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 _send_telemetry(input_data)
+    except ConfigurationError as error:
+        print(error, file=sys.stderr)
     except Exception:
         pass
     print("{}")

@@ -145,7 +145,7 @@ Tool outcomes follow the documented [Codex hooks](https://developers.openai.com/
 
 Arbitrary `tool_response` content is never sent as telemetry. Unknown or malformed result shapes use `result unavailable` rather than claiming success.
 
-Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, and telemetry failures, so monitoring cannot interrupt Codex. Logs go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
+Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, telemetry failures, and invalid hook configuration, so monitoring cannot interrupt Codex. Logs and source-aware configuration errors go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
 
 The hook preserves Codex's native session identity, so separate native Codex
 sessions in one workspace create separate dashboard cards. If no native ID is
@@ -229,8 +229,9 @@ Explicit values are strictly validated. Malformed JSON, non-object sections,
 wrong scalar types, invalid ranges, and invalid environment values abort
 dashboard startup or hook initialization with a source-aware error naming the
 environment variable or absolute file path, logical field, invalid value, and
-expected constraint. MQTT authentication and TLS fields remain out of scope
-until issue #3.
+expected constraint. Hook entry points write that error to stderr while still
+exiting normally with one JSON object on stdout. MQTT authentication and TLS
+fields remain out of scope until issue #3.
 
 ## Dashboard Telemetry Ingress Limits
 
@@ -246,7 +247,12 @@ not booleans.
 
 The shared `vauxhall.core.telemetry` validator enforces these schema and field
 limits for dashboard ingestion and the built-in telemetry client. Rejection
-reasons never include payload values.
+reasons never include payload values. Frontend readiness and queue transfer are
+one synchronized transition, so an event cannot be stranded between the MQTT
+callback's readiness check and the UI's initial drain. Dispatch is serialized
+separately so newer live updates cannot overtake that queued snapshot. Repeated
+frontend readiness signals are idempotent and do not run the drain callback
+again.
 
 Before the frontend is ready, the dashboard retains only the newest
 `VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` events (500 by default); each full
@@ -268,7 +274,7 @@ Vauxhall does not use those private symbols at runtime.
 
 Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications. It implements documented [Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) fields, including `AfterTool.tool_response` and `SessionEnd.reason`. A session end reports one of `session exited`, `session cleared`, `logged out`, `input closed`, or the conservative fallback `session ended`; raw reason values are not published.
 
-Telemetry is best-effort: the hook configures logging inside its failure boundary and always exits normally with one JSON object on stdout, including for ignored events, malformed input, and telemetry failures. Logs go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
+Telemetry is best-effort: the hook lazy-loads telemetry and configures logging inside its failure boundary, then always exits normally with one JSON object on stdout, including for ignored events, malformed input, telemetry failures, and invalid hook configuration. Logs and source-aware configuration errors go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
 
 The hook preserves Gemini's native session identity, so separate native Gemini
 sessions in one workspace create separate dashboard cards. If no native ID is
@@ -316,7 +322,8 @@ If you prefer to configure it manually, add the following to your `.gemini/setti
     "AfterAgent": [...],
     "BeforeTool": [...],
     "AfterTool": [...],
-    "Notification": [...]
+    "Notification": [...],
+    "SessionEnd": [...]
   }
 }
 ```

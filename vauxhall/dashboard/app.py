@@ -5,6 +5,7 @@
 
 from collections import deque
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from pyloid import Pyloid
@@ -30,7 +31,9 @@ class DashboardApp:
         """
         self.app = app
         self.window: Any = None
-        self.ipc = DashboardIPC(on_ready_callback=self.drain_queue)
+        self._updates_lock = Lock()
+        self._dispatch_lock = Lock()
+        self.ipc = DashboardIPC(on_ready_callback=self._on_frontend_ready)
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
         )
@@ -40,13 +43,28 @@ class DashboardApp:
 
     def drain_queue(self) -> None:
         """Forward all queued updates to the frontend."""
-        if self.last_status:
-            self.window.invoke("status-update", self.last_status)
-        if self.pending_updates:
-            logger.info("Draining %d queued updates.", len(self.pending_updates))
-        while self.pending_updates:
-            p = self.pending_updates.popleft()
-            self.window.invoke("agent-update", p)
+        self._drain_pending_updates(mark_ready=False)
+
+    def _on_frontend_ready(self) -> None:
+        """Atomically transfer queued updates when the frontend becomes ready."""
+        self._drain_pending_updates(mark_ready=True)
+
+    def _drain_pending_updates(self, *, mark_ready: bool) -> None:
+        """Snapshot pending state under lock, then forward it to the frontend."""
+        with self._dispatch_lock:
+            with self._updates_lock:
+                if mark_ready:
+                    self.ipc.is_ready = True
+                last_status = self.last_status
+                pending_updates = list(self.pending_updates)
+                self.pending_updates.clear()
+
+            if last_status:
+                self.window.invoke("status-update", last_status)
+            if pending_updates:
+                logger.info("Draining %d queued updates.", len(pending_updates))
+            for pending_update in pending_updates:
+                self.window.invoke("agent-update", pending_update)
 
     def on_telemetry(self, data: object) -> None:
         """Handle telemetry data received from MQTT.
@@ -66,25 +84,26 @@ class DashboardApp:
             assert isinstance(data, dict)
             telemetry = dict(data)
 
-            if self.ipc.is_ready:
-                # Drain queue if any (just in case)
-                self.drain_queue()
+            with self._updates_lock:
+                if not self.ipc.is_ready:
+                    logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
+                    if len(self.pending_updates) == self.pending_updates.maxlen:
+                        self.discarded_pending_updates += 1
+                        if (
+                            self.discarded_pending_updates
+                            & (self.discarded_pending_updates - 1)
+                            == 0
+                        ):
+                            logger.warning(
+                                "Discarded oldest pending telemetry update; "
+                                "total discarded: %d",
+                                self.discarded_pending_updates,
+                            )
+                    self.pending_updates.append(telemetry)
+                    return
+
+            with self._dispatch_lock:
                 self.window.invoke("agent-update", telemetry)
-            else:
-                logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
-                if len(self.pending_updates) == self.pending_updates.maxlen:
-                    self.discarded_pending_updates += 1
-                    if (
-                        self.discarded_pending_updates
-                        & (self.discarded_pending_updates - 1)
-                        == 0
-                    ):
-                        logger.warning(
-                            "Discarded oldest pending telemetry update; "
-                            "total discarded: %d",
-                            self.discarded_pending_updates,
-                        )
-                self.pending_updates.append(telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
 
@@ -94,10 +113,13 @@ class DashboardApp:
         Args:
             message: The status message.
         """
-        self.last_status = message
         try:
-            if self.ipc.is_ready:
-                self.window.invoke("status-update", message)
+            with self._updates_lock:
+                self.last_status = message
+                is_ready = self.ipc.is_ready
+            if is_ready:
+                with self._dispatch_lock:
+                    self.window.invoke("status-update", message)
         except Exception:
             logger.exception("Error in on_status")
 

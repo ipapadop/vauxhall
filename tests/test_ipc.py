@@ -16,11 +16,12 @@ def test_ipc_ping() -> None:
 
 
 def test_ipc_set_ready() -> None:
-    """Verify that set_ready triggers the callback and updates state."""
+    """Verify that set_ready triggers its callback only on the first call."""
     callback = MagicMock()
     ipc = DashboardIPC(on_ready_callback=callback)
 
     assert ipc.is_ready is False
+    assert ipc.set_ready() is True
     assert ipc.set_ready() is True
     assert ipc.is_ready is True
     callback.assert_called_once()

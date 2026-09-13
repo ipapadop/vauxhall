@@ -100,6 +100,8 @@ Configuration is strict: malformed JSON, non-object sections, wrong scalar
 types, invalid ranges, and invalid environment values abort dashboard startup
 or hook initialization. Errors identify the environment variable or absolute
 configuration path, logical field, invalid value, and expected constraint.
+Hooks report configuration errors on stderr while still exiting normally with
+one JSON object on stdout, preserving the host hook protocol.
 MQTT authentication and TLS settings are intentionally deferred to issue #3.
 
 Dashboard MQTT ingestion is bounded before JSON decoding: messages larger than
@@ -110,8 +112,13 @@ characters), `workspace` (4,096), `session_id` (256), and supported `state`
 16 string keys (64 characters each) with scalar values; string values are
 limited to 4,096 characters. Before the frontend is ready, the dashboard keeps
 only the newest `pending_update_limit` events (500 by default), discarding the
-oldest event when the buffer is full. The core protocol validator enforces the
-same schema and field limits for the dashboard and built-in telemetry client.
+oldest event when the buffer is full. The readiness transition atomically
+assigns every event to the queued snapshot or live delivery so none can be
+stranded between those paths, and serializes dispatch so live events cannot
+overtake the queued snapshot. Repeated frontend readiness signals are
+idempotent and do not trigger another drain. The core protocol validator
+enforces the same schema and field limits for the dashboard and built-in
+telemetry client.
 
 The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
 connection failures or disconnects, and `Disconnected` for an intentional

@@ -46,10 +46,13 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: Always True.
         """
-        self.is_ready = True
-        logger.info("Frontend signaled readiness.")
+        if self.is_ready:
+            return True
         if self.on_ready_callback:
             self.on_ready_callback()
+        if not self.is_ready:
+            self.is_ready = True
+        logger.info("Frontend signaled readiness.")
         return True
 
     @Bridge(result=int)

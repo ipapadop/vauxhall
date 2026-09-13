@@ -374,7 +374,7 @@ generates the encoded PowerShell command needed for safe path handling.
 | Gemini event | Vauxhall state |
 | :--- | :--- |
 | `BeforeAgent` | `Thinking` (with `prompt`) |
-| `AfterModel` | `Thinking` (`Model replied`, with `tokens` when reported) |
+| `AfterModel` | `Thinking` (`Model replied`, with `tokens` when reported), for the final response chunk only |
 | `BeforeTool` | `Acting`; `Waiting for Input` for `ask_user` and `ask_question` |
 | `AfterTool` | `Thinking`, `Error`, or `Idle`, based on the tool result |
 | `Notification` | `Waiting for Input` for `ToolPermission`; others are ignored |

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.simulate_agent import LIFECYCLE_OPERATIONS, simulate_agent
+from scripts.simulate_agent import POSSIBLE_OPERATIONS, simulate_agent
 from vauxhall.core.telemetry import telemetry_validation_error
 
 
@@ -46,11 +46,11 @@ def test_simulate_agent_connection_error(mock_client_class: MagicMock) -> None:
     mock_client.send.assert_not_called()
 
 
-@pytest.mark.parametrize("operation", LIFECYCLE_OPERATIONS)
-def test_simulate_agent_publishes_valid_lifecycle_operations(
+@pytest.mark.parametrize("operation", POSSIBLE_OPERATIONS)
+def test_simulate_agent_publishes_valid_operations(
     operation: dict,
 ) -> None:
-    """Lifecycle hook operations must be simulated as valid telemetry."""
+    """Every simulated operation must be valid telemetry."""
     with (
         patch("scripts.simulate_agent.TelemetryClient") as mock_client_class,
         patch("scripts.simulate_agent.random.choice", side_effect=["local", operation]),

@@ -360,7 +360,10 @@ def test_after_model_tokens() -> None:
     """Verify that AfterModel extracts totalTokenCount."""
     hook_data = {
         "hook_event_name": "AfterModel",
-        "llm_response": {"usageMetadata": {"totalTokenCount": 1234}},
+        "llm_response": {
+            "candidates": [{"content": {"parts": []}, "finishReason": "STOP"}],
+            "usageMetadata": {"totalTokenCount": 1234},
+        },
         "session_id": "session-123",
         "cwd": "/workspace",
     }
@@ -682,3 +685,36 @@ def test_gemini_lifecycle_events_publish_dashboard_states(
         session_id="native:session-123",
         **expected,
     )
+
+
+@pytest.mark.parametrize(
+    "llm_response",
+    [
+        {"candidates": [{"content": {"role": "model", "parts": ["partial"]}}]},
+        {"candidates": [{"content": {"parts": ["partial"]}, "finishReason": ""}]},
+        {"candidates": [{"finishReason": "FINISH_REASON_UNSPECIFIED"}]},
+        {"candidates": ["not-a-candidate"], "usageMetadata": {"totalTokenCount": 9}},
+        {"candidates": "not-a-list"},
+        {"usageMetadata": {"totalTokenCount": 12}},
+        "not-an-object",
+    ],
+)
+def test_gemini_after_model_skips_non_final_chunks(llm_response: object) -> None:
+    """Streaming AfterModel chunks must not publish until the response finishes."""
+    event = {
+        "hook_event_name": "AfterModel",
+        "llm_response": llm_response,
+        "session_id": "session-123",
+        "cwd": "/workspace",
+    }
+    output = io.StringIO()
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(event))),
+        patch("sys.stdout", new=output),
+    ):
+        main()
+
+    client_class.assert_not_called()
+    assert output.getvalue() == "{}\n"

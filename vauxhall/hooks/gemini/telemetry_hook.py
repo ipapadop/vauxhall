@@ -50,6 +50,8 @@ def _tool_time_file(
     return Path(tempfile.gettempdir()) / f"vauxhall-gemini-{digest}.time"
 
 
+# Finish reasons that do not end a streamed model response.
+_UNFINISHED_REASONS = ("", "FINISH_REASON_UNSPECIFIED")
 _SESSION_START_STATUSES = {
     "startup": "Session started",
     "resume": "Session resumed",
@@ -186,18 +188,48 @@ def handle_pre_compress(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]
     return state, {"status": "Compacting context"}
 
 
-def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Map AfterModel to a thinking state with its token count, when present."""
-    state = "Thinking"
-    details = {"status": "Model replied"}
-    usage = input_data.get("llm_response", {}).get("usageMetadata", {})
-    tokens = usage.get("totalTokenCount")
-    if tokens is not None:
-        details["tokens"] = tokens
-    return state, details
+def _is_final_model_response(llm_response: object) -> bool:
+    """Return whether a model response chunk carries a finish reason."""
+    if not isinstance(llm_response, dict):
+        return False
+    candidates = llm_response.get("candidates")
+    if not isinstance(candidates, list):
+        return False
+    return any(
+        isinstance(candidate, dict)
+        and isinstance(candidate.get("finishReason"), str)
+        and candidate["finishReason"] not in _UNFINISHED_REASONS
+        for candidate in candidates
+    )
 
 
-_EVENT_HANDLERS: dict[str, Callable[[dict[str, Any]], tuple[str, dict[str, Any]]]] = {
+def handle_after_model(
+    input_data: dict[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    """Map the final AfterModel chunk to a thinking state with its token count.
+
+    Gemini CLI fires AfterModel for every streamed chunk, so only the chunk that
+    finishes the response is published.
+    """
+    llm_response = input_data.get("llm_response")
+    if not _is_final_model_response(llm_response):
+        return None
+    details: dict[str, Any] = {"status": "Model replied"}
+    usage = llm_response.get("usageMetadata")
+    if isinstance(usage, dict) and usage.get("totalTokenCount") is not None:
+        details["tokens"] = usage["totalTokenCount"]
+    return "Thinking", details
+
+
+_EventHandler = Callable[[dict[str, Any]], tuple[str, dict[str, Any]] | None]
+# Events translated from their input alone; a None result skips telemetry.
+_EVENT_HANDLERS: dict[str, _EventHandler] = {
+    "Notification": handle_notification,
+    "BeforeAgent": lambda data: (
+        "Thinking",
+        {"prompt": data.get("prompt", "Processing...")},
+    ),
+    "AfterAgent": lambda _: ("Idle", {"status": "Ready"}),
     "AfterModel": handle_after_model,
     "SessionStart": handle_session_start,
     "SessionEnd": handle_session_end,
@@ -212,11 +244,9 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     )
     workspace = input_data.get("cwd", input_data.get("workspace", str(Path.cwd())))
 
-    notification_result: tuple[str, dict[str, Any]] | None = None
-    if (
-        hook_type == "Notification"
-        and (notification_result := handle_notification(input_data)) is None
-    ):
+    handler = _EVENT_HANDLERS.get(hook_type) if isinstance(hook_type, str) else None
+    event_result = handler(input_data) if handler is not None else None
+    if handler is not None and event_result is None:
         return
 
     session_id = resolve_session_id(input_data)
@@ -226,19 +256,12 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
 
     time_file = _tool_time_file(workspace, session_id, input_data)
     details: dict[str, Any]
-    if notification_result is not None:
-        state, details = notification_result
-    elif hook_type == "BeforeAgent":
-        state = "Thinking"
-        details = {"prompt": input_data.get("prompt", "Processing...")}
-    elif hook_type == "AfterAgent":
-        state, details = "Idle", {"status": "Ready"}
+    if event_result is not None:
+        state, details = event_result
     elif hook_type == "BeforeTool":
         state, details = handle_before_tool(input_data, time_file)
     elif hook_type == "AfterTool":
         state, details = handle_after_tool(input_data, time_file)
-    elif hook_type in _EVENT_HANDLERS:
-        state, details = _EVENT_HANDLERS[hook_type](input_data)
     else:
         state, details = "Idle", {"hook": hook_type}
 

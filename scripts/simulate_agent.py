@@ -48,7 +48,7 @@ POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
     },
     {"state": "Error", "details": {"error": "Connection reset by peer"}},
     {
-        "state": "Waiting",
+        "state": "Idle",
         "details": {"status": "Waiting for background task to complete"},
     },
     *LIFECYCLE_OPERATIONS,

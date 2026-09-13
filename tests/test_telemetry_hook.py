@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from vauxhall.hooks.gemini.telemetry_hook import main
+import pytest
+
+from vauxhall.hooks.gemini.telemetry_hook import _classify_tool_response, main
 
 
 def test_ignored_notification_outputs_valid_json() -> None:
@@ -107,6 +109,159 @@ def test_telemetry_initialization_failure_outputs_valid_json() -> None:
         main()
 
     assert output.getvalue() == "{}\n"
+
+
+@pytest.mark.parametrize(
+    ("environment_value", "file_payload", "expected_source", "expected_value"),
+    [
+        ("invalid", None, "VAUXHALL_MQTT_PORT", "'invalid'"),
+        (None, {"mqtt": []}, "vauxhall_hooks.json", "[]"),
+    ],
+)
+def test_gemini_hook_reports_invalid_configuration_without_breaking_protocol(
+    tmp_path: Path,
+    environment_value: str | None,
+    file_payload: object | None,
+    expected_source: str,
+    expected_value: str,
+) -> None:
+    """Invalid hook configuration remains actionable without corrupting stdout."""
+    if file_payload is not None:
+        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("VAUXHALL_")
+    }
+    if environment_value is not None:
+        environment["VAUXHALL_MQTT_PORT"] = environment_value
+    project_root = str(Path(__file__).resolve().parents[1])
+    environment["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (project_root, environment.get("PYTHONPATH")))
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
+        input="{}",
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert expected_source in completed.stderr
+    assert expected_value in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("response", "state", "status", "error"),
+    [
+        (
+            {"llmContent": "secret", "returnDisplay": "secret"},
+            "Thinking",
+            "completed",
+            None,
+        ),
+        (
+            {"error": {"message": "secret"}},
+            "Error",
+            "failed",
+            "Tool reported an error",
+        ),
+        (
+            {"error": {"code": "CANCELLED", "message": "secret"}},
+            "Idle",
+            "cancelled",
+            None,
+        ),
+        (None, "Thinking", "result unavailable", None),
+        ([], "Thinking", "result unavailable", None),
+    ],
+)
+def test_gemini_after_tool_outcomes(
+    response: object, state: str, status: str, error: str | None
+) -> None:
+    """AfterTool responses must map to truthful dashboard outcomes."""
+    assert _classify_tool_response(response) == (state, status, error)
+
+
+def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> None:
+    """AfterTool publishes only normalized outcome fields, never result content."""
+    workspace = tmp_path / "workspace"
+    (workspace / ".gemini").mkdir(parents=True)
+    hook_data = {
+        "hook_event_name": "AfterTool",
+        "tool_name": "run_shell_command",
+        "tool_response": {"error": {"message": "secret"}},
+        "session_id": "session-123",
+        "cwd": str(workspace),
+    }
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        main()
+
+    assert client.send.call_args.kwargs == {
+        "agent": "Gemini",
+        "workspace": str(workspace),
+        "state": "Error",
+        "tool": "run_shell_command",
+        "status": "failed",
+        "error": "Tool reported an error",
+        "session_id": "native:session-123",
+    }
+    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+
+
+@pytest.mark.parametrize(
+    ("reason", "status"),
+    [
+        ("exit", "session exited"),
+        ("clear", "session cleared"),
+        ("logout", "logged out"),
+        ("prompt_input_exit", "input closed"),
+        ("other", "session ended"),
+        (None, "session ended"),
+        (123, "session ended"),
+        ([], "session ended"),
+    ],
+)
+def test_gemini_session_end_maps_documented_reasons(
+    reason: object, status: str
+) -> None:
+    """SessionEnd must emit only normalized statuses for known CLI reasons."""
+    hook_data = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "session-123",
+        "reason": reason,
+        "cwd": "/workspace",
+    }
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        main()
+
+    client.send.assert_called_once_with(
+        agent="Gemini",
+        workspace="/workspace",
+        state="Idle",
+        status=status,
+        session_id="native:session-123",
+    )
 
 
 def test_notification_tool_permission() -> None:
@@ -247,6 +402,7 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
         "hook_event_name": "AfterTool",
         "tool_name": "ls",
         "session_id": "session-123",
+        "tool_response": {"returnDisplay": "directory listing"},
         "cwd": str(workspace),
     }
 

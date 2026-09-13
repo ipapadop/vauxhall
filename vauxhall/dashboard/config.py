@@ -17,13 +17,19 @@ from vauxhall.core.config import (
 class UIConfig:
     """UI configuration for the dashboard."""
 
-    host: str = "127.0.0.1"
-    port: int = 8080
+    port: int = field(default=8080, metadata={"min": 1, "max": 65535})
     debug: bool = False
-    window_title: str = "Vauxhall Agent Dashboard"
-    width: int = 1000
-    height: int = 800
-    stale_threshold: int = 120
+    window_title: str = field(
+        default="Vauxhall Agent Dashboard", metadata={"non_empty": True}
+    )
+    width: int = field(default=1000, metadata={"min": 320, "max": 16384})
+    height: int = field(default=800, metadata={"min": 320, "max": 16384})
+    stale_threshold: int = field(default=120, metadata={"min": 1, "max": 86400})
+    pending_update_limit: int = field(default=500, metadata={"min": 1, "max": 10000})
+    max_active_agents: int = field(default=100, metadata={"min": 1, "max": 1000})
+    max_payload_bytes: int = field(
+        default=65536, metadata={"min": 1024, "max": 1048576}
+    )
 
 
 @dataclass

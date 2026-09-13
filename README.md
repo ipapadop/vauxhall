@@ -15,11 +15,12 @@ Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Code
 - **Session-aware Cards**: Dashboard cards are identified by agent, workspace, and session ID, so concurrent sessions for the same agent in one workspace remain distinct.
 - **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
 - **Real-time Activity Log**: A concise, non-scrolling view of the last 5 events per agent with timestamps (`[HH:mm:ss]`).
-- **Audit History**: Deep-dive into agent behavior with a **resizable history modal** (🕒) that supports real-time updates and smart auto-scrolling (freezes on hover for easy reading).
+- **Audit History**: Deep-dive into agent behavior with a **resizable history modal** (🕒) that supports real-time updates and smart auto-scrolling (freezes on hover for easy reading). Each card retains its latest 20 history records.
+- **Bounded Active Cards**: The dashboard retains up to 100 active cards by default; when full, a new identity evicts the least-recently-seen card.
 - **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
 - **Tooltip Support**: Integrated help for all UI elements to guide new users.
 - **Interactive Navigation**: Click any agent card to copy its raw workspace path to your clipboard with visual "Copied!" feedback. Vauxhall does not turn untrusted telemetry into a shell command.
-- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, completion, and idle state. Tool-duration tracking is isolated by session and, when supplied by the agent, tool-call identity.
+- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, truthful tool outcomes (completion, failure, cancellation, or unavailable result), and idle state without publishing tool-result content. Tool-duration tracking is isolated by session and, when supplied by the agent, tool-call identity.
 - **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Codex and Gemini hooks always return valid protocol JSON even when telemetry fails. Importing the reusable client or configuration modules preserves the host application's logging; executable entry points configure Vauxhall logging explicitly.
 - **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
 - **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
@@ -71,6 +72,64 @@ vauxhall
 
 From a source checkout, `uv run vauxhall` starts the same entry point.
 
+### Configuration
+
+Dashboard configuration is loaded from `vauxhall_dashboard.json` in the current
+directory, then `~/.config/vauxhall/vauxhall_dashboard.json`. Environment
+variables take precedence over file values, which take precedence over the
+defaults below. Hooks use the same MQTT and logging fields with
+`vauxhall_hooks.json` in the same search paths.
+
+| Section | Field | Environment variable | Default | Valid values |
+| --- | --- | --- | --- | --- |
+| `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
+| `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
+| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535 |
+| `logging` | `level` | `VAUXHALL_LOGGING_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
+| `dashboard` | `port` | `VAUXHALL_DASHBOARD_PORT` | `8080` | Integer 1–65535 |
+| `dashboard` | `debug` | `VAUXHALL_DASHBOARD_DEBUG` | `false` | Boolean (`true`/`false`, `1`/`0`, or `yes`/`no`) |
+| `dashboard` | `window_title` | `VAUXHALL_DASHBOARD_WINDOW_TITLE` | `Vauxhall Agent Dashboard` | Non-empty string |
+| `dashboard` | `width` | `VAUXHALL_DASHBOARD_WIDTH` | `1000` | Integer 320–16384 |
+| `dashboard` | `height` | `VAUXHALL_DASHBOARD_HEIGHT` | `800` | Integer 320–16384 |
+| `dashboard` | `stale_threshold` | `VAUXHALL_DASHBOARD_STALE_THRESHOLD` | `120` | Integer 1–86400 seconds |
+| `dashboard` | `pending_update_limit` | `VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` | `500` | Integer 1–10000 |
+| `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
+| `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
+
+Configuration is strict: malformed JSON, non-object sections, wrong scalar
+types, invalid ranges, and invalid environment values abort dashboard startup
+or hook initialization. Errors identify the environment variable or absolute
+configuration path, logical field, invalid value, and expected constraint.
+Hooks report configuration errors on stderr while still exiting normally with
+one JSON object on stdout, preserving the host hook protocol.
+MQTT authentication and TLS settings are intentionally deferred to issue #3.
+
+Dashboard MQTT ingestion is bounded before JSON decoding: messages larger than
+`max_payload_bytes` (65,536 bytes by default) and malformed messages are
+dropped. Accepted telemetry is schema version 1 with non-empty `agent` (128
+characters), `workspace` (4,096), `session_id` (256), and supported `state`
+(32), plus optional `env` (`local` or `remote`, 16). `details` accepts at most
+16 string keys (64 characters each) with scalar values when present; string
+values are limited to 4,096 characters. Before the frontend is ready, the
+dashboard keeps only the newest `pending_update_limit` events (500 by
+default), discarding the oldest event when the buffer is full. The readiness
+transition atomically
+assigns every event to the queued snapshot or live delivery so none can be
+stranded between those paths, and serializes dispatch so live events cannot
+overtake the queued snapshot. Repeated frontend readiness signals are
+idempotent and do not trigger another drain. The core protocol validator
+enforces the same schema and field limits for the dashboard and built-in
+telemetry client.
+
+The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
+connection failures or disconnects, and `Disconnected` for an intentional
+shutdown. MQTT cleanup always runs when the UI loop exits, including on an
+exception. The dashboard requires Pyloid 0.27.2 or newer: its `BrowserWindow`
+wrapper marshals cross-thread commands through `command_signal` and
+`_handle_command`, so MQTT callbacks can safely call `window.invoke()` without
+a second queue. Vauxhall does not depend on those private Pyloid symbols at
+runtime.
+
 ### 3. Integrate with Agents
 Vauxhall supports multiple agents through customizable hooks. Install the desired integration in the agent workspace:
 
@@ -87,10 +146,12 @@ release that provided the command. Registered hooks invoke the packaged
 telemetry module, so moving or deleting the source checkout does not break
 them. The Codex installer writes `.codex/hooks.json`, rejects invalid existing
 structures without replacing them, and gives each telemetry handler a
-three-second timeout backed by a one-second MQTT connection limit. Both
+three-second timeout backed by a one-second MQTT connection limit. The Gemini
+installer also registers a `SessionEnd` hook. Both integrations publish
+normalized tool outcomes only, never arbitrary tool responses. Both
 installers shell-quote POSIX paths and use encoded PowerShell commands on
 Windows. Open `/hooks` in Codex after installation to review and trust the new
-project hooks. See [AGENTS.md](AGENTS.md) for event mappings, manual
+project hooks. See [AGENTS.md](AGENTS.md) for event mappings, protocol references, manual
 configuration, and generic-agent integration. Codex and Gemini preserve their
 native session identities, so separate native sessions create separate
 dashboard cards even when they use the same agent name and workspace.

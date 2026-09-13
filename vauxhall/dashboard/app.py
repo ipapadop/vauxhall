@@ -3,7 +3,9 @@
 
 """Main entry point for the Vauxhall Dashboard application."""
 
+from collections import deque
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from pyloid import Pyloid
@@ -29,29 +31,49 @@ class DashboardApp:
         """
         self.app = app
         self.window: Any = None
-        self.ipc = DashboardIPC(on_ready_callback=self.drain_queue)
-        self.pending_updates: list[dict[str, Any]] = []
+        self._updates_lock = Lock()
+        self._dispatch_lock = Lock()
+        self.ipc = DashboardIPC(on_ready_callback=self._on_frontend_ready)
+        self.pending_updates: deque[dict[str, Any]] = deque(
+            maxlen=settings.dashboard.pending_update_limit
+        )
+        self.discarded_pending_updates = 0
         self.last_status: str | None = None
         self.mqtt: DashboardSubscriber | None = None
 
     def drain_queue(self) -> None:
         """Forward all queued updates to the frontend."""
-        if self.last_status:
-            self.window.invoke("status-update", self.last_status)
-        if self.pending_updates:
-            logger.info("Draining %d queued updates.", len(self.pending_updates))
-        while self.pending_updates:
-            p = self.pending_updates.pop(0)
-            self.window.invoke("agent-update", p)
+        self._drain_pending_updates(mark_ready=False)
 
-    def on_telemetry(self, data: dict[str, Any]) -> None:
+    def _on_frontend_ready(self) -> None:
+        """Atomically transfer queued updates when the frontend becomes ready."""
+        self._drain_pending_updates(mark_ready=True)
+
+    def _drain_pending_updates(self, *, mark_ready: bool) -> None:
+        """Snapshot pending state under lock, then forward it to the frontend."""
+        with self._dispatch_lock:
+            with self._updates_lock:
+                if mark_ready:
+                    self.ipc.is_ready = True
+                last_status = self.last_status
+                pending_updates = list(self.pending_updates)
+                self.pending_updates.clear()
+
+            if last_status:
+                self.window.invoke("status-update", last_status)
+            if pending_updates:
+                logger.info("Draining %d queued updates.", len(pending_updates))
+            for pending_update in pending_updates:
+                self.window.invoke("agent-update", pending_update)
+
+    def on_telemetry(self, data: object) -> None:
         """Handle telemetry data received from MQTT.
 
         If the frontend is ready, the data is invoked immediately.
         Otherwise, it is queued until the frontend signals readiness.
 
         Args:
-            data: The telemetry data dictionary.
+            data: The decoded telemetry data.
         """
         try:
             error = telemetry_validation_error(data)
@@ -59,13 +81,29 @@ class DashboardApp:
                 logger.warning("Rejected telemetry: %s", error)
                 return
 
-            if self.ipc.is_ready:
-                # Drain queue if any (just in case)
-                self.drain_queue()
-                self.window.invoke("agent-update", data)
-            else:
-                logger.debug("Queuing telemetry for agent: %s", data.get("agent"))
-                self.pending_updates.append(data)
+            assert isinstance(data, dict)
+            telemetry = dict(data)
+
+            with self._updates_lock:
+                if not self.ipc.is_ready:
+                    logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
+                    if len(self.pending_updates) == self.pending_updates.maxlen:
+                        self.discarded_pending_updates += 1
+                        if (
+                            self.discarded_pending_updates
+                            & (self.discarded_pending_updates - 1)
+                            == 0
+                        ):
+                            logger.warning(
+                                "Discarded oldest pending telemetry update; "
+                                "total discarded: %d",
+                                self.discarded_pending_updates,
+                            )
+                    self.pending_updates.append(telemetry)
+                    return
+
+            with self._dispatch_lock:
+                self.window.invoke("agent-update", telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
 
@@ -75,10 +113,13 @@ class DashboardApp:
         Args:
             message: The status message.
         """
-        self.last_status = message
         try:
-            if self.ipc.is_ready:
-                self.window.invoke("status-update", message)
+            with self._updates_lock:
+                self.last_status = message
+                is_ready = self.ipc.is_ready
+            if is_ready:
+                with self._dispatch_lock:
+                    self.window.invoke("status-update", message)
         except Exception:
             logger.exception("Error in on_status")
 
@@ -88,23 +129,26 @@ class DashboardApp:
             title=settings.dashboard.window_title,
             width=settings.dashboard.width,
             height=settings.dashboard.height,
+            dev_tools=settings.dashboard.debug,
             IPCs=[self.ipc],
         )
 
         self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
-        self.mqtt.start()
+        try:
+            self.mqtt.start()
 
-        ui_dir = Path(__file__).parent / "ui"
+            ui_dir = Path(__file__).parent / "ui"
 
-        ui_dir_abs = ui_dir.resolve()
-        url = pyloid_serve(str(ui_dir_abs))
-        logger.info("Serving UI from %s at %s", ui_dir_abs, url)
+            ui_dir_abs = ui_dir.resolve()
+            url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
+            logger.info("Serving UI from %s at %s", ui_dir_abs, url)
 
-        self.window.load_url(url)
-        self.window.show_and_focus()
-        self.app.run()
-        logger.info("Vauxhall Dashboard shutting down...")
-        self.mqtt.stop()
+            self.window.load_url(url)
+            self.window.show_and_focus()
+            self.app.run()
+        finally:
+            self.mqtt.stop()
+            logger.info("Vauxhall Dashboard shutting down...")
 
 
 def main() -> None:

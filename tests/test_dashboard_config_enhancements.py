@@ -16,25 +16,21 @@ def test_dashboard_env_only_optimization() -> None:
         "VAUXHALL_DASHBOARD_PORT": "9090",
     }
     with patch.dict(os.environ, env):
-        # Even if a file exists in CWD, it should be ignored if VAUXHALL_MQTT_HOST
-        # is set
         config = DashboardConfig.load()
         assert config.mqtt.host == "env-mqtt-host"
         assert config.dashboard.port == 9090
-        assert config.dashboard.host == "127.0.0.1"  # Default
 
 
 def test_dashboard_env_overrides_file(tmp_path: Path) -> None:
     """Test that environment variables override file values."""
     config_file = tmp_path / "vauxhall_dashboard.json"
-    config_file.write_text(json.dumps({"dashboard": {"host": "1.1.1.1", "port": 1111}}))
+    config_file.write_text(json.dumps({"dashboard": {"port": 1111}}))
 
     env = {
         "VAUXHALL_DASHBOARD_PORT": "2222",
     }
     with patch.dict(os.environ, env):
         config = DashboardConfig.load(config_file)
-        assert config.dashboard.host == "1.1.1.1"  # From file
         assert config.dashboard.port == 2222  # From env (overrides file)
 
 

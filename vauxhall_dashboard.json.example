@@ -2,12 +2,14 @@
   "mqtt": { "host": "localhost", "port": 1883, "keepalive": 60 },
   "logging": { "level": "INFO" },
   "dashboard": {
-    "host": "127.0.0.1",
     "port": 8080,
     "debug": false,
     "window_title": "Vauxhall Agent Dashboard",
     "width": 1000,
     "height": 800,
-    "stale_threshold": 120
+    "stale_threshold": 120,
+    "pending_update_limit": 500,
+    "max_active_agents": 100,
+    "max_payload_bytes": 65536
   }
 }

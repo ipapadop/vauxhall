@@ -46,10 +46,13 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: Always True.
         """
-        self.is_ready = True
-        logger.info("Frontend signaled readiness.")
+        if self.is_ready:
+            return True
         if self.on_ready_callback:
             self.on_ready_callback()
+        if not self.is_ready:
+            self.is_ready = True
+        logger.info("Frontend signaled readiness.")
         return True
 
     @Bridge(result=int)
@@ -64,6 +67,15 @@ class DashboardIPC(PyloidIPC):
             settings.dashboard.stale_threshold,
         )
         return settings.dashboard.stale_threshold
+
+    @Bridge(result=int)
+    def get_max_active_agents(self) -> int:
+        """Retrieve the maximum number of active dashboard cards."""
+        logger.debug(
+            "Frontend requested maximum active agents: %d",
+            settings.dashboard.max_active_agents,
+        )
+        return settings.dashboard.max_active_agents
 
     @Bridge(str, result=bool)
     def open_url(self, url: str) -> bool:

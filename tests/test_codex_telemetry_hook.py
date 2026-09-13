@@ -13,7 +13,11 @@ from unittest.mock import patch
 
 import pytest
 
-from vauxhall.hooks.codex.telemetry_hook import _create_telemetry_client, main
+from vauxhall.hooks.codex.telemetry_hook import (
+    _classify_tool_response,
+    _create_telemetry_client,
+    main,
+)
 
 
 def test_codex_hook_outputs_valid_json() -> None:
@@ -104,6 +108,119 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
 
 
 @pytest.mark.parametrize(
+    ("environment_value", "file_payload", "expected_source", "expected_value"),
+    [
+        ("invalid", None, "VAUXHALL_MQTT_PORT", "'invalid'"),
+        (None, {"mqtt": []}, "vauxhall_hooks.json", "[]"),
+    ],
+)
+def test_codex_hook_reports_invalid_configuration_without_breaking_protocol(
+    tmp_path: Path,
+    environment_value: str | None,
+    file_payload: object | None,
+    expected_source: str,
+    expected_value: str,
+) -> None:
+    """Invalid hook configuration remains actionable without corrupting stdout."""
+    if file_payload is not None:
+        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("VAUXHALL_")
+    }
+    if environment_value is not None:
+        environment["VAUXHALL_MQTT_PORT"] = environment_value
+    project_root = str(Path(__file__).resolve().parents[1])
+    environment["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (project_root, environment.get("PYTHONPATH")))
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.codex.telemetry_hook"],
+        input="{}",
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert expected_source in completed.stderr
+    assert expected_value in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("response", "state", "status", "error"),
+    [
+        ({"exit_code": 0, "output": "secret"}, "Thinking", "completed", None),
+        (
+            {"exit_code": 2, "output": "secret"},
+            "Error",
+            "failed",
+            "Bash failed (exit code 2)",
+        ),
+        (
+            {"isError": True, "content": [{"text": "secret"}]},
+            "Error",
+            "failed",
+            "Tool reported an error",
+        ),
+        (
+            {"exit_code": 0, "isError": True},
+            "Error",
+            "failed",
+            "Tool reported an error",
+        ),
+        ({"cancelled": True, "output": "secret"}, "Idle", "cancelled", None),
+        (None, "Thinking", "result unavailable", None),
+        ("malformed", "Thinking", "result unavailable", None),
+    ],
+)
+def test_codex_post_tool_outcomes(
+    response: object, state: str, status: str, error: str | None
+) -> None:
+    """PostToolUse responses must map to truthful dashboard outcomes."""
+    assert _classify_tool_response(response) == (state, status, error)
+
+
+def test_codex_post_tool_does_not_publish_response_content() -> None:
+    """PostToolUse publishes only normalized outcome fields, never result content."""
+    hook_data = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_response": {"exit_code": 2, "output": "secret"},
+        "session_id": "session-123",
+        "cwd": "/workspace",
+    }
+
+    with (
+        patch(
+            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
+        ) as client_factory,
+        patch("sys.stdin", StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=StringIO()),
+    ):
+        client = client_factory.return_value
+        client.__enter__.return_value = client
+        main()
+
+    assert client.send.call_args.kwargs == {
+        "agent": "Codex",
+        "workspace": "/workspace",
+        "state": "Error",
+        "tool": "Bash",
+        "status": "failed",
+        "error": "Bash failed (exit code 2)",
+        "session_id": "native:session-123",
+    }
+    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+
+
+@pytest.mark.parametrize(
     ("hook_data", "expected"),
     [
         (
@@ -173,6 +290,20 @@ def test_codex_hook_survives_telemetry_import_failure() -> None:
                 "session_id": "native:session-123",
                 "state": "Idle",
                 "status": "Ready",
+            },
+        ),
+        (
+            {
+                "hook_event_name": "Interrupt",
+                "session_id": "session-123",
+                "cwd": "/workspace",
+            },
+            {
+                "agent": "Codex",
+                "workspace": "/workspace",
+                "state": "Idle",
+                "status": "interrupted",
+                "session_id": "native:session-123",
             },
         ),
     ],

@@ -200,6 +200,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         "vauxhall-install-codex": "vauxhall.hooks.codex.install:install",
         "vauxhall-install-gemini": "vauxhall.hooks.gemini.install:install",
     }
+    assert 'pyloid>=0.27.2; extra == "dashboard"' in metadata.get_all("Requires-Dist")
 
 
 def test_package_version_matches_installed_distribution() -> None:

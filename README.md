@@ -177,7 +177,7 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
 - `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Codex
   and Gemini CLI hooks and installers.
 - `scripts/`: The agent simulator and a logging color check.
-- `tests/`: Python tests, with frontend tests in `tests/frontend/`.
+- `tests/`: Python tests mirroring the `vauxhall/` package layout, with frontend tests in `tests/dashboard/ui/`.
 
 ## Development
 

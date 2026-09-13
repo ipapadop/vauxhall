@@ -10,14 +10,13 @@ passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
 
 import hashlib
 import json
-import sys
 import time
-from contextlib import redirect_stdout
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.hooks.common import is_cancelled, run_hook
 from vauxhall.hooks.identity import resolve_session_id
 
 if TYPE_CHECKING:
@@ -40,7 +39,6 @@ def _tool_time_file(
     return Path(workspace) / ".gemini" / f".vauxhall_tool_start.{digest}.time"
 
 
-_CANCELLATION_MARKERS = frozenset({"cancelled", "canceled", "aborted"})
 _SESSION_END_STATUSES = {
     "exit": "session exited",
     "clear": "session cleared",
@@ -49,25 +47,11 @@ _SESSION_END_STATUSES = {
 }
 
 
-def _is_cancelled(response: dict[str, Any]) -> bool:
-    """Return whether a Gemini tool response contains a cancellation marker."""
-    if response.get("cancelled") is True or response.get("canceled") is True:
-        return True
-    candidates = [response.get(key) for key in ("code", "status", "name")]
-    error = response.get("error")
-    if isinstance(error, dict):
-        candidates.extend(error.get(key) for key in ("code", "status", "name"))
-    return any(
-        isinstance(value, str) and value.lower() in _CANCELLATION_MARKERS
-        for value in candidates
-    )
-
-
 def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     """Map a Gemini tool response to a truthful telemetry outcome."""
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
-    if _is_cancelled(response):
+    if is_cancelled(response):
         return "Idle", "cancelled", None
     if response.get("error") is not None:
         return "Error", "failed", "Tool reported an error"
@@ -84,14 +68,6 @@ def _create_telemetry_client() -> "TelemetryClient":
     )
 
     return _TelemetryClient()
-
-
-def _setup_logging() -> None:
-    """Configure logging inside the hook protocol failure boundary."""
-    from vauxhall.core.logging import setup_logging  # noqa: PLC0415
-    from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
-
-    setup_logging(level=hook_settings.logging.level)
 
 
 def handle_notification(
@@ -134,40 +110,31 @@ def handle_before_tool(
     tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
 
     # Record start time for duration calculation
-    try:
-        with time_file.open("w") as f:
-            f.write(str(time.time()))
-    except Exception:
-        pass
+    with suppress(Exception):
+        time_file.write_text(str(time.time()))
 
     # Handle explicit 'ask_user' and 'ask_question' tool calls
-    if tool_name in ["ask_user", "ask_question"]:
-        state = "Waiting for Input"
+    if tool_name in ("ask_user", "ask_question"):
         questions = tool_input.get("questions", [])
         if "question" in tool_input and not questions:
             questions = [{"question": tool_input.get("question")}]
         if questions:
-            prompt = "\n".join([q.get("question", "") for q in questions])
-            details = {"prompt": prompt}
+            prompt = "\n".join(q.get("question", "") for q in questions)
         else:
-            details = {"prompt": "User input required"}
-    else:
-        state = "Acting"
-        # Extract a friendly display string based on the tool being used
-        cmd_display = ""
-        if tool_name == "run_shell_command":
-            cmd_display = tool_input.get("command", "")
-        elif tool_name in ["read_file", "write_file", "replace", "view_file"]:
-            cmd_display = tool_input.get("file_path", "")
+            prompt = "User input required"
+        return "Waiting for Input", {"prompt": prompt}
 
-        details = {
-            "cmd": cmd_display,
-            "args": json.dumps(tool_input),
-        }
-        if tool_name != "unknown":
-            details["tool"] = tool_name
+    # Extract a friendly display string based on the tool being used
+    cmd_display = ""
+    if tool_name == "run_shell_command":
+        cmd_display = tool_input.get("command", "")
+    elif tool_name in ("read_file", "write_file", "replace", "view_file"):
+        cmd_display = tool_input.get("file_path", "")
 
-    return state, details
+    details = {"cmd": cmd_display, "args": json.dumps(tool_input)}
+    if tool_name != "unknown":
+        details["tool"] = tool_name
+    return "Acting", details
 
 
 def handle_after_tool(
@@ -191,15 +158,10 @@ def handle_after_tool(
         details["error"] = error
 
     # Calculate duration
-    try:
-        if time_file.exists():
-            with time_file.open() as f:
-                start_time = float(f.read().strip())
-            duration = round(time.time() - start_time, 1)
-            details["duration"] = duration
-            time_file.unlink()
-    except Exception:
-        pass
+    with suppress(Exception):
+        start_time = float(time_file.read_text().strip())
+        details["duration"] = round(time.time() - start_time, 1)
+        time_file.unlink()
     return state, details
 
 
@@ -212,34 +174,6 @@ def handle_session_end(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]
         else "session ended"
     )
     return "Idle", {"status": status}
-
-
-def handle_before_agent(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI BeforeAgent events.
-
-    Args:
-        input_data: The hook event data.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
-    state = "Thinking"
-    details = {"prompt": input_data.get("prompt", "Processing...")}
-    return state, details
-
-
-def handle_after_agent(_input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI AfterAgent events.
-
-    Args:
-        _input_data: The hook event data.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
-    state = "Idle"
-    details = {"status": "Ready"}
-    return state, details
 
 
 def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -260,32 +194,14 @@ def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]
     return state, details
 
 
-def handle_unknown_hook(hook_type: str) -> tuple[str, dict[str, Any]]:
-    """Handle unknown Gemini CLI events.
-
-    Args:
-        hook_type: The unrecognized hook event name.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
-    state = "Idle"
-    details = {"hook": hook_type}
-    return state, details
-
-
 def _send_telemetry(input_data: dict[str, Any]) -> None:
     """Translate one Gemini hook event and publish its telemetry."""
     hook_type = input_data.get(
         "hook_event_name", input_data.get("hook_type", "BeforeTool")
     )
     workspace = input_data.get("cwd", input_data.get("workspace", str(Path.cwd())))
-    agent_name = "Gemini"
 
-    state = "Idle"
-    details: dict[str, Any] = {}
     notification_result: tuple[str, dict[str, Any]] | None = None
-
     if (
         hook_type == "Notification"
         and (notification_result := handle_notification(input_data)) is None
@@ -298,12 +214,14 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
         return
 
     time_file = _tool_time_file(workspace, session_id, input_data)
+    details: dict[str, Any]
     if notification_result is not None:
         state, details = notification_result
     elif hook_type == "BeforeAgent":
-        state, details = handle_before_agent(input_data)
+        state = "Thinking"
+        details = {"prompt": input_data.get("prompt", "Processing...")}
     elif hook_type == "AfterAgent":
-        state, details = handle_after_agent(input_data)
+        state, details = "Idle", {"status": "Ready"}
     elif hook_type == "AfterModel":
         state, details = handle_after_model(input_data)
     elif hook_type == "BeforeTool":
@@ -313,11 +231,11 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     elif hook_type == "SessionEnd":
         state, details = handle_session_end(input_data)
     else:
-        state, details = handle_unknown_hook(hook_type)
+        state, details = "Idle", {"hook": hook_type}
 
     with _create_telemetry_client() as client:
         client.send(
-            agent=agent_name,
+            agent="Gemini",
             workspace=workspace,
             session_id=session_id,
             state=state,
@@ -327,17 +245,7 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
 
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
-    try:
-        with redirect_stdout(sys.stderr):
-            _setup_logging()
-            input_data = json.load(sys.stdin)
-            if isinstance(input_data, dict):
-                _send_telemetry(input_data)
-    except ConfigurationError as error:
-        print(error, file=sys.stderr)
-    except Exception:
-        pass
-    print("{}")
+    run_hook(_send_telemetry)
 
 
 if __name__ == "__main__":

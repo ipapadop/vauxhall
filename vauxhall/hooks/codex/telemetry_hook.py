@@ -4,16 +4,14 @@
 """Vauxhall telemetry command hook for Codex."""
 
 import hashlib
-import json
-import sys
 import tempfile
 import time
-from contextlib import redirect_stdout, suppress
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.hooks.common import is_cancelled, run_hook
 from vauxhall.hooks.identity import resolve_session_id
 
 if TYPE_CHECKING:
@@ -22,28 +20,11 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-_CANCELLATION_MARKERS = frozenset({"cancelled", "canceled", "aborted"})
-
-
-def _is_cancelled(response: dict[str, Any]) -> bool:
-    """Return whether a Codex tool response contains a cancellation marker."""
-    if response.get("cancelled") is True or response.get("canceled") is True:
-        return True
-    candidates = [response.get(key) for key in ("code", "status", "name")]
-    error = response.get("error")
-    if isinstance(error, dict):
-        candidates.extend(error.get(key) for key in ("code", "status", "name"))
-    return any(
-        isinstance(value, str) and value.lower() in _CANCELLATION_MARKERS
-        for value in candidates
-    )
-
-
 def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     """Map a Codex tool response to a truthful telemetry outcome."""
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
-    if _is_cancelled(response):
+    if is_cancelled(response):
         return "Idle", "cancelled", None
     exit_code = response.get("exit_code")
     has_exit_code = isinstance(exit_code, int) and not isinstance(exit_code, bool)
@@ -63,14 +44,6 @@ def _create_telemetry_client() -> "TelemetryClient":
     client = TelemetryClient()
     client.client.connect_timeout = 1.0
     return client
-
-
-def _setup_logging() -> None:
-    """Configure logging inside the hook protocol failure boundary."""
-    from vauxhall.core.logging import setup_logging  # noqa: PLC0415
-    from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
-
-    setup_logging(level=hook_settings.logging.level)
 
 
 def _tool_time_file(input_data: dict[str, Any]) -> Path | None:
@@ -201,17 +174,7 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
 
 def main() -> None:
     """Process one Codex hook event without disrupting its protocol."""
-    try:
-        with redirect_stdout(sys.stderr):
-            _setup_logging()
-            input_data = json.load(sys.stdin)
-            if isinstance(input_data, dict):
-                _send_telemetry(input_data)
-    except ConfigurationError as error:
-        print(error, file=sys.stderr)
-    except Exception:
-        pass
-    print("{}")
+    run_hook(_send_telemetry)
 
 
 if __name__ == "__main__":

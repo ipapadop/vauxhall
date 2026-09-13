@@ -109,10 +109,11 @@ Dashboard MQTT ingestion is bounded before JSON decoding: messages larger than
 dropped. Accepted telemetry is schema version 1 with non-empty `agent` (128
 characters), `workspace` (4,096), `session_id` (256), and supported `state`
 (32), plus optional `env` (`local` or `remote`, 16). `details` accepts at most
-16 string keys (64 characters each) with scalar values; string values are
-limited to 4,096 characters. Before the frontend is ready, the dashboard keeps
-only the newest `pending_update_limit` events (500 by default), discarding the
-oldest event when the buffer is full. The readiness transition atomically
+16 string keys (64 characters each) with scalar values when present; string
+values are limited to 4,096 characters. Before the frontend is ready, the
+dashboard keeps only the newest `pending_update_limit` events (500 by
+default), discarding the oldest event when the buffer is full. The readiness
+transition atomically
 assigns every event to the queued snapshot or live delivery so none can be
 stranded between those paths, and serializes dispatch so live events cannot
 overtake the queued snapshot. Repeated frontend readiness signals are

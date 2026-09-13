@@ -80,7 +80,7 @@ def telemetry_validation_error(payload: object) -> str | None:  # noqa: PLR0911
         return identity_error
     if set(payload) - _ALLOWED_FIELDS:
         return "telemetry payload contains unsupported fields"
-    if not _is_valid_details(payload.get("details")):
+    if not _is_valid_details(payload.get("details", {})):
         return (
             "details must contain at most 16 scalar entries "
             "with bounded keys and values"

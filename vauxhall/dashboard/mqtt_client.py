@@ -148,7 +148,9 @@ class DashboardSubscriber:
         if not self._loop_started:
             return
         logger.info("Disconnecting from MQTT broker...")
-        self.client.disconnect()
-        self.client.loop_stop()
-        self._loop_started = False
-        self.status_callback("Disconnected")
+        try:
+            self.client.disconnect()
+        finally:
+            self.client.loop_stop()
+            self._loop_started = False
+            self.status_callback("Disconnected")

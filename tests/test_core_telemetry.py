@@ -101,7 +101,7 @@ def test_telemetry_rejects_non_object_payloads(payload: object) -> None:
 
 
 @pytest.mark.parametrize(
-    "field", ["schema_version", "agent", "workspace", "session_id", "state", "details"]
+    "field", ["schema_version", "agent", "workspace", "session_id", "state"]
 )
 def test_telemetry_rejects_missing_required_fields(field: str) -> None:
     """Reject events missing any required schema field."""
@@ -109,6 +109,14 @@ def test_telemetry_rejects_missing_required_fields(field: str) -> None:
     del event[field]
 
     assert validate_telemetry(event) is None
+
+
+def test_telemetry_accepts_omitted_optional_details() -> None:
+    """Accept a telemetry event containing only the required fields."""
+    event = valid_event()
+    del event["details"]
+
+    assert validate_telemetry(event) == event
 
 
 def test_telemetry_rejects_unknown_top_level_fields() -> None:

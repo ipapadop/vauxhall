@@ -240,6 +240,25 @@ def test_stop_reports_disconnected_once(mock_client_class: MagicMock) -> None:
 
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
+def test_stop_cleans_up_loop_when_disconnect_raises(
+    mock_client_class: MagicMock,
+) -> None:
+    """A disconnect failure cannot leave the MQTT network loop running."""
+    status_callback = MagicMock()
+    subscriber = DashboardSubscriber(MagicMock(), status_callback)
+    subscriber._loop_started = True
+    mock_client = mock_client_class.return_value
+    mock_client.disconnect.side_effect = RuntimeError("disconnect failed")
+
+    with pytest.raises(RuntimeError, match="disconnect failed"):
+        subscriber.stop()
+
+    mock_client.loop_stop.assert_called_once_with()
+    assert subscriber._loop_started is False
+    status_callback.assert_called_once_with("Disconnected")
+
+
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
 def test_stop_publishes_terminal_status_after_in_progress_connect_callback(
     mock_client_class: MagicMock,
 ) -> None:

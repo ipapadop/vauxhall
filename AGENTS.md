@@ -241,9 +241,9 @@ decoding JSON, and drops malformed or unsupported telemetry after decoding.
 Accepted telemetry uses schema version 1: non-empty `agent` (128 characters),
 `workspace` (4,096), `session_id` (256), and one supported `state` (32), with
 optional `env` (`local` or `remote`, 16). `details` allows up to 16 string keys
-of 64 characters and scalar values; string values are capped at 4,096
-characters. Numeric metrics such as `tokens` and `duration` must be numbers,
-not booleans.
+of 64 characters and scalar values when present; string values are capped at
+4,096 characters. Numeric metrics such as `tokens` and `duration` must be
+numbers, not booleans.
 
 The shared `vauxhall.core.telemetry` validator enforces these schema and field
 limits for dashboard ingestion and the built-in telemetry client. Rejection

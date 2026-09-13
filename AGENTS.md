@@ -1,8 +1,8 @@
 # Agent Integration Guide
 
 Vauxhall works with any agent that can publish JSON over MQTT. It ships hooks
-for Codex and Gemini CLI; other agents can use `TelemetryClient` or publish
-messages directly.
+for Claude Code, Codex, and Gemini CLI; other agents can use `TelemetryClient`
+or publish messages directly.
 
 ## Publishing Telemetry
 
@@ -152,6 +152,99 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **Pyloid**: Pyloid 0.27.2 or newer is required. Its `BrowserWindow` marshals
   cross-thread commands to the UI thread, so MQTT callbacks call
   `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
+
+## Claude Code
+
+### Event Mapping
+
+| Claude Code event | Vauxhall state |
+| :--- | :--- |
+| `SessionStart` | `Idle` (`Session started`) |
+| `UserPromptSubmit` | `Thinking` (with `prompt`) |
+| `PreToolUse` | `Acting`; `Waiting for Input` for `AskUserQuestion` |
+| `PermissionRequest` | `Waiting for Input` |
+| `PostToolUse` | `Thinking` (`completed`); `Idle` (`cancelled`) when interrupted |
+| `PostToolUseFailure` | `Error` (`failed`); `Idle` (`cancelled`) for `is_interrupt` |
+| `Notification` | `Waiting for Input` for `idle_prompt` and `elicitation_dialog`; others are ignored |
+| `Stop` | `Idle` (`Ready`) |
+| `SessionEnd` | `Idle`, with a normalized reason |
+
+Events follow the documented
+[Claude Code hooks](https://code.claude.com/docs/en/hooks) input fields. Other
+events, such as `SubagentStop` and `PreCompact`, are not registered and are
+ignored. `SessionEnd` reports `session cleared`, `logged out`, or `input closed`
+for the `clear`, `logout`, and `prompt_input_exit` reasons, and `session ended`
+otherwise.
+
+### Published Data
+
+- Only `Bash` tool calls publish their command text. File contents and other
+  tool inputs are not published.
+- `PermissionRequest` publishes the tool input's `description` as the prompt,
+  when present.
+- `tool_response` and `error` contents are never published.
+- Tool durations use a timing file per session and `tool_use_id` in the system
+  temporary directory, so concurrent tool calls do not overwrite each other.
+
+### Failure Handling
+
+As with Codex, the hook writes one JSON object to stdout for every input and
+sends logs and configuration errors to stderr.
+
+### Automated Installation
+
+After installing `vauxhall[hooks]`, run from the Claude Code project:
+
+```bash
+vauxhall-install-claude
+```
+
+The installer:
+
+- Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`.
+  If the file is invalid JSON or has an unexpected structure, it exits with an
+  error and leaves the file unchanged.
+- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
+  that provided the command.
+- Replaces existing Vauxhall handlers, keeps all other settings, registers
+  every event above, and replaces the settings file atomically. It uses local
+  settings because the command contains a machine-specific path.
+- Writes commands that run `python -m vauxhall.hooks.claude.telemetry_hook`,
+  quoted the same way as the Codex installer, with a 3-second timeout.
+
+Claude Code reads hooks at startup. Restart it, or open `/hooks` to review the
+new hooks.
+
+### Manual Configuration
+
+Add the command handler to each event in `.claude/settings.local.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.claude.telemetry_hook",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionStart": [...],
+    "UserPromptSubmit": [...],
+    "PermissionRequest": [...],
+    "PostToolUse": [...],
+    "PostToolUseFailure": [...],
+    "Notification": [...],
+    "Stop": [...],
+    "SessionEnd": [...]
+  }
+}
+```
 
 ## Codex
 

@@ -20,8 +20,6 @@ class ColoredFormatter(logging.Formatter):
     GREEN = "\x1b[32;20m"
     RESET = "\x1b[0m"
 
-    FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-
     COLORS: ClassVar[dict[int, str]] = {
         logging.DEBUG: BLUE,
         logging.INFO: GREEN,

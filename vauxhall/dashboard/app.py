@@ -89,15 +89,12 @@ class DashboardApp:
                     logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
                     if len(self.pending_updates) == self.pending_updates.maxlen:
                         self.discarded_pending_updates += 1
-                        if (
-                            self.discarded_pending_updates
-                            & (self.discarded_pending_updates - 1)
-                            == 0
-                        ):
+                        discarded = self.discarded_pending_updates
+                        if discarded & (discarded - 1) == 0:
                             logger.warning(
                                 "Discarded oldest pending telemetry update; "
                                 "total discarded: %d",
-                                self.discarded_pending_updates,
+                                discarded,
                             )
                     self.pending_updates.append(telemetry)
                     return
@@ -137,11 +134,9 @@ class DashboardApp:
         try:
             self.mqtt.start()
 
-            ui_dir = Path(__file__).parent / "ui"
-
-            ui_dir_abs = ui_dir.resolve()
-            url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
-            logger.info("Serving UI from %s at %s", ui_dir_abs, url)
+            ui_dir = (Path(__file__).parent / "ui").resolve()
+            url = pyloid_serve(str(ui_dir), port=settings.dashboard.port)
+            logger.info("Serving UI from %s at %s", ui_dir, url)
 
             self.window.load_url(url)
             self.window.show_and_focus()

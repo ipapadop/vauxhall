@@ -54,8 +54,7 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     session_id = f"simulation:{agent_idx}"
     workspace = str(Path(tempfile.gettempdir()) / f"vauxhall-test-{agent_idx}")
 
-    envs = ["local", "remote"]
-    env = random.choice(envs)
+    env = random.choice(["local", "remote"])
 
     with TelemetryClient("localhost", 1883) as client:
         if not client.is_connected:

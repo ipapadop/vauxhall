@@ -39,7 +39,7 @@ export function ensureAgentCapacity(maxAgents) {
 }
 
 /**
- * Ensures an agent's history buffer is initialized and updated.
+ * Prepends an event to the card's history, keeping the newest 20 entries.
  * @param {HTMLElement} card - The agent card element.
  * @param {object} data - The telemetry data.
  */

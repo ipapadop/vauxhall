@@ -6,79 +6,119 @@
 
 # Vauxhall Agent Dashboard
 
-Vauxhall is a real-time monitoring dashboard for AI agents (Gemini, Claude, Codex, etc.). It provides a centralized, **modern grid view** of what your agents are doing across different workspaces, using a lightweight MQTT-based architecture and web technologies.
+Vauxhall is a real-time dashboard for AI coding agents such as Codex and Gemini
+CLI. Agents publish telemetry over MQTT, and the dashboard shows each agent
+session as a card in a grid.
 
-## Key Features
+## Features
 
-- **Real-time Monitoring**: See agent states (Thinking, Acting, Idle, Waiting for Input, Error) as they happen with color-coded indicators.
-- **Modern Grid Layout**: Responsive web-based interface that displays multiple agent cards simultaneously, proportional to your window size.
-- **Session-aware Cards**: Dashboard cards are identified by agent, workspace, and session ID, so concurrent sessions for the same agent in one workspace remain distinct.
-- **Detailed Telemetry & Metrics**: View live logs, active tools, performance metrics (token counts, operation duration), and environment context (Local vs. Remote).
-- **Real-time Activity Log**: A concise, non-scrolling view of the last 5 events per agent with timestamps (`[HH:mm:ss]`).
-- **Audit History**: Deep-dive into agent behavior with a **resizable history modal** (🕒) that supports real-time updates and smart auto-scrolling (freezes on hover for easy reading). Each card retains its latest 20 history records.
-- **Bounded Active Cards**: The dashboard retains up to 100 active cards by default; when full, a new identity evicts the least-recently-seen card.
-- **Advanced Filtering & Sorting**: Quickly find agents using the global search bar or sort by name, status, tokens, or recent activity.
-- **Tooltip Support**: Integrated help for all UI elements to guide new users.
-- **Interactive Navigation**: Click any agent card to copy its raw workspace path to your clipboard with visual "Copied!" feedback. Vauxhall does not turn untrusted telemetry into a shell command.
-- **Codex and Gemini Hooks**: Built-in lifecycle integrations report prompts, tool activity, permission waits, truthful tool outcomes (completion, failure, cancellation, or unavailable result), and idle state without publishing tool-result content. Tool-duration tracking is isolated by session and, when supplied by the agent, tool-call identity.
-- **Resilient Design**: Telemetry sends use bounded QoS 1 broker acknowledgments and fail-safe error boundaries, while Codex and Gemini hooks always return valid protocol JSON even when telemetry fails. Importing the reusable client or configuration modules preserves the host application's logging; executable entry points configure Vauxhall logging explicitly.
-- **Safe Telemetry Rendering**: Agent-provided values are rendered as text rather than executable markup.
-- **Stale Agent Detection**: Automatically identifies inactive agents with a relative "last seen" timer (e.g., "5m ago") and gray-out effect.
-- **Interactive Stale Agents**: Even stale agents remain fully interactive, allowing you to scroll their logs and inspect their history.
-
+- **Live state**: Cards are color-coded by state: Acting, Thinking, Waiting for
+  Input, Input Required, Error, or Idle.
+- **Session-aware cards**: Cards are keyed by agent, workspace, and session ID,
+  so concurrent sessions in one workspace stay separate. Up to 100 cards are
+  kept by default; a new session evicts the least recently seen card.
+- **Activity log**: Each card shows its last 5 events with `[HH:mm:ss]`
+  timestamps, token and duration badges for the latest operation, and a LOCAL
+  or REMOTE badge.
+- **History**: The 🕒 icon opens a resizable modal with the card's last 20
+  events. It updates live, can be filtered, and pauses auto-scroll while you
+  hover.
+- **Search and sort**: Filter cards by agent name or workspace path, and sort by
+  name, recent activity, status, or latest token count.
+- **Stale detection**: Cards show a "last seen" timer and turn gray after the
+  stale threshold (120 seconds by default). **Clear Stale** removes them.
+- **Copy workspace**: Clicking a card copies its raw workspace path.
+- **Codex and Gemini CLI hooks**: Installers register hooks that report prompts,
+  tool activity, permission waits, tool outcomes (completed, failed, cancelled,
+  or result unavailable), and idle state. Tool results are never published.
+- **Safe handling**: Telemetry is validated and size-limited, rendered as text,
+  and never turned into shell commands. Hooks always return valid protocol JSON,
+  even when telemetry fails.
 
 ## Architecture
 
-Vauxhall uses a **Producer-Consumer** pattern over MQTT:
+1. **Hooks (producers)**: Python modules run by agent hook events publish
+   telemetry to an MQTT broker.
+2. **Mosquitto (broker)**: Routes telemetry from hooks to the dashboard.
+3. **Dashboard (consumer)**: A Pyloid desktop app with a Python MQTT backend and
+   a vanilla JavaScript frontend.
 
-1.  **Hooks (Producers)**: Small Python scripts triggered by agent events that publish telemetry to the MQTT broker. See [AGENTS.md](AGENTS.md) for integration details.
-2.  **Mosquitto (Broker)**: A lightweight message broker that routes telemetry from hooks to the dashboard.
-3.  **Dashboard (Consumer)**: A **Pyloid-based web application** combining a Python backend (MQTT) with a modern **Vanilla JavaScript** frontend.
+## Requirements
 
-## Prerequisites
-
-- **Python 3.10+**
-
-- **Mosquitto MQTT Broker**: Install via your package manager (e.g., `brew install mosquitto` or `sudo apt install mosquitto`).
+- Python 3.10 or newer
+- Mosquitto MQTT broker (for example, `brew install mosquitto` or
+  `sudo apt install mosquitto`)
 
 ## Installation
 
-### For Dashboard Users
+Dashboard:
+
 ```bash
 pip install "vauxhall[dashboard]"
 ```
 
-The package supports Python 3.10 and newer on any operating system supported by
-its dependencies.
+Agent machines (installs only `paho-mqtt`):
 
-### For Remote Agents (Minimum Dependencies)
 ```bash
 pip install "vauxhall[hooks]"
 ```
-*(This only installs `paho-mqtt` and the core logic)*
 
 ## Usage
 
-### 1. Start the MQTT Broker
-Ensure Mosquitto is running on your local machine:
+### 1. Start the broker
+
 ```bash
 mosquitto
 ```
 
-### 2. Run the Dashboard
+### 2. Run the dashboard
+
 ```bash
 vauxhall
 ```
 
-From a source checkout, `uv run vauxhall` starts the same entry point.
+From a source checkout, run `uv run vauxhall`.
 
-### Configuration
+### 3. Install agent hooks
 
-Dashboard configuration is loaded from `vauxhall_dashboard.json` in the current
-directory, then `~/.config/vauxhall/vauxhall_dashboard.json`. Environment
-variables take precedence over file values, which take precedence over the
-defaults below. Hooks use the same MQTT and logging fields with
-`vauxhall_hooks.json` in the same search paths.
+Run the installer from the agent's workspace:
+
+```bash
+# Codex
+vauxhall-install-codex
+
+# Gemini CLI
+vauxhall-install-gemini
+```
+
+Each installer recreates `.vauxhall-venv` in the workspace, installs the same
+Vauxhall release into it, and registers hooks that run the packaged hook
+module, so the hooks do not depend on a source checkout. Unrelated hooks are
+preserved. For Codex, open `/hooks` after installing to review and trust the
+new project hooks.
+
+See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and
+integrating other agents.
+
+### 4. Simulate agents
+
+To try the dashboard without real agents, publish mock telemetry from a source
+checkout:
+
+```bash
+uv run python scripts/simulate_agent.py -n 5 -t 20
+```
+
+- `-n`, `--num-agents`: Number of concurrent agents (default 1).
+- `-t`, `--num-transitions`: Events per agent (default 5).
+
+## Configuration
+
+The dashboard reads `vauxhall_dashboard.json` and hooks read
+`vauxhall_hooks.json`, from the current directory or, if the file is not there,
+from `~/.config/vauxhall/`. Environment variables override file values, which
+override the defaults. Hooks use only the `mqtt` and `logging` sections. See
+`vauxhall_dashboard.json.example` and `vauxhall_hooks.json.example`.
 
 | Section | Field | Environment variable | Default | Valid values |
 | --- | --- | --- | --- | --- |
@@ -96,74 +136,19 @@ defaults below. Hooks use the same MQTT and logging fields with
 | `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
 | `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
 
-Configuration is strict: malformed JSON, non-object sections, wrong scalar
-types, invalid ranges, and invalid environment values abort dashboard startup
-or hook initialization. Errors identify the environment variable or absolute
-configuration path, logical field, invalid value, and expected constraint.
-Hooks report configuration errors on stderr while still exiting normally with
-one JSON object on stdout, preserving the host hook protocol.
-MQTT authentication and TLS settings are intentionally deferred to issue #3.
+Invalid values (malformed JSON, non-object sections, wrong types, out-of-range
+values, or unparsable environment values) stop the dashboard at startup. The
+error names the environment variable or file path, the field, the value, and
+the expected constraint. Hooks print the error to stderr and still return valid
+protocol JSON. MQTT authentication and TLS are not supported yet (issue #3).
 
-Dashboard MQTT ingestion is bounded before JSON decoding: messages larger than
-`max_payload_bytes` (65,536 bytes by default) and malformed messages are
-dropped. Accepted telemetry is schema version 1 with non-empty `agent` (128
-characters), `workspace` (4,096), `session_id` (256), and supported `state`
-(32), plus optional `env` (`local` or `remote`, 16). `details` accepts at most
-16 string keys (64 characters each) with scalar values when present; string
-values are limited to 4,096 characters. Before the frontend is ready, the
-dashboard keeps only the newest `pending_update_limit` events (500 by
-default), discarding the oldest event when the buffer is full. The readiness
-transition atomically
-assigns every event to the queued snapshot or live delivery so none can be
-stranded between those paths, and serializes dispatch so live events cannot
-overtake the queued snapshot. Repeated frontend readiness signals are
-idempotent and do not trigger another drain. The core protocol validator
-enforces the same schema and field limits for the dashboard and built-in
-telemetry client.
+## Telemetry
 
-The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
-connection failures or disconnects, and `Disconnected` for an intentional
-shutdown. MQTT cleanup always runs when the UI loop exits, including on an
-exception. The dashboard requires Pyloid 0.27.2 or newer: its `BrowserWindow`
-wrapper marshals cross-thread commands through `command_signal` and
-`_handle_command`, so MQTT callbacks can safely call `window.invoke()` without
-a second queue. Vauxhall does not depend on those private Pyloid symbols at
-runtime.
-
-### 3. Integrate with Agents
-Vauxhall supports multiple agents through customizable hooks. Install the desired integration in the agent workspace:
-
-```bash
-# Codex
-vauxhall-install-codex
-
-# Gemini CLI
-vauxhall-install-gemini
-```
-
-Each installer creates `.vauxhall-venv` and installs the same immutable Vauxhall
-release that provided the command. Registered hooks invoke the packaged
-telemetry module, so moving or deleting the source checkout does not break
-them. The Codex installer writes `.codex/hooks.json`, rejects invalid existing
-structures without replacing them, and gives each telemetry handler a
-three-second timeout backed by a one-second MQTT connection limit. The Gemini
-installer also registers a `SessionEnd` hook. Both integrations publish
-normalized tool outcomes only, never arbitrary tool responses. Both
-installers shell-quote POSIX paths and use encoded PowerShell commands on
-Windows. Open `/hooks` in Codex after installation to review and trust the new
-project hooks. See [AGENTS.md](AGENTS.md) for event mappings, protocol references, manual
-configuration, and generic-agent integration. Codex and Gemini preserve their
-native session identities, so separate native sessions create separate
-dashboard cards even when they use the same agent name and workspace.
-
-### Telemetry schema
-
-Vauxhall accepts only telemetry schema version 1. Every payload requires
-`schema_version`, `agent`, `workspace`, `session_id`, and `state`.
-`session_id` is an opaque value that must remain stable throughout one session
-and must be unique among concurrent sessions for the same agent and workspace.
-Generic producers should generate one UUID when the session starts and reuse it
-for every event:
+Producers publish schema version 1 JSON to
+`vauxhall/agents/<agent_name>/activity`. The `schema_version`, `agent`,
+`workspace`, `session_id`, and `state` fields are required. `session_id` must
+stay the same for a whole session and be unique among concurrent sessions of
+the same agent in the same workspace; generate a UUID when the session starts.
 
 ```python
 from uuid import uuid4
@@ -181,50 +166,30 @@ client.send(
 )
 ```
 
-Producers in other languages can publish schema-v1 JSON to
-`vauxhall/agents/<agent_name>/activity`:
-
-```json
-{
-  "schema_version": 1,
-  "agent": "AgentName",
-  "workspace": "/absolute/path/to/workspace",
-  "session_id": "0195db69-a702-73dc-a223-7556293f8cba",
-  "state": "Acting",
-  "details": {}
-}
-```
-
-The built-in hooks resolve session identity in this order: the agent's native
-session ID, a hash of its transcript path, then `VAUXHALL_SESSION_ID`. They skip
-an event when none of those sources is available. Unversioned, incomplete, or
-unsupported payloads are logged and dropped by the dashboard.
-
-### 4. Simulation
-To see the dashboard in action without running actual agents, use the simulation script to publish mock telemetry data for multiple agents:
-```bash
-python3 scripts/simulate_agent.py -n 5 -t 20
-```
-*   `-n`, `--num-agents`: Number of concurrent agents to simulate.
-*   `-t`, `--num-transitions`: Number of telemetry events (transitions) to send per agent.
-
+The dashboard logs and drops oversized, malformed, and invalid messages. See
+[AGENTS.md](AGENTS.md#telemetry-schema) for the full schema and field limits.
 
 ## Project Structure
 
-- `vauxhall/dashboard/`: The Pyloid-based dashboard application and its packaged Vanilla JS UI assets.
-- `vauxhall/hooks/`: Reusable telemetry client plus Codex and Gemini hook implementations and installers.
-- `scripts/`: Utility scripts for simulation and verification.
-- `tests/`: Comprehensive test suite for UI and network components.
+- `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
+  the dashboard and hooks.
+- `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
+- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Codex
+  and Gemini CLI hooks and installers.
+- `scripts/`: The agent simulator and a logging color check.
+- `tests/`: Python tests, with frontend tests in `tests/frontend/`.
 
 ## Development
 
-Frontend tests require Node.js 20.19 or newer.
+Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
 
-Contributors must follow the coding and documentation standards defined in [AGENTS.md](AGENTS.md#development--maintenance-rules). Specifically:
-- **Ruff**: Use the project-pinned Ruff version and run `ruff format .` plus `ruff check --fix .` before committing. Python files must retain their SPDX copyright and license headers.
-- **Frontend tests**: Run `npm ci` once, then `npm test` after changing dashboard JavaScript.
-- **Packaging**: Run `python -m build` and `twine check dist/*` when changing distribution metadata, entry points, or bundled assets.
-- **Docs**: Always update `README.md` and `AGENTS.md` after every change.
+- **Python**: Run `ruff format .` and `ruff check .` with the pinned Ruff
+  version, then `.venv/bin/pytest`.
+- **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
+  `npm test`.
+- **Packaging**: After changing metadata, entry points, or bundled assets, run
+  `python -m build` and `twine check dist/*`.
 
 ## License
+
 MIT

@@ -1,18 +1,12 @@
 # Agent Integration Guide
 
-Vauxhall is designed to be agent-agnostic. You can integrate any AI agent or CLI tool by sending telemetry messages to the MQTT broker.
+Vauxhall works with any agent that can publish JSON over MQTT. It ships hooks
+for Codex and Gemini CLI; other agents can use `TelemetryClient` or publish
+messages directly.
 
-## Supported Agents
+## Publishing Telemetry
 
-Currently, Vauxhall includes built-in support or templates for:
-- **Codex**: Full lifecycle, tool, permission, and turn-completion hooks.
-- **Gemini CLI**: Full pre/post command hooks.
-- **Generic Agents**: Any agent can be simulated or integrated using the `TelemetryClient`.
-
-## Integration Methods
-
-### 1. Using Python Hooks (Recommended)
-If your agent supports Python-based hooks or you are wrapping a CLI tool in Python, use the `TelemetryClient`.
+### Python Client
 
 ```python
 from uuid import uuid4
@@ -22,7 +16,7 @@ from vauxhall.hooks.client import TelemetryClient
 session_id = str(uuid4())
 client = TelemetryClient(host="localhost", port=1883)
 
-# Send an "Acting" state with tool details, metrics, and environment context
+# Report a running tool with metrics and environment
 delivered = client.send(
     agent="MyAgent",
     workspace="/path/to/project",
@@ -31,11 +25,11 @@ delivered = client.send(
     env="local",  # Optional: "local" or "remote"
     tool="grep",
     cmd="grep -r 'TODO' .",
-    tokens=1245,  # Optional: Token count for the operation
-    duration=12.4,  # Optional: Duration in seconds
+    tokens=1245,  # Optional
+    duration=12.4,  # Optional, in seconds
 )
 
-# Send an "Idle" state when finished
+# Report that the agent is done
 client.send(
     agent="MyAgent",
     workspace="/path/to/project",
@@ -44,13 +38,18 @@ client.send(
 )
 ```
 
-`send()` publishes at QoS 1 and returns `True` only when MQTT receives the broker's acknowledgment. It waits up to one second for that acknowledgment and returns `False`, without raising, when serialization, connection, or publication fails. Use `TelemetryClient` as a context manager when sending several events so they share one connection. Importing the client and configuration modules does not configure or replace the host application's root logging; dashboard and hook entry points configure Vauxhall logging when they run.
+`send()` validates the event, publishes it at QoS 1, and waits up to one second
+for the broker's acknowledgment. It returns `True` only when the broker
+acknowledges the message; validation, connection, and publish failures return
+`False` instead of raising. Use the client as a context manager to send several
+events over one connection. Importing the client or configuration modules does
+not change the host application's logging; the dashboard and hook entry points
+configure logging when they run.
 
-### 2. Manual MQTT (Any Language)
-You can publish JSON messages to the following topic structure:
-`vauxhall/agents/<agent_name>/activity`
+### Raw MQTT (Any Language)
 
-**Message Format:**
+Publish JSON to `vauxhall/agents/<agent_name>/activity`:
+
 ```json
 {
   "schema_version": 1,
@@ -62,129 +61,173 @@ You can publish JSON messages to the following topic structure:
 }
 ```
 
-Optional `env` and operation values such as `tool`, `cmd`, `tokens`,
-`duration`, `prompt`, and `error` may also be sent; operation values belong in
-the `details` object.
+Operation values such as `tool`, `cmd`, `prompt`, `status`, `error`, `tokens`,
+and `duration` go in `details`. The optional `env` field is top-level.
 
-## Telemetry schema
+## Telemetry Schema
 
-Version 1 is the only accepted telemetry schema. The `schema_version`, `agent`,
-`workspace`, `session_id`, and `state` fields are required. `session_id` is
-opaque, must remain stable throughout one session, and must be unique among
-concurrent sessions for the same agent and workspace. Generic producers should
-generate one UUID at session startup and pass it on every event.
+Version 1 is the only accepted schema.
 
-The built-in hooks resolve a session ID from the agent's native ID first, then
-from a hash of its transcript path, and finally from `VAUXHALL_SESSION_ID`. If
-none is available, the hook skips the event. The dashboard logs and drops
-unversioned, incomplete, and unsupported payloads.
-
-## Supported States & UI Indicators
-
-The dashboard uses the `state` field to color-code agent cards:
-
-| State | UI Color | Description |
+| Field | Required | Constraint |
 | :--- | :--- | :--- |
-| `Acting` | 🟢 Green | Agent is currently executing a tool or command. |
-| `Thinking` | 🟢 Green | Agent is processing or planning. |
-| `Waiting for Input` | 🟡 Yellow | Agent is paused and waiting for user confirmation. |
-| `Input Required` | 🟡 Yellow | Same as above. |
-| `Error` | 🔴 Red | Agent encountered a fatal error. |
-| `Idle` | None | Agent is finished or standby. |
+| `schema_version` | Yes | Integer `1` |
+| `agent` | Yes | 1–128 characters |
+| `workspace` | Yes | 1–4,096 characters |
+| `session_id` | Yes | 1–256 characters |
+| `state` | Yes | A [supported state](#supported-states) |
+| `env` | No | `local` or `remote` |
+| `details` | No | Object with at most 16 entries |
 
-## Metadata & Features
+Required fields cannot be blank, and unknown top-level fields are rejected.
+`details` keys are strings of at most 64 characters. Values are strings of at
+most 4,096 characters, numbers, booleans, or `null`; `tokens` and `duration`
+must be numbers, not booleans.
 
-Dashboard cards are identified by the combination of `agent`, `workspace`, and
-`session_id`. Separate sessions therefore create separate cards even when the
-agent name and workspace are identical.
+`session_id` is opaque. It must stay the same for a whole session and be unique
+among concurrent sessions of the same agent in the same workspace. Generic
+producers should generate a UUID when the session starts.
 
-### Environment Badges
-Vauxhall displays a badge (LOCAL, REMOTE) based on the `env` field. If omitted, the dashboard attempts to guess the environment based on the `workspace` path:
-- Paths starting with `/home` or `C:\` default to **LOCAL**.
-- Other absolute paths default to **REMOTE**.
+The built-in hooks take the session ID from the agent's native session ID, then
+a hash of the transcript path, then the `VAUXHALL_SESSION_ID` environment
+variable. If none is available, the hook skips the event.
 
-If `tokens` or `duration` are provided in the `details` object, they will appear as small badges in the **card footer**.
+The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
+default) before decoding them, and logs and drops malformed or invalid
+telemetry. Rejection logs never include payload values. The dashboard and
+`TelemetryClient` share one validator, `vauxhall.core.telemetry`.
 
-### Real-Time Activity Log
-The `log-area` on each card is a real-time append-only stream of the **last 5 events**. Any update containing a `tool`, `cmd`, or `prompt` will append a new line with a timestamp (`[HH:mm:ss]`).
+## Supported States
 
-- **Acting**: Shows "Running: <tool> <cmd>".
-- **Waiting**: Shows "Prompt: <prompt>" (prioritized over tool names).
-- **Thinking**: Shows "Completed: <tool>" or the specific status message.
+| State | Card color | Meaning |
+| :--- | :--- | :--- |
+| `Acting` | 🟢 Green | Running a tool or command |
+| `Thinking` | 🟢 Green | Processing or planning |
+| `Waiting for Input` | 🟡 Yellow | Waiting for the user |
+| `Input Required` | 🟡 Yellow | Same as `Waiting for Input` |
+| `Error` | 🔴 Red | A tool or the agent failed |
+| `Idle` | None | Finished or on standby |
 
-This area is non-scrolling to keep the dashboard clean.
+## Dashboard Behavior
 
-All values received through telemetry are treated as untrusted text and must not be inserted into executable HTML.
+- **Cards**: A card is identified by `agent`, `workspace`, and `session_id`, so
+  separate sessions get separate cards. The dashboard keeps up to
+  `max_active_agents` cards (100 by default); a new identity at capacity evicts
+  the least recently seen card.
+- **Environment badge**: Shows `env`. Without it, workspaces starting with
+  `/home` or a Windows drive letter (such as `C:\`) are labeled LOCAL, and all
+  others REMOTE.
+- **Metrics**: Positive `tokens` and `duration` values appear as footer badges.
+  They reset when an `Acting` event, or a `Thinking` event with a `prompt`,
+  starts a new operation.
+- **Activity log**: Each card shows its last 5 events, newest first, with
+  `[HH:mm:ss]` timestamps. An event whose message matches the previous one is
+  not repeated. The message is, in order of precedence: the prompt for waiting
+  states, `Error: <error>`, `Running: <tool> <cmd>` (or `Completed: <tool>` for
+  a completed `Thinking` event), `Prompt: <prompt>`, or the status.
+- **History**: The 🕒 icon opens a resizable modal with the card's last 20
+  events, filterable by text and state. It updates live and follows new events
+  only when scrolled to the bottom and not hovered.
+- **Staleness**: A card with no events for `stale_threshold` seconds (120 by
+  default) turns gray and shows `STALE`. Staleness is checked every 10 seconds.
+- **Copying**: Clicking a card copies the raw `workspace` value. Telemetry is
+  never inserted into HTML markup or shell commands.
 
-Clicking an agent card copies the raw `workspace` value to the clipboard. The dashboard must not concatenate this untrusted value into a shell command.
+## Dashboard Internals
 
-### Session History & Audit
-The dashboard automatically maintains the last 20 operations per agent. It retains up to 100 active cards by default; when a new identity arrives at capacity, the least-recently-seen card is evicted. Users can view a card's history by clicking the **Clock (🕒)** icon in the card footer to open a **resizable modal**. This modal supports real-time updates and includes a "smart auto-scroll" that freezes when you are hovering to allow for easy inspection.
+- **Pending updates**: Until the frontend signals readiness, the dashboard keeps
+  only the newest `pending_update_limit` events (500 by default), dropping the
+  oldest. Drop warnings are logged at power-of-two counts and never include
+  telemetry.
+- **Readiness**: Marking the frontend ready and taking the pending snapshot
+  happen under one lock, so no event is lost between the MQTT callback and the
+  initial drain. Dispatch is serialized, so live events cannot overtake the
+  queued snapshot. Repeated readiness signals have no effect.
+- **Connection status**: The status line shows `Connecting...`,
+  `Connected to Agent Fleet`, retry messages after connection failures or
+  disconnects, and `Disconnected` on shutdown.
+- **Shutdown**: When the UI loop exits, including after an exception or partial
+  startup failure, the dashboard marks the frontend not ready and stops the
+  MQTT client once. The final `Disconnected` status and any late telemetry are
+  kept instead of being sent to the destroyed window.
+- **Pyloid**: Pyloid 0.27.2 or newer is required. Its `BrowserWindow` marshals
+  cross-thread commands to the UI thread, so MQTT callbacks call
+  `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
 
-## Specific Agent Instructions
+## Codex
 
-### Codex
-
-Vauxhall provides a unified Codex command hook for lifecycle events, tool executions, permission requests, and turn completion. It maps Codex events as follows:
+### Event Mapping
 
 | Codex event | Vauxhall state |
 | :--- | :--- |
 | `SessionStart`, `UserPromptSubmit` | `Thinking` |
-| `PreToolUse` | `Acting` |
-| `PermissionRequest` and `request_user_input` | `Waiting for Input` |
+| `PreToolUse` | `Acting`; `Waiting for Input` for `request_user_input` |
+| `PermissionRequest` | `Waiting for Input` |
 | `PostToolUse` | `Thinking`, `Error`, or `Idle`, based on the tool result |
 | `Stop`, `SessionEnd` | `Idle` (`Ready`) |
 | `Interrupt` | `Idle` (`interrupted`) |
 
-Tool outcomes follow the documented [Codex hooks](https://developers.openai.com/codex/hooks/) result fields:
+`PostToolUse` outcomes follow the documented
+[Codex hooks](https://developers.openai.com/codex/hooks/) result fields:
 
-| Integration | Success evidence | Failure evidence | Cancellation evidence | Interruption evidence |
-| :--- | :--- | :--- | :--- | :--- |
-| Codex | tool-specific `tool_response.exit_code == 0` or `isError == false` | non-zero `exit_code` or `isError == true` | structured cancellation marker when supplied by a tool | `Interrupt` hook event |
-| Gemini | `tool_response` object with no `error` | non-null `tool_response.error` | structured cancellation marker inside response/error | no tool-interrupt field; `SessionEnd.reason` covers CLI exit/clear/logout/input exit |
+| `tool_response` | State | Status |
+| :--- | :--- | :--- |
+| Cancellation marker | `Idle` | `cancelled` |
+| Non-zero `exit_code` | `Error` | `failed` |
+| `isError: true` | `Error` | `failed` |
+| `exit_code: 0` or `isError: false` | `Thinking` | `completed` |
+| Anything else | `Thinking` | `result unavailable` |
 
-Arbitrary `tool_response` content is never sent as telemetry. Unknown or malformed result shapes use `result unavailable` rather than claiming success.
+A cancellation marker is `cancelled: true`, `canceled: true`, or a `code`,
+`status`, or `name` of `cancelled`, `canceled`, or `aborted`, at the top level
+or inside `error`.
 
-Telemetry is best-effort. The hook lazy-loads telemetry and configures logging inside its failure boundary, then reserves stdout for one JSON object, including for unknown events, malformed input, telemetry failures, and invalid hook configuration, so monitoring cannot interrupt Codex. Logs and source-aware configuration errors go to stderr. Tool durations use per-invocation timing files so concurrent tool calls do not overwrite one another. Only canonical `Bash` tools publish their command text; patch contents and arbitrary MCP or local-tool input fields are not published.
+### Published Data
 
-The hook preserves Codex's native session identity, so separate native Codex
-sessions in one workspace create separate dashboard cards. If no native ID is
-available, it uses the shared fallback chain described in
-[Telemetry schema](#telemetry-schema) and skips events that have no stable
-session identity.
+- Only `Bash` tool calls publish their command text. Patch contents and other
+  tool inputs are not published.
+- `tool_response` content is never published.
+- Tool durations use a timing file per session and `tool_use_id` in the system
+  temporary directory, so concurrent tool calls do not overwrite each other.
 
-Gemini tool-duration timing files are keyed by the resolved session identity
-and, when present, `tool_call_id`. This prevents concurrent sessions in one
-workspace from overwriting each other's start times and also separates
-concurrent tool calls within a session when Gemini supplies an invocation ID.
+### Failure Handling
 
-#### Automated Installation (Recommended)
+The hook loads configuration, logging, and the MQTT client inside its error
+boundary. For every input, including unknown events, malformed JSON, invalid
+configuration, and telemetry failures, it writes one JSON object to stdout and
+exits normally. Logs and configuration errors go to stderr.
 
-After installing `vauxhall[hooks]`, run this command from the Codex workspace:
+### Automated Installation
+
+After installing `vauxhall[hooks]`, run from the Codex workspace:
 
 ```bash
 vauxhall-install-codex
 ```
 
-The installer refreshes `.vauxhall-venv`, installs the exact immutable
-`vauxhall[hooks]` release that supplied the command, preserves unrelated
-configuration in `.codex/hooks.json`, replaces existing Vauxhall Codex
-handlers, and registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
-`PermissionRequest`, `PostToolUse`, `Stop`, `Interrupt`, and `SessionEnd`.
-Existing invalid JSON or nested hook structure is backed up and left unchanged.
-Hook commands execute `python -m vauxhall.hooks.codex.telemetry_hook` from the
-isolated environment. They use shell quoting on POSIX and UTF-16LE
-Base64-encoded PowerShell on Windows so workspace-path metacharacters are not
-interpreted by the shell. Each handler has an explicit three-second timeout,
-and MQTT connection setup is limited to one second; handlers remain synchronous
-so tool-start and tool-completion telemetry retain lifecycle order. The
-installed hooks do not depend on the checkout from which Vauxhall was built.
+The installer:
 
-Project hooks require trust before Codex runs them. Open `/hooks` in Codex after installation, review the definitions, and trust them.
+- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. If the file is
+  invalid JSON or has an unexpected structure, it exits with an error and leaves
+  the file unchanged.
+- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
+  that provided the command.
+- Replaces existing Vauxhall handlers, keeps all other configuration, and
+  registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+  `PermissionRequest`, `PostToolUse`, `Stop`, `Interrupt`, and `SessionEnd`.
+- Writes commands that run `python -m vauxhall.hooks.codex.telemetry_hook` from
+  the isolated environment: shell-quoted on POSIX, and as UTF-16LE
+  Base64-encoded PowerShell on Windows, so path metacharacters are not
+  interpreted.
+- Gives each handler a 3-second timeout; the MQTT connection attempt is limited
+  to 1 second. Handlers are synchronous so tool start and completion events stay
+  in order.
 
-#### Manual Configuration
+Codex runs project hooks only after you trust them. Open `/hooks` in Codex,
+review the definitions, and trust them.
 
-Add the command handler to each desired event in `.codex/hooks.json`. For example:
+### Manual Configuration
+
+Add the command handler to each event in `.codex/hooks.json`. For example:
 
 ```json
 {
@@ -206,103 +249,82 @@ Add the command handler to each desired event in `.codex/hooks.json`. For exampl
 }
 ```
 
-Codex passes one JSON event object on stdin. The hook reads `cwd`, `hook_event_name`, tool metadata, prompt text, and permission descriptions, then publishes the corresponding Vauxhall telemetry event.
+Codex passes one JSON event object on stdin. On Windows, use the installer; it
+generates the encoded PowerShell command needed for safe path handling.
 
-On Windows, use the automated installer rather than adapting the POSIX command above; it generates the encoded PowerShell command required for safe path handling.
+## Gemini CLI
 
-## Configuration
+### Event Mapping
 
-Dashboard settings load from `vauxhall_dashboard.json` in the current working
-directory, then `~/.config/vauxhall/`; hook settings use
-`vauxhall_hooks.json` in the same paths. Environment variables override file
-values, which override dataclass defaults. The dashboard exposes
-`VAUXHALL_DASHBOARD_PORT`, `VAUXHALL_DASHBOARD_DEBUG`,
-`VAUXHALL_DASHBOARD_WINDOW_TITLE`, `VAUXHALL_DASHBOARD_WIDTH`,
-`VAUXHALL_DASHBOARD_HEIGHT`, `VAUXHALL_DASHBOARD_STALE_THRESHOLD`,
-`VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT`,
-`VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS`, and
-`VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES`. MQTT and logging settings are shared:
-`VAUXHALL_MQTT_HOST`, `VAUXHALL_MQTT_PORT`,
-`VAUXHALL_MQTT_KEEPALIVE`, and `VAUXHALL_LOGGING_LEVEL`.
+| Gemini event | Vauxhall state |
+| :--- | :--- |
+| `BeforeAgent` | `Thinking` (with `prompt`) |
+| `AfterModel` | `Thinking` (`Model replied`, with `tokens` when reported) |
+| `BeforeTool` | `Acting`; `Waiting for Input` for `ask_user` and `ask_question` |
+| `AfterTool` | `Thinking`, `Error`, or `Idle`, based on the tool result |
+| `Notification` | `Waiting for Input` for `ToolPermission`; others are ignored |
+| `AfterAgent` | `Idle` (`Ready`) |
+| `SessionEnd` | `Idle`, with a normalized reason |
+| Any other event | `Idle`, with the event name in `hook` |
 
-Explicit values are strictly validated. Malformed JSON, non-object sections,
-wrong scalar types, invalid ranges, and invalid environment values abort
-dashboard startup or hook initialization with a source-aware error naming the
-environment variable or absolute file path, logical field, invalid value, and
-expected constraint. Hook entry points write that error to stderr while still
-exiting normally with one JSON object on stdout. MQTT authentication and TLS
-fields remain out of scope until issue #3.
+`AfterTool` outcomes follow the documented
+[Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md)
+fields:
 
-## Dashboard Telemetry Ingress Limits
+| `tool_response` | State | Status |
+| :--- | :--- | :--- |
+| Cancellation marker (same as Codex) | `Idle` | `cancelled` |
+| Non-null `error` | `Error` | `failed` |
+| Any other object | `Thinking` | `completed` |
+| Missing or not an object | `Thinking` | `result unavailable` |
 
-The dashboard drops MQTT payloads larger than
-`VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` (65,536 bytes by default) before
-decoding JSON, and drops malformed or unsupported telemetry after decoding.
-Accepted telemetry uses schema version 1: non-empty `agent` (128 characters),
-`workspace` (4,096), `session_id` (256), and one supported `state` (32), with
-optional `env` (`local` or `remote`, 16). `details` allows up to 16 string keys
-of 64 characters and scalar values when present; string values are capped at
-4,096 characters. Numeric metrics such as `tokens` and `duration` must be
-numbers, not booleans.
+Gemini CLI has no tool-interrupt field. `SessionEnd` reports `session exited`,
+`session cleared`, `logged out`, or `input closed` for the `exit`, `clear`,
+`logout`, and `prompt_input_exit` reasons, and `session ended` otherwise. Raw
+reason values are not published.
 
-The shared `vauxhall.core.telemetry` validator enforces these schema and field
-limits for dashboard ingestion and the built-in telemetry client. Rejection
-reasons never include payload values. Frontend readiness and queue transfer are
-one synchronized transition, so an event cannot be stranded between the MQTT
-callback's readiness check and the UI's initial drain. Dispatch is serialized
-separately so newer live updates cannot overtake that queued snapshot. Repeated
-frontend readiness signals are idempotent and do not run the drain callback
-again.
+### Published Data
 
-Before the frontend is ready, the dashboard retains only the newest
-`VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` events (500 by default); each full
-buffer insertion discards the oldest event. Discard warnings are rate-limited
-at power-of-two discard counts and never include telemetry contents.
+- `BeforeTool` publishes the tool input as JSON in `args`, and a `cmd` value:
+  the command for `run_shell_command`, or `file_path` for `read_file`,
+  `write_file`, `replace`, and `view_file`. Events whose `args` exceed 4,096
+  characters fail validation and are not published.
+- `tool_response` content is never published.
+- Tool durations use a timing file in the workspace's `.gemini/` directory,
+  keyed by session ID and, when present, `tool_call_id`.
 
-## Dashboard Connection Lifecycle
+### Failure Handling
 
-The dashboard reports `Connecting...`, `Connected to Agent Fleet`, retrying
-connection failures or disconnects, and `Disconnected` for intentional
-shutdown. It stops the MQTT client exactly once when the UI loop exits,
-including after an exception or partial startup failure. The dashboard extra
-requires Pyloid 0.27.2 or newer. Its `BrowserWindow` wrapper marshals
-cross-thread commands through `command_signal` and `_handle_command`, allowing
-MQTT callbacks to call `window.invoke()` directly without a second queue;
-Vauxhall does not use those private symbols at runtime.
+As with Codex, the hook writes one JSON object to stdout for every input and
+sends logs and configuration errors to stderr.
 
-### Gemini CLI
+### Automated Installation
 
-Vauxhall provides a unified telemetry hook for Gemini CLI that handles agent lifecycle events, tool executions, and user notifications. It implements documented [Gemini CLI hook](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) fields, including `AfterTool.tool_response` and `SessionEnd.reason`. A session end reports one of `session exited`, `session cleared`, `logged out`, `input closed`, or the conservative fallback `session ended`; raw reason values are not published.
-
-Telemetry is best-effort: the hook lazy-loads telemetry and configures logging inside its failure boundary, then always exits normally with one JSON object on stdout, including for ignored events, malformed input, telemetry failures, and invalid hook configuration. Logs and source-aware configuration errors go to stderr so monitoring cannot corrupt the Gemini CLI hook protocol.
-
-The hook preserves Gemini's native session identity, so separate native Gemini
-sessions in one workspace create separate dashboard cards. If no native ID is
-available, it uses the shared fallback chain described in
-[Telemetry schema](#telemetry-schema) and skips events that have no stable
-session identity.
-
-#### Automated Installation (Recommended)
-After installing `vauxhall[hooks]`, register the hooks in the current Gemini
-workspace by running:
+After installing `vauxhall[hooks]`, run from the Gemini CLI workspace:
 
 ```bash
 vauxhall-install-gemini
 ```
 
-This script will:
-1.  **Isolated Environment**: Create a dedicated virtual environment (`.vauxhall-venv`) in the current directory to isolate telemetry dependencies. If the directory exists, it is refreshed.
-2.  **Dependency Management**: Install the exact immutable `vauxhall[hooks]` release that supplied the command into the isolated venv.
-3.  **Clean Installation**: Purge any existing hooks starting with `vauxhall-` to ensure a clean state before registering new ones.
-4.  **Configuration**: Locate (or create) `.gemini/settings.json` in your workspace and register `python -m vauxhall.hooks.gemini.telemetry_hook` using the absolute path to the isolated venv's Python interpreter.
-5.  **Descriptive Hooks**: Setup hooks with specific names (`vauxhall-thinking`, `vauxhall-acting`, `vauxhall-session-end`, etc.) and clear descriptions for easy identification.
+The installer:
 
-The generated hooks are independent of the checkout from which Vauxhall was
-built. POSIX paths are shell-quoted, and Windows commands use UTF-16LE
-Base64-encoded PowerShell so path metacharacters are not interpreted.
+- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
+  that provided the command.
+- Reads `.gemini/settings.json` and backs it up to
+  `.gemini/settings.json.bak`. If the file cannot be read or parsed, it prints a
+  warning and starts from empty settings, overwriting the file without a
+  backup.
+- Removes hooks whose names start with `vauxhall-` and registers
+  `vauxhall-thinking` (`BeforeAgent`), `vauxhall-idle` (`AfterAgent`),
+  `vauxhall-model` (`AfterModel`), `vauxhall-acting` (`BeforeTool`),
+  `vauxhall-done` (`AfterTool`), `vauxhall-waiting` (`Notification`), and
+  `vauxhall-session-end` (`SessionEnd`).
+- Writes commands that run `python -m vauxhall.hooks.gemini.telemetry_hook`,
+  quoted the same way as the Codex installer.
 
-#### Manual Configuration
-If you prefer to configure it manually, add the following to your `.gemini/settings.json`:
+### Manual Configuration
+
+Add the hook to each event in `.gemini/settings.json`:
 
 ```json
 {
@@ -320,6 +342,7 @@ If you prefer to configure it manually, add the following to your `.gemini/setti
       }
     ],
     "AfterAgent": [...],
+    "AfterModel": [...],
     "BeforeTool": [...],
     "AfterTool": [...],
     "Notification": [...],
@@ -328,21 +351,34 @@ If you prefer to configure it manually, add the following to your `.gemini/setti
 }
 ```
 
-## Development & Maintenance Rules
+## Configuration
 
-To ensure the stability and readability of the Vauxhall ecosystem, all contributors (and AI agents) must follow these rules:
+The dashboard reads `vauxhall_dashboard.json` and hooks read
+`vauxhall_hooks.json`, from the current directory or, if the file is not there,
+from `~/.config/vauxhall/`. Environment variables override file values, which
+override defaults. See [README.md](README.md#configuration) for every field and
+environment variable.
 
-1.  **Code Style**: Before committing any Python changes, you MUST run:
-    - `ruff format .` to ensure consistent formatting.
-    - `ruff check .` to identify potential issues.
-    - All `ruff check` errors must be resolved or fixed using `ruff check --fix .`.
-    - Every Python file must begin with the project's SPDX copyright and license headers.
-    - Use the exact Ruff version declared by the project so local and CI results agree.
-3.  **Testing**: Before committing, all existing and new tests MUST pass.
-    - Run `.venv/bin/pytest` to verify.
-    - With Node.js 20.19 or newer, run `npm test` to verify frontend rendering behavior.
-    - Always add unit tests for new features or bug fixes.
-    - The packaging tests build real wheels, verify metadata and dashboard UI assets, install the wheel into clean environments, and run both public hook installers outside the source checkout.
-4.  **Documentation Synchronization**: After **every** code change or feature implementation, you MUST review and update the following files to reflect the current state of the project:
-    - `README.md`: Update features, architecture, and usage instructions.
-    - `AGENTS.md`: Update integration methods, states, and metadata features.
+Invalid explicit values abort dashboard startup or hook telemetry with an error
+naming the source (environment variable or absolute file path), the field, the
+value, and the expected constraint. Hooks print that error to stderr and still
+write one JSON object to stdout. MQTT authentication and TLS are out of scope
+until issue #3.
+
+## Development and Maintenance Rules
+
+All contributors, including AI agents, must:
+
+1. **Code style**: Before committing Python changes, run `ruff format .` and
+   `ruff check .` with the Ruff version pinned in `pyproject.toml`, and fix every
+   error (`ruff check --fix .` fixes many). Every Python file must start with the
+   project's SPDX copyright and license headers.
+2. **Testing**: All tests must pass before committing.
+   - Run `.venv/bin/pytest`. The packaging tests build real wheels, check
+     metadata and bundled UI assets, install the wheel into clean environments,
+     and run both hook installers outside the source checkout.
+   - With Node.js 20.19 or newer, run `npm test` for the frontend.
+   - Add unit tests for every new feature and bug fix.
+3. **Documentation**: After every change, update `README.md` (features,
+   architecture, usage) and `AGENTS.md` (integration, states, dashboard
+   behavior) to match the code.

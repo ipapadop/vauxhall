@@ -94,7 +94,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
 }
 
 /**
- * Formats the telemetry data into a human-readable action string.
+ * Builds the display segments that describe a telemetry event.
  * @param {object} data - The telemetry data object (containing state and details).
  * @returns {Array<{text: string, className?: string}>} Display segments.
  */

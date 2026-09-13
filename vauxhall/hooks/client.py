@@ -58,10 +58,9 @@ def format_message(
 
 
 class TelemetryClient:
-    """Client for sending telemetry data via MQTT.
+    """Publishes agent activity telemetry over MQTT.
 
-    Connects to an MQTT broker and publishes agent activity messages.
-    Failures in connection or publishing are handled silently.
+    Connection and publication failures are logged at debug level, never raised.
     """
 
     def __init__(self, host: str | None = None, port: int | None = None) -> None:
@@ -127,10 +126,7 @@ class TelemetryClient:
         env: str | None = None,
         **details: object,
     ) -> bool:
-        """Send a telemetry message.
-
-        Formats the message and publishes it to the agent's activity topic.
-        Fails silently if an error occurs during connection or publication.
+        """Publish one telemetry message to the agent's activity topic at QoS 1.
 
         Args:
             agent: The name of the agent.

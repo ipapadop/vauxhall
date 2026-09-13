@@ -67,14 +67,7 @@ class DashboardApp:
                 self.window.invoke("agent-update", pending_update)
 
     def on_telemetry(self, data: object) -> None:
-        """Handle telemetry data received from MQTT.
-
-        If the frontend is ready, the data is invoked immediately.
-        Otherwise, it is queued until the frontend signals readiness.
-
-        Args:
-            data: The decoded telemetry data.
-        """
+        """Forward valid telemetry, or queue it until the frontend is ready."""
         try:
             error = telemetry_validation_error(data)
             if error is not None:
@@ -105,11 +98,7 @@ class DashboardApp:
             logger.exception("Error in on_telemetry")
 
     def on_status(self, message: str) -> None:
-        """Handle status updates from MQTT.
-
-        Args:
-            message: The status message.
-        """
+        """Record an MQTT status and forward it when the frontend is ready."""
         try:
             with self._updates_lock:
                 self.last_status = message

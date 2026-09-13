@@ -3,9 +3,8 @@
 
 """Vauxhall telemetry hook for Gemini CLI.
 
-This script is a unified entry point for all Gemini CLI hook events (BeforeAgent,
-AfterAgent, BeforeTool, AfterTool, and Notification). It processes the event JSON
-passed via stdin and sends formatted telemetry to the Vauxhall Dashboard.
+Reads one hook event (BeforeAgent, AfterAgent, AfterModel, BeforeTool, AfterTool,
+Notification, or SessionEnd) as JSON from stdin and publishes its telemetry.
 """
 
 import hashlib
@@ -73,14 +72,7 @@ def _create_telemetry_client() -> "TelemetryClient":
 def handle_notification(
     input_data: dict[str, Any],
 ) -> tuple[str, dict[str, Any]] | None:
-    """Handle Gemini CLI Notification events.
-
-    Args:
-        input_data: The hook event data.
-
-    Returns:
-        tuple[str, dict[str, Any]] | None: (state, details) or None to ignore.
-    """
+    """Map a ToolPermission notification to a waiting state; ignore others."""
     notification_type = input_data.get("notification_type", "")
     if notification_type == "ToolPermission":
         state = "Waiting for Input"
@@ -97,15 +89,7 @@ def handle_notification(
 def handle_before_tool(
     input_data: dict[str, Any], time_file: Path
 ) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI BeforeTool events.
-
-    Args:
-        input_data: The hook event data.
-        time_file: Path to record the start time.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
+    """Record a tool's start time and map BeforeTool to a state and details."""
     tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
     tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
 
@@ -140,15 +124,7 @@ def handle_before_tool(
 def handle_after_tool(
     input_data: dict[str, Any], time_file: Path
 ) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI AfterTool events.
-
-    Args:
-        input_data: The hook event data.
-        time_file: Path to read the start time.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
+    """Map an AfterTool outcome and its duration to a state and details."""
     tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
     state, status, error = _classify_tool_response(input_data.get("tool_response"))
     details: dict[str, Any] = {"status": status}
@@ -177,14 +153,7 @@ def handle_session_end(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]
 
 
 def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI AfterModel events.
-
-    Args:
-        input_data: The hook event data.
-
-    Returns:
-        tuple[str, dict[str, Any]]: (state, details).
-    """
+    """Map AfterModel to a thinking state with its token count, when present."""
     state = "Thinking"
     details = {"status": "Model replied"}
     usage = input_data.get("llm_response", {}).get("usageMetadata", {})

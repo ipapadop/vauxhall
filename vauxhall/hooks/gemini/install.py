@@ -132,7 +132,7 @@ def register_hook(settings: dict, event: str, hook_config: dict, command: str) -
 
 
 def install() -> None:
-    """Main installation entry point."""
+    """Install Vauxhall telemetry hooks into the current Gemini workspace."""
     print("Vauxhall Gemini Hook Installer")
     print("------------------------------")
 

@@ -290,8 +290,10 @@ reason values are not published.
   `write_file`, `replace`, and `view_file`. Events whose `args` exceed 4,096
   characters fail validation and are not published.
 - `tool_response` content is never published.
-- Tool durations use a timing file in the workspace's `.gemini/` directory,
-  keyed by session ID and, when present, `tool_call_id`.
+- Tool durations use a timing file per tool call in the system temporary
+  directory, keyed by workspace, session ID, and `tool_call_id` when present, or
+  otherwise the tool name and input. Concurrent tool calls do not overwrite each
+  other.
 
 ### Failure Handling
 
@@ -308,17 +310,21 @@ vauxhall-install-gemini
 
 The installer:
 
+- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. If the file
+  is invalid JSON or has an unexpected structure, it exits with an error and
+  leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
   that provided the command.
-- Reads `.gemini/settings.json` and backs it up to
-  `.gemini/settings.json.bak`. If the file cannot be read or parsed, it prints a
-  warning and starts from empty settings, overwriting the file without a
-  backup.
-- Removes hooks whose names start with `vauxhall-` and registers
-  `vauxhall-thinking` (`BeforeAgent`), `vauxhall-idle` (`AfterAgent`),
-  `vauxhall-model` (`AfterModel`), `vauxhall-acting` (`BeforeTool`),
-  `vauxhall-done` (`AfterTool`), `vauxhall-waiting` (`Notification`), and
-  `vauxhall-session-end` (`SessionEnd`).
+- Removes only handlers that Vauxhall generated: commands with the installed
+  hook module invocation, or the named handlers from earlier installers that
+  ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including
+  ones whose names start with `vauxhall-`, and the `enabled`, `disabled`, and
+  `notifications` hook options are kept.
+- Registers `vauxhall-thinking` (`BeforeAgent`), `vauxhall-idle`
+  (`AfterAgent`), `vauxhall-model` (`AfterModel`), `vauxhall-acting`
+  (`BeforeTool`), `vauxhall-done` (`AfterTool`), `vauxhall-waiting`
+  (`Notification`), and `vauxhall-session-end` (`SessionEnd`), and replaces the
+  settings file atomically.
 - Writes commands that run `python -m vauxhall.hooks.gemini.telemetry_hook`,
   quoted the same way as the Codex installer.
 

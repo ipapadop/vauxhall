@@ -3,16 +3,12 @@
 
 """Installation utility for Vauxhall Codex hooks."""
 
-import base64
-import json
-import shlex
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
 from vauxhall.hooks import common
-from vauxhall.hooks.common import WINDOWS_ENCODED_COMMAND_PREFIX, setup_venv
+from vauxhall.hooks.common import setup_venv
 
 HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
 HOOK_EVENTS = (
@@ -25,29 +21,6 @@ HOOK_EVENTS = (
     "Interrupt",
     "SessionEnd",
 )
-
-
-def _validate_hook_config(config: dict[str, Any]) -> None:
-    """Validate the nested structures modified by the installer."""
-    hooks = config.get("hooks", {})
-    if not isinstance(hooks, dict):
-        msg = "Codex hooks must be a JSON object"
-        raise TypeError(msg)
-    for event, groups in hooks.items():
-        if not isinstance(groups, list):
-            msg = f"Codex hook event {event!r} must contain a JSON array"
-            raise TypeError(msg)
-        for group in groups:
-            if not isinstance(group, dict):
-                msg = f"Codex hook event {event!r} contains a non-object group"
-                raise TypeError(msg)
-            handlers = group.get("hooks")
-            if not isinstance(handlers, list):
-                msg = f"Codex hook event {event!r} group must contain a hooks array"
-                raise TypeError(msg)
-            if not all(isinstance(handler, dict) for handler in handlers):
-                msg = f"Codex hook event {event!r} contains a non-object handler"
-                raise TypeError(msg)
 
 
 def build_hook_command(venv_python: Path) -> str:
@@ -64,25 +37,12 @@ def load_hooks(hooks_path: Path) -> dict[str, Any]:
     Returns:
         The existing valid configuration, or an empty dictionary when absent.
     """
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    if not hooks_path.exists():
-        return {}
+    return common.load_hook_settings(hooks_path, "Codex")
 
-    print(f"Reading existing hooks from {hooks_path}")
-    backup_path = hooks_path.with_suffix(".json.bak")
-    shutil.copy(hooks_path, backup_path)
-    print(f"Backup created at {backup_path}")
-    try:
-        with hooks_path.open() as file:
-            hooks = json.load(file)
-    except Exception as error:
-        msg = f"Could not read existing hooks: {error}"
-        raise ValueError(msg) from error
-    if not isinstance(hooks, dict):
-        msg = "Codex hooks configuration must be a JSON object"
-        raise TypeError(msg)
-    _validate_hook_config(hooks)
-    return hooks
+
+def _is_vauxhall_handler(handler: object) -> bool:
+    """Return whether a handler invokes Vauxhall's Codex hook module."""
+    return common.is_hook_handler(handler, HOOK_MODULE)
 
 
 def purge_vauxhall_hooks(config: dict[str, Any]) -> None:
@@ -91,63 +51,7 @@ def purge_vauxhall_hooks(config: dict[str, Any]) -> None:
     Args:
         config: Codex hook configuration to modify.
     """
-    hooks = config.get("hooks")
-    if not isinstance(hooks, dict):
-        return
-
-    for event in list(hooks):
-        groups = hooks[event]
-        if not isinstance(groups, list):
-            continue
-        for group in groups:
-            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-                continue
-            group["hooks"] = [
-                handler
-                for handler in group["hooks"]
-                if not _is_vauxhall_handler(handler)
-            ]
-        hooks[event] = [
-            group for group in groups if isinstance(group, dict) and group.get("hooks")
-        ]
-        if not hooks[event]:
-            del hooks[event]
-
-
-def _is_vauxhall_handler(handler: object) -> bool:
-    """Return whether a handler invokes Vauxhall's Codex hook module."""
-    if not isinstance(handler, dict) or handler.get("type") != "command":
-        return False
-    command = handler.get("command")
-    if not isinstance(command, str):
-        return False
-    if _is_vauxhall_invocation(command):
-        return True
-    if not command.startswith(WINDOWS_ENCODED_COMMAND_PREFIX):
-        return False
-    encoded_script = command.removeprefix(WINDOWS_ENCODED_COMMAND_PREFIX)
-    try:
-        script = base64.b64decode(encoded_script, validate=True).decode("utf-16-le")
-    except (UnicodeError, ValueError):
-        return False
-    return _is_vauxhall_invocation(script)
-
-
-def _is_vauxhall_invocation(command: str) -> bool:
-    """Return whether a shell command has a generated Vauxhall hook shape."""
-    try:
-        arguments = shlex.split(command)
-    except ValueError:
-        return False
-    if len(arguments) == 3:
-        executable = arguments[0]
-    elif len(arguments) == 4 and arguments[0] == "&":
-        executable = arguments[1]
-    else:
-        return False
-    executable_name = executable.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
-    is_python = executable_name.casefold() in {"python", "python.exe"}
-    return is_python and arguments[-2:] == ["-m", HOOK_MODULE]
+    common.purge_hook_handlers(config, _is_vauxhall_handler)
 
 
 def register_hook(config: dict[str, Any], event: str, command: str) -> None:
@@ -158,19 +62,13 @@ def register_hook(config: dict[str, Any], event: str, command: str) -> None:
         event: Codex lifecycle event name.
         command: Shell command Codex should execute.
     """
-    hooks = config.setdefault("hooks", {})
-    groups = hooks.setdefault(event, [])
     handler = {
         "type": "command",
         "command": command,
         "statusMessage": "Sending Vauxhall telemetry",
         "timeout": 3,
     }
-    for group in groups:
-        if group.get("matcher") == "*":
-            group.setdefault("hooks", []).append(handler)
-            return
-    groups.append({"matcher": "*", "hooks": [handler]})
+    common.register_hook_handler(config, event, handler)
 
 
 def install() -> None:
@@ -197,9 +95,7 @@ def install() -> None:
         print(f"Registered hook for: {event}")
 
     try:
-        with target_hooks.open("w") as file:
-            json.dump(config, file, indent=2)
-            file.write("\n")
+        common.write_json_atomically(target_hooks, config)
     except Exception as error:
         print(f"Error saving hooks: {error}")
         sys.exit(1)

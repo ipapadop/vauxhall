@@ -93,9 +93,12 @@ vauxhall-install-gemini
 
 Each installer recreates `.vauxhall-venv` in the workspace, installs the same
 Vauxhall release into it, and registers hooks that run the packaged hook
-module, so the hooks do not depend on a source checkout. Unrelated hooks are
-preserved. For Codex, open `/hooks` after installing to review and trust the
-new project hooks.
+module, so the hooks do not depend on a source checkout. Before changing an
+existing hook or settings file, the installer backs it up and validates it. If
+the file is invalid, the installer leaves it unchanged and exits with an error.
+Reinstalling replaces only Vauxhall's own handlers and writes the file
+atomically, preserving unrelated settings and hooks. For Codex, open `/hooks`
+after installing to review and trust the new project hooks.
 
 See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and
 integrating other agents.

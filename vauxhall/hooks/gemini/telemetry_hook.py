@@ -9,6 +9,7 @@ Notification, or SessionEnd) as JSON from stdin and publishes its telemetry.
 
 import hashlib
 import json
+import tempfile
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -29,13 +30,23 @@ logger = get_logger(__name__)
 def _tool_time_file(
     workspace: str, session_id: str, input_data: dict[str, Any]
 ) -> Path:
-    """Return a collision-resistant timing file for one Gemini tool call."""
+    """Return a collision-resistant timing file for one Gemini tool call.
+
+    BeforeTool and AfterTool share the call ID when Gemini provides one;
+    otherwise they share the tool name and input, which both events carry.
+    """
     tool_call_id = input_data.get("tool_call_id")
-    identity = session_id
     if isinstance(tool_call_id, str) and tool_call_id.strip():
-        identity = f"{identity}\0{tool_call_id.strip()}"
+        call_identity = tool_call_id.strip()
+    else:
+        call_identity = json.dumps(
+            [input_data.get("tool_name"), input_data.get("tool_input")],
+            sort_keys=True,
+            default=str,
+        )
+    identity = f"{workspace}\0{session_id}\0{call_identity}"
     digest = hashlib.sha256(identity.encode()).hexdigest()
-    return Path(workspace) / ".gemini" / f".vauxhall_tool_start.{digest}.time"
+    return Path(tempfile.gettempdir()) / f"vauxhall-gemini-{digest}.time"
 
 
 _SESSION_END_STATUSES = {

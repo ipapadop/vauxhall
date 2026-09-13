@@ -554,3 +554,83 @@ def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
         main()
 
     mock_client_class.assert_not_called()
+
+
+def test_tool_durations_without_call_ids_are_isolated_by_tool_input(
+    tmp_path: Path,
+) -> None:
+    """Concurrent calls without IDs must not share one per-workspace start time."""
+    workspace = tmp_path / "no-gemini-directory"
+
+    def event(hook: str, command: str) -> dict:
+        return {
+            "hook_event_name": hook,
+            "tool_name": "run_shell_command",
+            "tool_input": {"command": command},
+            "session_id": "session-one",
+            "cwd": str(workspace),
+        }
+
+    events = [
+        event("BeforeTool", "sleep 5"),
+        event("BeforeTool", "ls"),
+        event("AfterTool", "ls"),
+        event("AfterTool", "sleep 5"),
+    ]
+
+    with (
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
+        ) as mock_client_class,
+        patch("sys.stdout", new=io.StringIO()),
+        patch(
+            "vauxhall.hooks.gemini.telemetry_hook.time.time",
+            side_effect=[1000.0, 1004.0, 1005.0, 1010.0],
+        ),
+    ):
+        mock_instance = mock_client_class.return_value
+        mock_instance.__enter__.return_value = mock_instance
+        for item in events:
+            with patch("sys.stdin", io.StringIO(json.dumps(item))):
+                main()
+
+    durations = [
+        call.kwargs.get("duration")
+        for call in mock_instance.send.call_args_list
+        if call.kwargs["state"] == "Thinking"
+    ]
+    assert durations == [1.0, 10.0]
+    assert not workspace.exists()
+
+
+@pytest.mark.parametrize(
+    "hook_data",
+    [
+        {"hook_event_name": "BeforeTool", "session_id": "s", "tool_input": []},
+        {"hook_event_name": "AfterModel", "session_id": "s", "llm_response": "x"},
+        {
+            "hook_event_name": "Notification",
+            "session_id": "s",
+            "notification_type": "ToolPermission",
+            "details": "not-an-object",
+        },
+        {"hook_event_name": "BeforeTool", "session_id": "s", "cwd": ["not-a-path"]},
+    ],
+)
+def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
+    """Malformed nested hook fields cannot break the Gemini stdout protocol."""
+    completed = subprocess.run(
+        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
+        input=json.dumps(hook_data),
+        text=True,
+        capture_output=True,
+        check=False,
+        env={
+            **os.environ,
+            "VAUXHALL_MQTT_HOST": "127.0.0.1",
+            "VAUXHALL_MQTT_PORT": "1",
+        },
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"

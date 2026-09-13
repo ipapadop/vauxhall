@@ -44,8 +44,8 @@ export function ensureAgentCapacity(maxAgents) {
  * @param {object} data - The telemetry data.
  */
 export function updateAgentHistory(card, data) {
-    if (!card.history) card.history = [];
-    
+    card.history ??= [];
+
     card.history.unshift({
         time: new Date().toLocaleTimeString(),
         state: data.state,

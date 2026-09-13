@@ -16,105 +16,61 @@ async function init() {
     console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');
     const grid = document.getElementById('agent-grid');
-    
+
     if (!grid) return;
 
-    // UI Element References
-    const clearBtn = document.getElementById('clear-btn');
-    const clearStaleBtn = document.getElementById('clear-stale-btn');
-    const themeToggle = document.getElementById('theme-toggle');
     const logoLink = document.getElementById('logo-link');
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
-    const closeBtn = document.querySelector('.close-btn');
     const modal = document.getElementById('history-modal');
-    
+
     // Theme Management
-    const savedTheme = localStorage.getItem('vauxhall-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('vauxhall-theme') || 'dark');
+    document.getElementById('theme-toggle')?.addEventListener('click', () => {
+        const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('vauxhall-theme', newTheme);
+    });
 
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('vauxhall-theme', newTheme);
-        });
-    }
-
-    if (logoLink) {
-        logoLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            const url = logoLink.getAttribute('href');
-            if (url && window.ipc && window.ipc.DashboardIPC) {
-                window.ipc.DashboardIPC.open_url(url);
-            }
-        });
-    }
+    logoLink?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = logoLink.getAttribute('href');
+        if (url) window.ipc?.DashboardIPC?.open_url(url);
+    });
 
     // Tracks which agent is currently being viewed in the modal for live updates
     let currentHistoryKey = null;
+    const closeModal = () => {
+        closeHistoryModal();
+        currentHistoryKey = null;
+    };
+    const refreshModal = () => {
+        if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
+    };
 
-    // Setup Event Listeners
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            grid.innerHTML = '';
-            clearAgents();
-        });
-    }
+    document.getElementById('clear-btn')?.addEventListener('click', () => {
+        grid.innerHTML = '';
+        clearAgents();
+    });
 
-    if (clearStaleBtn) {
-        clearStaleBtn.addEventListener('click', () => {
-            for (const key in agents) {
-                const card = agents[key];
-                if (card.classList.contains('stale')) {
-                    card.remove();
-                    removeAgent(key);
-                }
+    document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
+        for (const [key, card] of Object.entries(agents)) {
+            if (card.classList.contains('stale')) {
+                card.remove();
+                removeAgent(key);
             }
-        });
-    }
+        }
+    });
 
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            filterGrid(e.target.value.toLowerCase(), agents);
-        });
-    }
+    searchInput?.addEventListener('input', (e) => filterGrid(e.target.value.toLowerCase(), agents));
+    sortSelect?.addEventListener('change', (e) => sortGrid(e.target.value, grid));
+    document.querySelector('.close-btn')?.addEventListener('click', closeModal);
+    document.getElementById('modal-search')?.addEventListener('input', refreshModal);
+    document.getElementById('modal-state-filter')?.addEventListener('change', refreshModal);
 
-    if (sortSelect) {
-        sortSelect.addEventListener('change', (e) => {
-            sortGrid(e.target.value, grid);
-        });
-    }
-
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            closeHistoryModal();
-            currentHistoryKey = null;
-        };
-    }
-
-    const modalSearch = document.getElementById('modal-search');
-    const modalFilter = document.getElementById('modal-state-filter');
-
-    if (modalSearch) {
-        modalSearch.addEventListener('input', () => {
-            if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
-        });
-    }
-
-    if (modalFilter) {
-        modalFilter.addEventListener('change', () => {
-            if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
-        });
-    }
-    
     // Close modal on background click
     window.onclick = (event) => {
-        if (event.target == modal) {
-            closeHistoryModal();
-            currentHistoryKey = null;
-        }
+        if (event.target === modal) closeModal();
     };
 
     // Initialize IPC with Python backend
@@ -123,7 +79,7 @@ async function init() {
     try {
         if (!window.pyloid) return;
 
-        if (window.ipc && window.ipc.DashboardIPC) {
+        if (window.ipc?.DashboardIPC) {
             try {
                 maxActiveAgents = await window.ipc.DashboardIPC.get_max_active_agents();
                 console.log(`Maximum active agents set to ${maxActiveAgents}`);
@@ -138,11 +94,7 @@ async function init() {
                 let card = agents[key];
 
                 if (!card) {
-                    const evictedKey = ensureAgentCapacity(maxActiveAgents);
-                    if (evictedKey === currentHistoryKey) {
-                        closeHistoryModal();
-                        currentHistoryKey = null;
-                    }
+                    if (ensureAgentCapacity(maxActiveAgents) === currentHistoryKey) closeModal();
                     card = createCard(data, window.ipc, () => {
                         currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);
@@ -151,25 +103,16 @@ async function init() {
                     grid.appendChild(card);
                 }
 
-                // Global state management
                 updateAgentHistory(card, data);
                 updateLastSeen(card);
-                
-                // UI updates
                 updateCard(card, data);
 
                 // Push live updates to the history modal if it's viewing this agent
-                if (currentHistoryKey === key) {
-                    openHistoryModal(key, agents, true); // true = silent update
-                }
+                if (currentHistoryKey === key) openHistoryModal(key, agents, true);
 
                 // Re-apply filter and sort to keep view consistent
-                if (searchInput && searchInput.value) {
-                    filterGrid(searchInput.value.toLowerCase(), agents);
-                }
-                if (sortSelect && sortSelect.value) {
-                    sortGrid(sortSelect.value, grid);
-                }
+                if (searchInput?.value) filterGrid(searchInput.value.toLowerCase(), agents);
+                if (sortSelect?.value) sortGrid(sortSelect.value, grid);
             },
             onStatusUpdate: (msg) => {
                 if (status) status.innerText = msg;
@@ -178,14 +121,12 @@ async function init() {
                 if (status) status.innerText = "Connected to Agent Fleet";
 
                 // Fetch stale threshold from settings
-                if (window.ipc && window.ipc.DashboardIPC) {
-                    window.ipc.DashboardIPC.get_stale_threshold().then(seconds => {
-                        staleThresholdMs = seconds * 1000;
-                        console.log(`Stale threshold set to ${staleThresholdMs}ms`);
-                    }).catch(err => {
-                        console.error("Failed to fetch stale threshold:", err);
-                    });
-                }
+                window.ipc?.DashboardIPC?.get_stale_threshold().then(seconds => {
+                    staleThresholdMs = seconds * 1000;
+                    console.log(`Stale threshold set to ${staleThresholdMs}ms`);
+                }).catch(err => {
+                    console.error("Failed to fetch stale threshold:", err);
+                });
             },
             onError: (err) => {
                 console.error("IPC Error:", err);
@@ -195,7 +136,6 @@ async function init() {
 
         // Start staleness check every 10 seconds
         setInterval(() => checkStaleness(agents, staleThresholdMs), 10000);
-
     } catch (err) {
         console.error("Initialization error:", err);
     }
@@ -206,7 +146,7 @@ if (window.pyloid) {
     init();
 } else {
     window.addEventListener('pyloidReady', init);
-    
+
     // Fallback: Check every 100ms for 2 seconds
     let checks = 0;
     const interval = setInterval(() => {

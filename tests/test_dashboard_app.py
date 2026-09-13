@@ -6,8 +6,11 @@
 import json
 import unittest
 from copy import deepcopy
+from threading import Event, Thread
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
+
+import pytest
 
 # Mock dependencies that might not be available or should be isolated
 sys_modules_patch = patch.dict(
@@ -24,6 +27,20 @@ sys_modules_patch.start()
 from vauxhall.dashboard.app import DashboardApp  # noqa: E402
 from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
+
+
+def valid_event(**overrides: object) -> dict[str, object]:
+    """Return a valid version-one dashboard telemetry event."""
+    event: dict[str, object] = {
+        "schema_version": 1,
+        "agent": "Codex",
+        "workspace": "/workspace",
+        "session_id": "session-1",
+        "state": "Thinking",
+        "details": {},
+    }
+    event.update(overrides)
+    return event
 
 
 class TestDashboardComponents(unittest.TestCase):
@@ -64,6 +81,34 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.window.invoke.assert_not_called()
         assert len(self.dashboard.pending_updates) == 0
 
+    @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+    def test_run_uses_configured_pyloid_window_settings(
+        self, mock_serve: MagicMock
+    ) -> None:
+        """Dashboard startup passes its supported settings to Pyloid."""
+        with (
+            patch("vauxhall.dashboard.app.DashboardSubscriber"),
+            patch("vauxhall.dashboard.app.settings") as mock_settings,
+        ):
+            mock_settings.dashboard.window_title = "Configured dashboard"
+            mock_settings.dashboard.width = 1280
+            mock_settings.dashboard.height = 720
+            mock_settings.dashboard.debug = True
+            mock_settings.dashboard.port = 9090
+
+            self.mock_app.run.side_effect = KeyboardInterrupt
+            with pytest.raises(KeyboardInterrupt):
+                self.dashboard.run()
+
+        self.mock_app.create_window.assert_called_once_with(
+            title="Configured dashboard",
+            width=1280,
+            height=720,
+            dev_tools=True,
+            IPCs=[self.dashboard.ipc],
+        )
+        mock_serve.assert_called_once_with(ANY, port=9090)
+
     def test_on_telemetry_queuing(self) -> None:
         """Verify that telemetry queued when IPC is not ready and flushed on drain."""
         self.dashboard.ipc.is_ready = False
@@ -95,7 +140,7 @@ class TestDashboardComponents(unittest.TestCase):
         forwarded_data = self.dashboard.window.invoke.call_args.args[1]
         assert forwarded_data == expected_data
         assert forwarded_data is not expected_data
-        assert self.dashboard.pending_updates == []
+        assert not self.dashboard.pending_updates
 
     def test_on_telemetry_rejects_unversioned_and_unsupported_messages(self) -> None:
         """Only supported schema-v1 telemetry may reach dashboard state."""
@@ -108,7 +153,7 @@ class TestDashboardComponents(unittest.TestCase):
             self.dashboard.on_telemetry(unversioned)
             self.dashboard.on_telemetry(unsupported)
 
-        assert self.dashboard.pending_updates == []
+        assert not self.dashboard.pending_updates
         self.dashboard.window.invoke.assert_not_called()
         assert "schema_version is required" in logs.output[0]
         assert "unsupported schema_version; expected 1" in logs.output[1]
@@ -180,7 +225,7 @@ class TestDashboardComponents(unittest.TestCase):
             "agent": "Gemini",
             "workspace": "/home/user/project",
             "session_id": "native:session-1",
-            "state": "Running",
+            "state": "Thinking",
             "details": {},
         }
         msg.payload = json.dumps(data).encode()
@@ -203,6 +248,191 @@ class TestDashboardComponents(unittest.TestCase):
         subscriber._on_message(None, None, msg)
 
         callback.assert_not_called()
+
+
+def test_pending_updates_discards_oldest_when_not_ready(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Retain only the newest pre-ready telemetry events at the queue limit."""
+    monkeypatch.setattr(
+        "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
+    )
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = False
+
+    for sequence in range(1, 6):
+        dashboard.on_telemetry(valid_event(details={"sequence": sequence}))
+
+    assert [event["details"]["sequence"] for event in dashboard.pending_updates] == [
+        3,
+        4,
+        5,
+    ]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelname == "WARNING"
+    ]
+    assert len(warnings) == 2
+    assert all(
+        "discarded oldest pending telemetry update" in warning.lower()
+        for warning in warnings
+    )
+    assert all("sequence" not in warning for warning in warnings)
+
+
+def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep a bounded newest tail during a large pre-ready telemetry burst."""
+    monkeypatch.setattr(
+        "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
+    )
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = False
+
+    for sequence in range(1, 10_001):
+        dashboard.on_telemetry(valid_event(details={"sequence": sequence}))
+
+    assert len(dashboard.pending_updates) == 3
+    assert [event["details"]["sequence"] for event in dashboard.pending_updates] == [
+        9_998,
+        9_999,
+        10_000,
+    ]
+    assert dashboard.discarded_pending_updates == 9_997
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert [record.args[0] for record in warnings] == [2**i for i in range(14)]
+
+
+def test_readiness_transition_cannot_strand_a_pending_update() -> None:
+    """An event racing frontend readiness must be delivered exactly once."""
+    dashboard = DashboardApp(MagicMock())
+    dashboard.window = MagicMock()
+    readiness_read = Event()
+    continue_read = Event()
+    readiness_started = Event()
+    original_ready_callback = dashboard.ipc.on_ready_callback
+
+    class CoordinatedIPC:
+        def __init__(self) -> None:
+            self._is_ready = False
+
+        @property
+        def is_ready(self) -> bool:
+            observed = self._is_ready
+            if not observed:
+                readiness_read.set()
+                if not continue_read.wait(timeout=2):
+                    raise TimeoutError
+            return observed
+
+        @is_ready.setter
+        def is_ready(self, value: bool) -> None:
+            self._is_ready = value
+
+        def set_ready(self) -> bool:
+            self._is_ready = True
+            readiness_started.set()
+            assert original_ready_callback is not None
+            original_ready_callback()
+            return True
+
+    dashboard.ipc = CoordinatedIPC()  # type: ignore[assignment]
+    telemetry_thread = Thread(target=dashboard.on_telemetry, args=(valid_event(),))
+    ready_thread = Thread(target=dashboard.ipc.set_ready)
+
+    telemetry_thread.start()
+    assert readiness_read.wait(timeout=2)
+    ready_thread.start()
+    assert readiness_started.wait(timeout=2)
+    continue_read.set()
+    telemetry_thread.join(timeout=2)
+    ready_thread.join(timeout=2)
+
+    assert not telemetry_thread.is_alive()
+    assert not ready_thread.is_alive()
+    assert not dashboard.pending_updates
+    dashboard.window.invoke.assert_called_once_with("agent-update", valid_event())
+
+
+def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> None:
+    """A live update cannot overtake the queued readiness snapshot."""
+    dashboard = DashboardApp(MagicMock())
+    queued_event = valid_event(state="Thinking")
+    live_event = valid_event(state="Acting")
+    dashboard.on_telemetry(queued_event)
+    queued_dispatch_started = Event()
+    continue_queued_dispatch = Event()
+    live_saw_ready = Event()
+    deliveries: list[str] = []
+    original_ready_callback = dashboard.ipc.on_ready_callback
+
+    class ReadinessObservingIPC:
+        def __init__(self) -> None:
+            self._is_ready = False
+
+        @property
+        def is_ready(self) -> bool:
+            if self._is_ready:
+                live_saw_ready.set()
+            return self._is_ready
+
+        @is_ready.setter
+        def is_ready(self, value: bool) -> None:
+            self._is_ready = value
+
+        def set_ready(self) -> bool:
+            assert original_ready_callback is not None
+            original_ready_callback()
+            if not self._is_ready:
+                self._is_ready = True
+            return True
+
+    def invoke(_channel: str, event: dict[str, object]) -> None:
+        if event["state"] == "Thinking":
+            queued_dispatch_started.set()
+            if not continue_queued_dispatch.wait(timeout=2):
+                raise TimeoutError
+        deliveries.append(str(event["state"]))
+
+    dashboard.ipc = ReadinessObservingIPC()  # type: ignore[assignment]
+    dashboard.window = MagicMock()
+    dashboard.window.invoke.side_effect = invoke
+    ready_thread = Thread(target=dashboard.ipc.set_ready)
+    live_thread = Thread(target=dashboard.on_telemetry, args=(live_event,))
+
+    ready_thread.start()
+    assert queued_dispatch_started.wait(timeout=2)
+    live_thread.start()
+    assert live_saw_ready.wait(timeout=2)
+    continue_queued_dispatch.set()
+    ready_thread.join(timeout=2)
+    live_thread.join(timeout=2)
+
+    assert not ready_thread.is_alive()
+    assert not live_thread.is_alive()
+    assert deliveries == ["Thinking", "Acting"]
+
+
+@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None:
+    """MQTT cleanup runs even when the UI event loop exits exceptionally."""
+    app = MagicMock()
+    app.run.side_effect = RuntimeError("UI failed")
+
+    with (
+        patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type,
+        pytest.raises(RuntimeError, match="UI failed"),
+    ):
+        DashboardApp(app).run()
+
+    mock_serve.assert_called_once()
+    subscriber_type.return_value.start.assert_called_once_with()
+    subscriber_type.return_value.stop.assert_called_once_with()
 
 
 if __name__ == "__main__":

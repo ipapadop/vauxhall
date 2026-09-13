@@ -1581,7 +1581,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "paho-mqtt", specifier = ">=2.0.0" },
-    { name = "pyloid", marker = "extra == 'dashboard'", specifier = ">=0.1.0" },
+    { name = "pyloid", marker = "extra == 'dashboard'", specifier = ">=0.27.2" },
     { name = "pyperclip", marker = "extra == 'dashboard'", specifier = ">=1.8.2" },
 ]
 provides-extras = ["dashboard", "hooks"]

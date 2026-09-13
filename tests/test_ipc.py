@@ -16,11 +16,12 @@ def test_ipc_ping() -> None:
 
 
 def test_ipc_set_ready() -> None:
-    """Verify that set_ready triggers the callback and updates state."""
+    """Verify that set_ready triggers its callback only on the first call."""
     callback = MagicMock()
     ipc = DashboardIPC(on_ready_callback=callback)
 
     assert ipc.is_ready is False
+    assert ipc.set_ready() is True
     assert ipc.set_ready() is True
     assert ipc.is_ready is True
     callback.assert_called_once()
@@ -30,6 +31,12 @@ def test_ipc_get_stale_threshold() -> None:
     """Verify that get_stale_threshold returns value from settings."""
     ipc = DashboardIPC()
     assert ipc.get_stale_threshold() == settings.dashboard.stale_threshold
+
+
+def test_ipc_get_max_active_agents() -> None:
+    """Verify that get_max_active_agents returns value from settings."""
+    ipc = DashboardIPC()
+    assert ipc.get_max_active_agents() == settings.dashboard.max_active_agents
 
 
 @patch("vauxhall.dashboard.ipc.pyperclip.copy")

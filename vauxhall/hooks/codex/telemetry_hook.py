@@ -12,6 +12,7 @@ from contextlib import redirect_stdout, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.hooks.identity import resolve_session_id
 
@@ -19,6 +20,40 @@ if TYPE_CHECKING:
     from vauxhall.hooks.client import TelemetryClient
 
 logger = get_logger(__name__)
+
+
+_CANCELLATION_MARKERS = frozenset({"cancelled", "canceled", "aborted"})
+
+
+def _is_cancelled(response: dict[str, Any]) -> bool:
+    """Return whether a Codex tool response contains a cancellation marker."""
+    if response.get("cancelled") is True or response.get("canceled") is True:
+        return True
+    candidates = [response.get(key) for key in ("code", "status", "name")]
+    error = response.get("error")
+    if isinstance(error, dict):
+        candidates.extend(error.get(key) for key in ("code", "status", "name"))
+    return any(
+        isinstance(value, str) and value.lower() in _CANCELLATION_MARKERS
+        for value in candidates
+    )
+
+
+def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
+    """Map a Codex tool response to a truthful telemetry outcome."""
+    if not isinstance(response, dict):
+        return "Thinking", "result unavailable", None
+    if _is_cancelled(response):
+        return "Idle", "cancelled", None
+    exit_code = response.get("exit_code")
+    has_exit_code = isinstance(exit_code, int) and not isinstance(exit_code, bool)
+    if has_exit_code and exit_code != 0:
+        return "Error", "failed", f"Bash failed (exit code {exit_code})"
+    if response.get("isError") is True:
+        return "Error", "failed", "Tool reported an error"
+    if has_exit_code or response.get("isError") is False:
+        return "Thinking", "completed", None
+    return "Thinking", "result unavailable", None
 
 
 def _create_telemetry_client() -> "TelemetryClient":
@@ -90,9 +125,12 @@ def _handle_pre_tool(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 def _handle_post_tool(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Translate a Codex PostToolUse event."""
     tool_name = input_data.get("tool_name", "unknown")
-    details: dict[str, Any] = {"status": "completed"}
+    state, status, error = _classify_tool_response(input_data.get("tool_response"))
+    details: dict[str, Any] = {"status": status}
     if tool_name != "unknown":
         details["tool"] = tool_name
+    if error is not None:
+        details["error"] = error
 
     time_file = _tool_time_file(input_data)
     if time_file is not None:
@@ -102,7 +140,7 @@ def _handle_post_tool(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             time_file.unlink()
         except Exception:
             pass
-    return "Thinking", details
+    return state, details
 
 
 def _handle_permission(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -137,9 +175,12 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     elif hook_type == "SessionStart":
         state = "Thinking"
         details = {"status": "Session started"}
-    elif hook_type in {"Stop", "Interrupt", "SessionEnd"}:
+    elif hook_type in {"Stop", "SessionEnd"}:
         state = "Idle"
         details = {"status": "Ready"}
+    elif hook_type == "Interrupt":
+        state = "Idle"
+        details = {"status": "interrupted"}
     else:
         return
 
@@ -166,6 +207,8 @@ def main() -> None:
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 _send_telemetry(input_data)
+    except ConfigurationError as error:
+        print(error, file=sys.stderr)
     except Exception:
         pass
     print("{}")

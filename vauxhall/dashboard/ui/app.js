@@ -8,11 +8,11 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 
-function init() {
+async function init() {
     console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');
     const grid = document.getElementById('agent-grid');
@@ -119,8 +119,18 @@ function init() {
 
     // Initialize IPC with Python backend
     let staleThresholdMs = 120000;
+    let maxActiveAgents = 100;
     try {
         if (!window.pyloid) return;
+
+        if (window.ipc && window.ipc.DashboardIPC) {
+            try {
+                maxActiveAgents = await window.ipc.DashboardIPC.get_max_active_agents();
+                console.log(`Maximum active agents set to ${maxActiveAgents}`);
+            } catch (err) {
+                console.error("Failed to fetch maximum active agents:", err);
+            }
+        }
 
         initIPC({
             onAgentUpdate: (data) => {
@@ -128,6 +138,11 @@ function init() {
                 let card = agents[key];
 
                 if (!card) {
+                    const evictedKey = ensureAgentCapacity(maxActiveAgents);
+                    if (evictedKey === currentHistoryKey) {
+                        closeHistoryModal();
+                        currentHistoryKey = null;
+                    }
                     card = createCard(data, window.ipc, () => {
                         currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);

@@ -14,11 +14,16 @@ import sys
 import time
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
-from vauxhall.hooks.client import TelemetryClient
 from vauxhall.hooks.identity import resolve_session_id
+
+if TYPE_CHECKING:
+    from vauxhall.hooks.client import TelemetryClient
+else:
+    TelemetryClient = None
 
 logger = get_logger(__name__)
 
@@ -33,6 +38,52 @@ def _tool_time_file(
         identity = f"{identity}\0{tool_call_id.strip()}"
     digest = hashlib.sha256(identity.encode()).hexdigest()
     return Path(workspace) / ".gemini" / f".vauxhall_tool_start.{digest}.time"
+
+
+_CANCELLATION_MARKERS = frozenset({"cancelled", "canceled", "aborted"})
+_SESSION_END_STATUSES = {
+    "exit": "session exited",
+    "clear": "session cleared",
+    "logout": "logged out",
+    "prompt_input_exit": "input closed",
+}
+
+
+def _is_cancelled(response: dict[str, Any]) -> bool:
+    """Return whether a Gemini tool response contains a cancellation marker."""
+    if response.get("cancelled") is True or response.get("canceled") is True:
+        return True
+    candidates = [response.get(key) for key in ("code", "status", "name")]
+    error = response.get("error")
+    if isinstance(error, dict):
+        candidates.extend(error.get(key) for key in ("code", "status", "name"))
+    return any(
+        isinstance(value, str) and value.lower() in _CANCELLATION_MARKERS
+        for value in candidates
+    )
+
+
+def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
+    """Map a Gemini tool response to a truthful telemetry outcome."""
+    if not isinstance(response, dict):
+        return "Thinking", "result unavailable", None
+    if _is_cancelled(response):
+        return "Idle", "cancelled", None
+    if response.get("error") is not None:
+        return "Error", "failed", "Tool reported an error"
+    return "Thinking", "completed", None
+
+
+def _create_telemetry_client() -> "TelemetryClient":
+    """Create the telemetry client only inside the hook failure boundary."""
+    if TelemetryClient is not None:
+        return TelemetryClient()
+
+    from vauxhall.hooks.client import (  # noqa: PLC0415
+        TelemetryClient as _TelemetryClient,
+    )
+
+    return _TelemetryClient()
 
 
 def _setup_logging() -> None:
@@ -131,11 +182,13 @@ def handle_after_tool(
     Returns:
         tuple[str, dict[str, Any]]: (state, details).
     """
-    state = "Thinking"
     tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
-    details = {"status": "completed"}
+    state, status, error = _classify_tool_response(input_data.get("tool_response"))
+    details: dict[str, Any] = {"status": status}
     if tool_name != "unknown":
         details["tool"] = tool_name
+    if error is not None:
+        details["error"] = error
 
     # Calculate duration
     try:
@@ -148,6 +201,17 @@ def handle_after_tool(
     except Exception:
         pass
     return state, details
+
+
+def handle_session_end(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Handle Gemini CLI SessionEnd events without publishing raw reasons."""
+    reason = input_data.get("reason")
+    status = (
+        _SESSION_END_STATUSES.get(reason, "session ended")
+        if isinstance(reason, str)
+        else "session ended"
+    )
+    return "Idle", {"status": status}
 
 
 def handle_before_agent(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -222,10 +286,11 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
     details: dict[str, Any] = {}
     notification_result: tuple[str, dict[str, Any]] | None = None
 
-    if hook_type == "Notification":
-        notification_result = handle_notification(input_data)
-        if notification_result is None:
-            return
+    if (
+        hook_type == "Notification"
+        and (notification_result := handle_notification(input_data)) is None
+    ):
+        return
 
     session_id = resolve_session_id(input_data)
     if session_id is None:
@@ -245,10 +310,12 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
         state, details = handle_before_tool(input_data, time_file)
     elif hook_type == "AfterTool":
         state, details = handle_after_tool(input_data, time_file)
+    elif hook_type == "SessionEnd":
+        state, details = handle_session_end(input_data)
     else:
         state, details = handle_unknown_hook(hook_type)
 
-    with TelemetryClient() as client:
+    with _create_telemetry_client() as client:
         client.send(
             agent=agent_name,
             workspace=workspace,
@@ -266,6 +333,8 @@ def main() -> None:
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 _send_telemetry(input_data)
+    except ConfigurationError as error:
+        print(error, file=sys.stderr)
     except Exception:
         pass
     print("{}")

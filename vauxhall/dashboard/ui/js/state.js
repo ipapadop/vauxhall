@@ -19,6 +19,26 @@ export function agentKey(data) {
 }
 
 /**
+ * Removes the least recently seen card when a new card would exceed capacity.
+ * @param {number} maxAgents - Maximum number of cards to retain.
+ * @returns {string | null} The evicted card key, if any.
+ */
+export function ensureAgentCapacity(maxAgents) {
+    const entries = Object.entries(agents);
+    if (entries.length < maxAgents) return null;
+
+    entries.sort(([leftKey, left], [rightKey, right]) => {
+        const age = Number(left.dataset.lastSeen || 0) - Number(right.dataset.lastSeen || 0);
+        return age || leftKey.localeCompare(rightKey);
+    });
+
+    const [key, card] = entries[0];
+    card.remove();
+    delete agents[key];
+    return key;
+}
+
+/**
  * Ensures an agent's history buffer is initialized and updated.
  * @param {HTMLElement} card - The agent card element.
  * @param {object} data - The telemetry data.

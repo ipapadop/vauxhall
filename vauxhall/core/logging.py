@@ -20,8 +20,6 @@ class ColoredFormatter(logging.Formatter):
     GREEN = "\x1b[32;20m"
     RESET = "\x1b[0m"
 
-    FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-
     COLORS: ClassVar[dict[int, str]] = {
         logging.DEBUG: BLUE,
         logging.INFO: GREEN,
@@ -31,14 +29,7 @@ class ColoredFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format the log record with colors.
-
-        Args:
-            record: The log record to format.
-
-        Returns:
-            str: The formatted log record.
-        """
+        """Format a log record with a colored level name."""
         log_color = self.COLORS.get(record.levelno, self.GREY)
         format_str = (
             f"%(asctime)s [{log_color}%(levelname)s{self.RESET}] %(name)s: %(message)s"
@@ -54,7 +45,7 @@ class _LoggingState:
 
 
 def setup_logging(level: int | str = logging.INFO) -> None:
-    """Set up the default logging configuration with color.
+    """Configure colored root logging once per process.
 
     Args:
         level: The logging level to use. Defaults to logging.INFO.

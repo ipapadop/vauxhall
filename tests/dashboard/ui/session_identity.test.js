@@ -10,7 +10,7 @@ import {
     agentKey,
     agents,
     clearAgents,
-} from '../../vauxhall/dashboard/ui/js/state.js';
+} from '../../../vauxhall/dashboard/ui/js/state.js';
 
 test('agent identity includes session and cannot collide on delimiters', () => {
     const first = agentKey({ agent: 'A:B', workspace: 'C', session_id: 'D' });
@@ -55,7 +55,7 @@ test('same agent and workspace sessions create separate cards', async (t) => {
     globalThis.setInterval = () => 0;
     clearAgents();
 
-    await import(`../../vauxhall/dashboard/ui/app.js?test=${Date.now()}`);
+    await import(`../../../vauxhall/dashboard/ui/app.js?test=${Date.now()}`);
     const base = {
         schema_version: 1,
         agent: 'Codex',
@@ -127,7 +127,7 @@ test('configured capacity retains existing cards and closes an evicted card moda
     globalThis.setInterval = () => 0;
     clearAgents();
 
-    await import(`../../vauxhall/dashboard/ui/app.js?capacity=${Date.now()}`);
+    await import(`../../../vauxhall/dashboard/ui/app.js?capacity=${Date.now()}`);
     await new Promise(resolve => setImmediate(resolve));
 
     const base = {
@@ -207,7 +207,7 @@ test('capacity loads before readiness delivers queued events', async (t) => {
     globalThis.setInterval = () => 0;
     clearAgents();
 
-    await import(`../../vauxhall/dashboard/ui/app.js?queued-capacity=${Date.now()}`);
+    await import(`../../../vauxhall/dashboard/ui/app.js?queued-capacity=${Date.now()}`);
     await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(setReadyCalls, 0);

@@ -91,13 +91,7 @@ class DashboardSubscriber:
     def _on_message(
         self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
-        """Internal callback for MQTT messages.
-
-        Args:
-            client: The MQTT client instance.
-            userdata: Private user data.
-            msg: The received message.
-        """
+        """Validate one MQTT telemetry message and forward it to the callback."""
         payload = msg.payload
         if len(payload) > settings.dashboard.max_payload_bytes:
             logger.warning(

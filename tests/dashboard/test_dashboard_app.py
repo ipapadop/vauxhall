@@ -435,5 +435,30 @@ def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None
     subscriber_type.return_value.stop.assert_called_once_with()
 
 
+@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> None:
+    """Status reported while stopping MQTT must not reach the destroyed window."""
+    app = MagicMock()
+    dashboard = DashboardApp(app)
+
+    def close_ready_window() -> None:
+        dashboard.ipc.is_ready = True
+        raise SystemExit(0)
+
+    app.run.side_effect = close_ready_window
+
+    with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
+        subscriber_type.return_value.stop.side_effect = lambda: dashboard.on_status(
+            "Disconnected"
+        )
+        with pytest.raises(SystemExit):
+            dashboard.run()
+
+    mock_serve.assert_called_once()
+    subscriber_type.return_value.stop.assert_called_once_with()
+    app.create_window.return_value.invoke.assert_not_called()
+    assert dashboard.last_status == "Disconnected"
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,26 +14,23 @@
  */
 export function initIPC(callbacks) {
     const pyloidEvent = window.pyloid.event || window.pyloid.EventAPI;
-    const pyloidIpc = window.ipc;
+    const dashboardIpc = window.ipc?.DashboardIPC;
 
-    if (pyloidEvent && pyloidEvent.listen) {
+    if (pyloidEvent?.listen) {
         pyloidEvent.listen('agent-update', callbacks.onAgentUpdate);
         pyloidEvent.listen('status-update', callbacks.onStatusUpdate);
     }
 
-    if (pyloidIpc && pyloidIpc.DashboardIPC) {
-        // Verify bridge health before signaling ready
-        pyloidIpc.DashboardIPC.ping().then(alive => {
-            if (alive) {
-                pyloidIpc.DashboardIPC.set_ready().then(() => {
-                    if (callbacks.onReady) callbacks.onReady();
-                });
-            }
-        }).catch(err => {
-            console.error("IPC Health Check Failed:", err);
-            if (callbacks.onError) callbacks.onError("IPC Connection Failed");
-        });
-    } else {
-        if (callbacks.onError) callbacks.onError("DashboardIPC not found");
+    if (!dashboardIpc) {
+        callbacks.onError?.("DashboardIPC not found");
+        return;
     }
+
+    // Verify bridge health before signaling ready
+    dashboardIpc.ping().then(alive => {
+        if (alive) dashboardIpc.set_ready().then(() => callbacks.onReady?.());
+    }).catch(err => {
+        console.error("IPC Health Check Failed:", err);
+        callbacks.onError?.("IPC Connection Failed");
+    });
 }

@@ -41,7 +41,7 @@ class DashboardIPC(PyloidIPC):
 
     @Bridge(result=bool)
     def set_ready(self) -> bool:
-        """Called by JavaScript when the frontend is ready to receive events.
+        """Mark the frontend ready, draining queued updates on the first call.
 
         Returns:
             bool: Always True.
@@ -50,8 +50,7 @@ class DashboardIPC(PyloidIPC):
             return True
         if self.on_ready_callback:
             self.on_ready_callback()
-        if not self.is_ready:
-            self.is_ready = True
+        self.is_ready = True
         logger.info("Frontend signaled readiness.")
         return True
 
@@ -79,7 +78,7 @@ class DashboardIPC(PyloidIPC):
 
     @Bridge(str, result=bool)
     def open_url(self, url: str) -> bool:
-        """Opens a URL in the system's default browser.
+        """Open a URL in the system's default browser.
 
         Args:
             url: The URL to open.
@@ -98,7 +97,7 @@ class DashboardIPC(PyloidIPC):
 
     @Bridge(str, result=bool)
     def copy_to_clipboard(self, text: str) -> bool:
-        """Copies text to the system clipboard.
+        """Copy text to the system clipboard.
 
         Args:
             text: The text to copy.

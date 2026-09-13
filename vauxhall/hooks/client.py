@@ -58,10 +58,9 @@ def format_message(
 
 
 class TelemetryClient:
-    """Client for sending telemetry data via MQTT.
+    """Publishes agent activity telemetry over MQTT.
 
-    Connects to an MQTT broker and publishes agent activity messages.
-    Failures in connection or publishing are handled silently.
+    Connection and publication failures are logged at debug level, never raised.
     """
 
     def __init__(self, host: str | None = None, port: int | None = None) -> None:
@@ -82,10 +81,7 @@ class TelemetryClient:
         """Enter the context manager, establishing a persistent connection."""
         self._managed = True
         try:
-            self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
-            self.is_connected = True
-            self.client.loop_start()
-            self._loop_running = True
+            self._connect()
         except Exception:
             logger.debug("Failed to connect telemetry client inside context manager")
             self._close_connection()
@@ -95,6 +91,13 @@ class TelemetryClient:
         """Exit the context manager, closing the connection."""
         self._close_connection()
         self._managed = False
+
+    def _connect(self) -> None:
+        """Connect to the broker and start the MQTT network loop."""
+        self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
+        self.is_connected = True
+        self.client.loop_start()
+        self._loop_running = True
 
     def _close_connection(self) -> None:
         """Close MQTT transport without allowing cleanup failures to escape."""
@@ -123,10 +126,7 @@ class TelemetryClient:
         env: str | None = None,
         **details: object,
     ) -> bool:
-        """Send a telemetry message.
-
-        Formats the message and publishes it to the agent's activity topic.
-        Fails silently if an error occurs during connection or publication.
+        """Publish one telemetry message to the agent's activity topic at QoS 1.
 
         Args:
             agent: The name of the agent.
@@ -150,12 +150,7 @@ class TelemetryClient:
                 return False
 
             if not self.is_connected:
-                self.client.connect(
-                    self.host, self.port, keepalive=settings.mqtt.keepalive
-                )
-                self.is_connected = True
-                self.client.loop_start()
-                self._loop_running = True
+                self._connect()
 
             publish_result = self.client.publish(topic, payload, qos=1)
             publish_result.wait_for_publish(PUBLISH_TIMEOUT_SECONDS)

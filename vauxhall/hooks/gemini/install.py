@@ -3,64 +3,50 @@
 
 """Installation utility for Vauxhall Gemini CLI hooks."""
 
-import base64
 import json
-import os
-import shlex
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-from vauxhall import __version__
+from vauxhall.hooks import common
+from vauxhall.hooks.common import setup_venv
 
 HOOK_MODULE = "vauxhall.hooks.gemini.telemetry_hook"
+HOOK_CONFIGS = {
+    "BeforeAgent": {
+        "name": "vauxhall-thinking",
+        "description": "Vauxhall telemetry for Gemini thinking state",
+    },
+    "AfterAgent": {
+        "name": "vauxhall-idle",
+        "description": "Vauxhall telemetry for Gemini idle state",
+    },
+    "SessionEnd": {
+        "name": "vauxhall-session-end",
+        "description": "Vauxhall telemetry for Gemini session end",
+    },
+    "BeforeTool": {
+        "name": "vauxhall-acting",
+        "description": "Vauxhall telemetry for Gemini tool execution",
+    },
+    "AfterTool": {
+        "name": "vauxhall-done",
+        "description": "Vauxhall telemetry for Gemini tool completion",
+    },
+    "AfterModel": {
+        "name": "vauxhall-model",
+        "description": "Vauxhall telemetry for Gemini model completion",
+    },
+    "Notification": {
+        "name": "vauxhall-waiting",
+        "description": "Vauxhall telemetry for Gemini waiting for input",
+    },
+}
 
 
 def build_hook_command(venv_python: Path) -> str:
     """Build a platform-appropriate command for the Gemini hook."""
-    arguments = [str(venv_python), "-m", HOOK_MODULE]
-    if os.name == "nt":
-        python_path = str(venv_python).replace("'", "''")
-        script = f"& '{python_path}' -m {HOOK_MODULE}"
-        encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
-        return (
-            "powershell.exe -NoProfile -NonInteractive "
-            f"-EncodedCommand {encoded_script}"
-        )
-    return shlex.join(arguments)
-
-
-def setup_venv(venv_dir: Path) -> Path:
-    """Create a virtual environment and install dependencies.
-
-    Args:
-        venv_dir: Path to the virtual environment directory.
-
-    Returns:
-        Path: The path to the venv's Python executable.
-    """
-    if venv_dir.exists():
-        print(f"Removing existing venv at {venv_dir}...")
-        shutil.rmtree(venv_dir)
-
-    print(f"Creating virtual environment in {venv_dir}...")
-    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-
-    # Detect venv python executable
-    if os.name == "nt":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    requirement = f"vauxhall[hooks]=={__version__}"
-    print(f"Installing {requirement}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", requirement],
-        check=True,
-        capture_output=True,
-    )
-    return venv_python
+    return common.build_hook_command(venv_python, HOOK_MODULE)
 
 
 def load_settings(settings_path: Path) -> dict:
@@ -102,8 +88,9 @@ def purge_vauxhall_hooks(settings: dict) -> None:
         return
 
     print("Purging old Vauxhall hooks...")
-    for event in list(settings["hooks"].keys()):
-        for matcher_group in settings["hooks"][event]:
+    hooks = settings["hooks"]
+    for event, groups in hooks.items():
+        for matcher_group in groups:
             if "hooks" in matcher_group:
                 matcher_group["hooks"] = [
                     h
@@ -111,9 +98,7 @@ def purge_vauxhall_hooks(settings: dict) -> None:
                     if not h.get("name", "").startswith("vauxhall-")
                 ]
         # Remove groups that are now empty
-        settings["hooks"][event] = [
-            mg for mg in settings["hooks"][event] if mg.get("hooks")
-        ]
+        hooks[event] = [mg for mg in groups if mg.get("hooks")]
 
 
 def register_hook(settings: dict, event: str, hook_config: dict, command: str) -> None:
@@ -125,12 +110,7 @@ def register_hook(settings: dict, event: str, hook_config: dict, command: str) -
         hook_config: Dictionary with hook name and description.
         command: The command to execute for the hook.
     """
-    if "hooks" not in settings:
-        settings["hooks"] = {}
-
-    if event not in settings["hooks"]:
-        settings["hooks"][event] = []
-
+    groups = settings.setdefault("hooks", {}).setdefault(event, [])
     new_hook = {
         "name": hook_config["name"],
         "type": "command",
@@ -138,81 +118,37 @@ def register_hook(settings: dict, event: str, hook_config: dict, command: str) -
         "description": hook_config["description"],
     }
 
-    installed = False
-    for matcher_group in settings["hooks"][event]:
+    for matcher_group in groups:
         if matcher_group.get("matcher") == "*":
             hooks_list = matcher_group.setdefault("hooks", [])
             for i, existing_hook in enumerate(hooks_list):
                 if existing_hook.get("name") == hook_config["name"]:
                     hooks_list[i] = new_hook
-                    installed = True
-                    break
-            if not installed:
-                hooks_list.append(new_hook)
-                installed = True
-            break
+                    return
+            hooks_list.append(new_hook)
+            return
 
-    if not installed:
-        settings["hooks"][event].append({"matcher": "*", "hooks": [new_hook]})
+    groups.append({"matcher": "*", "hooks": [new_hook]})
 
 
 def install() -> None:
-    """Main installation entry point."""
+    """Install Vauxhall telemetry hooks into the current Gemini workspace."""
     print("Vauxhall Gemini Hook Installer")
     print("------------------------------")
 
-    # 1. Paths and Environment Setup
     cwd = Path.cwd()
     venv_dir = cwd / ".vauxhall-venv"
-
-    # 2. Setup Venv
     venv_python = setup_venv(venv_dir)
 
-    # 3. Load settings
     target_settings = cwd / ".gemini" / "settings.json"
     settings = load_settings(target_settings)
-
-    # 4. Prepare hooks
     purge_vauxhall_hooks(settings)
 
     hook_command = build_hook_command(venv_python.absolute())
-    hook_configs = {
-        "BeforeAgent": {
-            "name": "vauxhall-thinking",
-            "description": "Vauxhall telemetry for Gemini thinking state",
-        },
-        "AfterAgent": {
-            "name": "vauxhall-idle",
-            "description": "Vauxhall telemetry for Gemini idle state",
-        },
-        "SessionEnd": {
-            "name": "vauxhall-session-end",
-            "description": "Vauxhall telemetry for Gemini session end",
-        },
-        "BeforeTool": {
-            "name": "vauxhall-acting",
-            "description": "Vauxhall telemetry for Gemini tool execution",
-        },
-        "AfterTool": {
-            "name": "vauxhall-done",
-            "description": "Vauxhall telemetry for Gemini tool completion",
-        },
-        "AfterModel": {
-            "name": "vauxhall-model",
-            "description": "Vauxhall telemetry for Gemini model completion",
-        },
-        "Notification": {
-            "name": "vauxhall-waiting",
-            "description": "Vauxhall telemetry for Gemini waiting for input",
-        },
-    }
-
-    # 5. Register hooks
-    for event, config in hook_configs.items():
+    for event, config in HOOK_CONFIGS.items():
         register_hook(settings, event, config, hook_command)
         print(f"Registered hook for: {event}")
 
-    # 6. Save settings
     try:
         with target_settings.open("w") as f:
             json.dump(settings, f, indent=2)

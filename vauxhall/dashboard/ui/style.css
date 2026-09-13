@@ -125,15 +125,6 @@ header {
     gap: 10px;
 }
 
-.stats-row {
-    margin: 4px 0 10px 0;
-    height: 20px;
-    display: flex;
-    align-items: center;
-}
-
-
-
 .agent-info {
     min-width: 0;
     flex: 1;

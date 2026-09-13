@@ -129,7 +129,7 @@ def test_hook_command_uses_posix_shell_quoting() -> None:
     installer = _installer()
     python = Path("/opt/Vauxhall $(touch marker)/bin/python")
 
-    with patch.object(installer.os, "name", "posix"):
+    with patch.object(installer.common.os, "name", "posix"):
         command = installer.build_hook_command(python)
 
     assert command == (
@@ -143,7 +143,7 @@ def test_hook_command_uses_windows_argument_quoting() -> None:
     installer = _installer()
     python = Path("/Program Files/Vauxhall & %TEMP%/(owner's)/python.exe")
 
-    with patch.object(installer.os, "name", "nt"):
+    with patch.object(installer.common.os, "name", "nt"):
         command = installer.build_hook_command(python)
 
     prefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
@@ -186,7 +186,7 @@ def test_windows_reinstall_replaces_vauxhall_handlers(tmp_path: Path) -> None:
             "setup_venv",
             return_value=Path("C:/Vauxhall/python.exe"),
         ),
-        patch.object(installer.os, "name", "nt"),
+        patch.object(installer.common.os, "name", "nt"),
     ):
         installer.install()
         installer.install()
@@ -213,12 +213,12 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
     """Hook environments must install an immutable published release."""
     installer = _installer()
     venv_dir = tmp_path / "hooks-venv"
-    if installer.os.name == "nt":
+    if installer.common.os.name == "nt":
         venv_python = venv_dir / "Scripts" / "python.exe"
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    with patch.object(installer.subprocess, "run") as run:
+    with patch.object(installer.common.subprocess, "run") as run:
         result = installer.setup_venv(venv_dir)
 
     assert result == venv_python

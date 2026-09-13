@@ -17,11 +17,6 @@ class ConfigurationError(ValueError):
     """Raised when an explicit configuration value is invalid."""
 
     @classmethod
-    def from_message(cls, message: str) -> "ConfigurationError":
-        """Create an error from a fully formatted configuration message."""
-        return cls(message)
-
-    @classmethod
     def invalid_value(
         cls, source: str, section: str, key: str, value: object, expected: str
     ) -> "ConfigurationError":
@@ -77,29 +72,25 @@ def load_config_data(config_path: Path) -> dict[str, Any]:
             data = json.load(f)
     except json.JSONDecodeError as e:
         message = f"{resolved_path}: is not valid JSON: {e}"
-        raise ConfigurationError.from_message(message) from e
+        raise ConfigurationError(message) from e
     except OSError as e:
         message = f"{resolved_path}: Could not read configuration: {e}"
-        raise ConfigurationError.from_message(message) from e
+        raise ConfigurationError(message) from e
 
     if not isinstance(data, dict):
         message = (
             f"{resolved_path}: top-level configuration must be an object, got {data!r}"
         )
-        raise ConfigurationError.from_message(message)
+        raise ConfigurationError(message)
     return data
 
 
 def find_config_file(filename: str) -> Path | None:
     """Search for config file in CWD and then ~/.config/vauxhall/."""
-    cwd_path = Path.cwd() / filename
-    if cwd_path.exists():
-        return cwd_path
-
-    user_config = Path.home() / ".config" / "vauxhall" / filename
-    if user_config.exists():
-        return user_config
-
+    for directory in (Path.cwd(), Path.home() / ".config" / "vauxhall"):
+        config_path = directory / filename
+        if config_path.exists():
+            return config_path
     return None
 
 
@@ -144,7 +135,7 @@ class ConfigResolver:
         if not isinstance(section_data, dict):
             source = str(self.config_path) if self.config_path else "configuration"
             message = f"{source}: {section} must be an object, got {section_data!r}"
-            raise ConfigurationError.from_message(message)
+            raise ConfigurationError(message)
         if key in section_data:
             assert self.config_path is not None
             return section_data[key], f"{self.config_path}:{section}.{key}"
@@ -162,12 +153,7 @@ class ConfigResolver:
         Returns:
             T: The resolved value.
         """
-        source_value = self._value_source(env_var, section, key)
-        if source_value is None:
-            return default
-
-        value, source = source_value
-        return self._resolve_value(value, source, section, key, default, {})
+        return self._resolve(env_var, section, key, default, {})
 
     def resolve_dataclass(self, cls: type[T], section: str, env_prefix: str) -> T:
         """Automatically resolve all fields for a dataclass.
@@ -180,38 +166,38 @@ class ConfigResolver:
         Returns:
             T: An instance of the dataclass.
         """
-        resolved_fields: dict[str, Any] = {}
-        for f in fields(cls):
-            default = f.default if f.default is not MISSING else None
-            env_var = f"{env_prefix}_{f.name.upper()}"
+        return cls(
+            **{
+                f.name: self._resolve(
+                    f"{env_prefix}_{f.name.upper()}",
+                    section,
+                    f.name,
+                    f.default if f.default is not MISSING else None,
+                    f.metadata,
+                )
+                for f in fields(cls)
+            }
+        )
 
-            source_value = self._value_source(env_var, section, f.name)
-            if source_value is None:
-                resolved_fields[f.name] = default
-                continue
-
-            value, source = source_value
-            resolved_fields[f.name] = self._resolve_value(
-                value, source, section, f.name, default, f.metadata
-            )
-
-        return cls(**resolved_fields)
-
-    def _resolve_value(  # noqa: PLR0913, PLR0917
+    def _resolve(
         self,
-        value: object,
-        source: str,
+        env_var: str,
         section: str,
         key: str,
         default: T,
         metadata: Mapping[str, object],
     ) -> T:
-        """Coerce and validate a configured value against its dataclass field."""
+        """Resolve one setting, then coerce and validate it against its field."""
+        source_value = self._value_source(env_var, section, key)
+        if source_value is None:
+            return default
+
+        value, source = source_value
         original_value = value
         if source.startswith("VAUXHALL_"):
             value = self._cast_environment_value(value, source, section, key, default)
         elif type(value) is not type(default):
-            self._raise_invalid(
+            raise ConfigurationError.invalid_value(
                 source, section, key, value, self._expected(metadata, default)
             )
 
@@ -220,24 +206,19 @@ class ConfigResolver:
             value = value.upper()
 
         if metadata.get("non_empty") and not value:
-            self._raise_invalid(
+            raise ConfigurationError.invalid_value(
                 source, section, key, original_value, "a non-empty string"
             )
 
         minimum = metadata.get("min")
         maximum = metadata.get("max")
-        if minimum is not None and value < minimum:
-            self._raise_invalid(
-                source, section, key, original_value, self._expected(metadata, default)
-            )
-        if maximum is not None and value > maximum:
-            self._raise_invalid(
-                source, section, key, original_value, self._expected(metadata, default)
-            )
-
         choices = metadata.get("choices")
-        if choices is not None and value not in choices:
-            self._raise_invalid(
+        if (
+            (minimum is not None and value < minimum)
+            or (maximum is not None and value > maximum)
+            or (choices is not None and value not in choices)
+        ):
+            raise ConfigurationError.invalid_value(
                 source, section, key, original_value, self._expected(metadata, default)
             )
 
@@ -254,12 +235,16 @@ class ConfigResolver:
                 return True  # type: ignore[return-value]
             if normalized in ("false", "0", "no"):
                 return False  # type: ignore[return-value]
-            self._raise_invalid(source, section, key, value, "a boolean")
+            raise ConfigurationError.invalid_value(
+                source, section, key, value, "a boolean"
+            )
         if isinstance(default, int):
             try:
                 return int(value)
-            except ValueError:
-                self._raise_invalid(source, section, key, value, "an integer")
+            except ValueError as error:
+                raise ConfigurationError.invalid_value(
+                    source, section, key, value, "an integer"
+                ) from error
         return value  # type: ignore[return-value]
 
     def _expected(self, metadata: Mapping[str, object], default: object) -> str:
@@ -279,9 +264,3 @@ class ConfigResolver:
             choices = ", ".join(sorted(metadata["choices"]))
             expected = f"{expected} one of {choices}"
         return expected
-
-    def _raise_invalid(
-        self, source: str, section: str, key: str, value: object, expected: str
-    ) -> None:
-        """Raise a source-aware error for one invalid explicit configuration value."""
-        raise ConfigurationError.invalid_value(source, section, key, value, expected)

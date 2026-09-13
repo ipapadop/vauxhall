@@ -10,7 +10,7 @@ import {
     agents,
     clearAgents,
     ensureAgentCapacity,
-} from '../../vauxhall/dashboard/ui/js/state.js';
+} from '../../../vauxhall/dashboard/ui/js/state.js';
 
 let document;
 

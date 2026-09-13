@@ -135,7 +135,7 @@ def test_gemini_hook_reports_invalid_configuration_without_breaking_protocol(
     }
     if environment_value is not None:
         environment["VAUXHALL_MQTT_PORT"] = environment_value
-    project_root = str(Path(__file__).resolve().parents[1])
+    project_root = str(Path(__file__).resolve().parents[3])
     environment["PYTHONPATH"] = os.pathsep.join(
         filter(None, (project_root, environment.get("PYTHONPATH")))
     )

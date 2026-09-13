@@ -8,6 +8,27 @@
  * @description Handles DOM manipulation, card creation, and updates.
  */
 
+const WAITING_STATES = new Set(['Waiting', 'Waiting for Input', 'Input Required']);
+const STATUS_ORDER = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+
+const isPositiveNumber = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const textOf = (card, selector) => card.querySelector(selector)?.textContent || '';
+const tokensOf = (card) => parseInt(card.querySelector('.metric-badge.tokens')?.dataset.value || '0');
+
+const CARD_COMPARATORS = {
+    name: (a, b) => textOf(a, '.agent-name').localeCompare(textOf(b, '.agent-name')),
+    recent: (a, b) => parseInt(b.dataset.lastSeen || '0') - parseInt(a.dataset.lastSeen || '0'),
+    status: (a, b) => (STATUS_ORDER[textOf(a, '.status-badge')] ?? 9) - (STATUS_ORDER[textOf(b, '.status-badge')] ?? 9),
+    tokens: (a, b) => tokensOf(b) - tokensOf(a),
+};
+
+function textSpan(className, value) {
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = String(value ?? '');
+    return span;
+}
+
 /**
  * Creates an agent card element.
  * @param {object} data - Initial telemetry data.
@@ -18,9 +39,10 @@
 export function createCard(data, pyloidIpc, openHistoryCallback) {
     const agent = String(data.agent ?? '');
     const workspace = String(data.workspace ?? '');
+    const sessionId = String(data.session_id ?? '');
     const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
-    const env = configuredEnv || (workspace.startsWith('/home') || workspace.match(/^[A-Z]:\\/i) ? 'local' : 'remote');
-    
+    const env = configuredEnv || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
+
     const card = document.createElement('div');
     card.className = 'agent-card';
     card.title = "Click to copy workspace path";
@@ -36,7 +58,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
             </div>
             <div class="status-badge" title="Current agent state">Idle</div>
         </div>
-        
+
         <div class="log-area" title="Real-time operations log (shows last 5 events)">Ready...</div>
         <div class="agent-footer">
             <div class="footer-meta">
@@ -52,36 +74,27 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     envBadge.textContent = env;
     card.querySelector('.agent-name').textContent = agent;
     card.querySelector('.agent-workspace').textContent = workspace;
-    const sessionId = String(data.session_id ?? '');
     const sessionElement = card.querySelector('.agent-session');
     sessionElement.textContent = `Session: ${sessionId}`;
     sessionElement.title = sessionId;
-    
-    // Setup History Modal Trigger
-    const historyIcon = card.querySelector('.history-icon');
-    if (historyIcon) {
-        historyIcon.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openHistoryCallback();
-        });
-    }
-    
-    // Setup Workspace Copy Trigger
-    card.addEventListener('click', () => {
-        if (pyloidIpc && pyloidIpc.DashboardIPC) {
-            pyloidIpc.DashboardIPC.copy_to_clipboard(workspace).then((success) => {
-                if (success) {
-                    showCopyFeedback(card);
-                }
-            });
-        }
+
+    card.querySelector('.history-icon').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openHistoryCallback();
     });
-    
+
+    // Copy the raw workspace path; never build a shell command from it
+    card.addEventListener('click', () => {
+        pyloidIpc?.DashboardIPC?.copy_to_clipboard(workspace).then((success) => {
+            if (success) showCopyFeedback(card);
+        });
+    });
+
     return card;
 }
 
 /**
- * Formats the telemetry data into a human-readable action string.
+ * Builds the display segments that describe a telemetry event.
  * @param {object} data - The telemetry data object (containing state and details).
  * @returns {Array<{text: string, className?: string}>} Display segments.
  */
@@ -90,10 +103,11 @@ function getDetailsSegments(data) {
     const details = data.details && typeof data.details === 'object' ? data.details : {};
     const state = data.state;
     const segment = (value, className) => ({ text: String(value), className });
+    const promptSegments = () => [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
 
     // Prioritize prompt for waiting states
-    if (state === 'Waiting for Input' || state === 'Input Required' || state === 'Waiting') {
-        if (details.prompt) return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
+    if (WAITING_STATES.has(state)) {
+        if (details.prompt) return promptSegments();
         if (details.message) return [segment(details.message)];
     }
 
@@ -104,8 +118,8 @@ function getDetailsSegments(data) {
     if (details.tool) {
         // If it's a known placeholder, and we have something better, use it
         if (details.tool === 'unknown' || details.tool === 'unknown_tool') {
-             if (details.prompt) return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
-             if (details.status) return [segment(details.status)];
+            if (details.prompt) return promptSegments();
+            if (details.status) return [segment(details.status)];
         }
 
         // For AfterTool (Thinking state), show "Completed"
@@ -118,14 +132,8 @@ function getDetailsSegments(data) {
         return segments;
     }
 
-    if (details.prompt) {
-        return [segment('Prompt:', 'log-prompt'), segment(` ${details.prompt}`)];
-    }
-
-    if (details.status) {
-        return [segment(details.status)];
-    }
-
+    if (details.prompt) return promptSegments();
+    if (details.status) return [segment(details.status)];
     return [];
 }
 
@@ -135,14 +143,7 @@ function getDetailsString(data) {
 
 function appendDetails(container, data) {
     getDetailsSegments(data).forEach(({ text, className }) => {
-        if (className) {
-            const span = document.createElement('span');
-            span.className = className;
-            span.textContent = text;
-            container.appendChild(span);
-        } else {
-            container.appendChild(document.createTextNode(text));
-        }
+        container.appendChild(className ? textSpan(className, text) : document.createTextNode(text));
     });
 }
 
@@ -156,91 +157,78 @@ export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
-    
+
     if (statusBadge) statusBadge.textContent = data.state;
-    
+
     // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');
     if (data.state === 'Error') {
         card.classList.add('error');
-    } else if (data.state === 'Waiting' || data.state === 'Waiting for Input' || data.state === 'Input Required') {
+    } else if (WAITING_STATES.has(data.state)) {
         card.classList.add('waiting');
     } else if (data.state === 'Acting' || data.state === 'Thinking') {
         card.classList.add('working');
     }
 
     const details = data.details || {};
-    
+
     // Reset metrics when starting a new operation
     if (data.state === 'Acting' || (data.state === 'Thinking' && details.prompt)) {
         card.latestTokens = null;
         card.latestDuration = null;
     }
-
-    // Accumulate metrics
-    if (typeof details.tokens === 'number' && Number.isFinite(details.tokens) && details.tokens > 0) {
-        card.latestTokens = details.tokens;
-    }
-    if (typeof details.duration === 'number' && Number.isFinite(details.duration) && details.duration > 0) {
-        card.latestDuration = details.duration;
-    }
+    if (isPositiveNumber(details.tokens)) card.latestTokens = details.tokens;
+    if (isPositiveNumber(details.duration)) card.latestDuration = details.duration;
 
     // Update Footer Metric Badges
     if (metricsArea) {
         metricsArea.replaceChildren();
         if (card.latestTokens) {
-            const t = card.latestTokens > 1000 ? (card.latestTokens/1000).toFixed(1) + 'k' : card.latestTokens;
-            const badge = document.createElement('span');
-            badge.className = 'metric-badge tokens';
+            const tokens = card.latestTokens > 1000 ? `${(card.latestTokens / 1000).toFixed(1)}k` : card.latestTokens;
+            const badge = textSpan('metric-badge tokens', tokens);
             badge.dataset.value = String(card.latestTokens);
             badge.title = 'Tokens used in last operation';
-            badge.textContent = String(t);
             metricsArea.appendChild(badge);
         }
         if (card.latestDuration) {
-            const badge = document.createElement('span');
-            badge.className = 'metric-badge';
+            const badge = textSpan('metric-badge', `${card.latestDuration}s`);
             badge.title = 'Duration of last operation';
-            badge.textContent = `${card.latestDuration}s`;
             metricsArea.appendChild(badge);
         }
     }
 
     // Update Rolling Activity Log (last 5 entries)
     const newLogMessage = getDetailsString(data);
+    if (!newLogMessage || newLogMessage === card.lastLogMessage || !logArea) return;
+    card.lastLogMessage = newLogMessage;
 
-    if (newLogMessage && newLogMessage !== card.lastLogMessage && logArea) {
-        card.lastLogMessage = newLogMessage;
-        
-        const time = new Date().toLocaleTimeString([], { 
-            hour12: false, 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit' 
-        });
+    const time = new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
 
-        if (logArea.textContent === "Ready...") {
-            logArea.replaceChildren();
-        }
-
-        const logLine = document.createElement('div');
-        logLine.className = 'log-line';
-        const timestamp = document.createElement('span');
-        timestamp.style.color = 'var(--text-dim)';
-        timestamp.textContent = `[${time}] `;
-        logLine.appendChild(timestamp);
-        appendDetails(logLine, data);
-        
-        logArea.prepend(logLine);
-
-        // Enforce 5-event limit for the card view (remove oldest from bottom)
-        while (logArea.children.length > 5) {
-            logArea.removeChild(logArea.lastElementChild);
-        }
-
-        // Keep view at the top (newest)
-        logArea.scrollTop = 0;
+    if (logArea.textContent === "Ready...") {
+        logArea.replaceChildren();
     }
+
+    const logLine = document.createElement('div');
+    logLine.className = 'log-line';
+    const timestamp = document.createElement('span');
+    timestamp.style.color = 'var(--text-dim)';
+    timestamp.textContent = `[${time}] `;
+    logLine.appendChild(timestamp);
+    appendDetails(logLine, data);
+    logArea.prepend(logLine);
+
+    // Enforce 5-event limit for the card view (remove oldest from bottom)
+    while (logArea.children.length > 5) {
+        logArea.removeChild(logArea.lastElementChild);
+    }
+
+    // Keep view at the top (newest)
+    logArea.scrollTop = 0;
 }
 
 /**
@@ -249,9 +237,7 @@ export function updateCard(card, data) {
  */
 function showCopyFeedback(card) {
     card.classList.add('copied');
-    setTimeout(() => {
-        card.classList.remove('copied');
-    }, 2000);
+    setTimeout(() => card.classList.remove('copied'), 2000);
 }
 
 /**
@@ -267,11 +253,7 @@ export function filterGrid(query, agents) {
 
         const name = nameElement.textContent?.toLowerCase() || '';
         const workspace = workspaceElement.textContent?.toLowerCase() || '';
-        if (name.includes(query) || workspace.includes(query)) {
-            card.style.display = 'flex';
-        } else {
-            card.style.display = 'none';
-        }
+        card.style.display = name.includes(query) || workspace.includes(query) ? 'flex' : 'none';
     });
 }
 
@@ -290,28 +272,8 @@ export function sortGrid(criteria, grid) {
     });
 
     // LAST: Re-sort DOM
-    const sorted = cardsArray.sort((a, b) => {
-        if (criteria === 'name') {
-            const nameA = a.querySelector('.agent-name')?.textContent || '';
-            const nameB = b.querySelector('.agent-name')?.textContent || '';
-            return nameA.localeCompare(nameB);
-        } else if (criteria === 'recent') {
-            return parseInt(b.dataset.lastSeen || '0') - parseInt(a.dataset.lastSeen || '0');
-        } else if (criteria === 'status') {
-            const statusOrder = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
-            const statusA = a.querySelector('.status-badge')?.textContent || '';
-            const statusB = b.querySelector('.status-badge')?.textContent || '';
-            return (statusOrder[statusA] ?? 9) - (statusOrder[statusB] ?? 9);
-        } else if (criteria === 'tokens') {
-            const tokensA = parseInt(a.querySelector('.metric-badge.tokens')?.dataset.value || '0');
-            const tokensB = parseInt(b.querySelector('.metric-badge.tokens')?.dataset.value || '0');
-            return tokensB - tokensA;
-        }
-        return 0;
-    });
-
-    // Instead of grid.innerHTML = '', just append in new order
-    sorted.forEach(card => grid.appendChild(card));
+    const compare = Object.hasOwn(CARD_COMPARATORS, criteria) ? CARD_COMPARATORS[criteria] : () => 0;
+    cardsArray.sort(compare).forEach(card => grid.appendChild(card));
 
     // INVERT & PLAY
     requestAnimationFrame(() => {
@@ -319,23 +281,22 @@ export function sortGrid(criteria, grid) {
             const rect = card.getBoundingClientRect();
             const deltaX = left - rect.left;
             const deltaY = top - rect.top;
+            if (deltaX === 0 && deltaY === 0) return;
 
-            if (deltaX !== 0 || deltaY !== 0) {
-                card.style.transition = 'none';
-                card.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            card.style.transition = 'none';
+            card.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
 
-                requestAnimationFrame(() => {
-                    // Use CSS variable for consistent speed
-                    card.style.transition = 'transform var(--transition-speed) ease-out';
+            requestAnimationFrame(() => {
+                // Use CSS variable for consistent speed
+                card.style.transition = 'transform var(--transition-speed) ease-out';
+                card.style.transform = '';
+
+                // Clear styles after transition to restore CSS hover etc.
+                card.addEventListener('transitionend', () => {
+                    card.style.transition = '';
                     card.style.transform = '';
-
-                    // Clear styles after transition to restore CSS hover etc.
-                    card.addEventListener('transitionend', () => {
-                        card.style.transition = '';
-                        card.style.transform = '';
-                    }, { once: true });
-                });
-            }
+                }, { once: true });
+            });
         });
     });
 }
@@ -349,29 +310,17 @@ export function checkStaleness(agents, staleThresholdMs = 120000) {
     const now = Date.now();
 
     Object.values(agents).forEach(card => {
-        const lastSeen = parseInt(card.dataset.lastSeen || '0');
-        const diff = now - lastSeen;
-        
-        // Update timer text
+        const diff = now - parseInt(card.dataset.lastSeen || '0');
+
         const timer = card.querySelector('.last-seen-timer');
         if (timer) {
-            if (diff < 60000) {
-                timer.textContent = 'just now';
-            } else {
-                const minutes = Math.floor(diff / 60000);
-                timer.textContent = `${minutes}m ago`;
-            }
+            timer.textContent = diff < 60000 ? 'just now' : `${Math.floor(diff / 60000)}m ago`;
         }
 
-        if (diff > staleThresholdMs) {
-            card.classList.add('stale');
-            const statusBadge = card.querySelector('.status-badge');
-            if (statusBadge && statusBadge.textContent !== 'STALE') {
-                statusBadge.textContent = 'STALE';
-            }
-        } else {
-            card.classList.remove('stale');
-        }
+        const isStale = diff > staleThresholdMs;
+        card.classList.toggle('stale', isStale);
+        const statusBadge = card.querySelector('.status-badge');
+        if (isStale && statusBadge) statusBadge.textContent = 'STALE';
     });
 }
 
@@ -380,7 +329,7 @@ let isInteractingWithModal = false;
 /**
  * Populates and opens the history modal.
  * Supports real-time updates and resizable behavior.
- * 
+ *
  * @param {string} agentKey - Unique key for the agent.
  * @param {object} agents - Global agents state object.
  * @param {boolean} isSilent - If true, updates content without forcing focus or jumping to bottom (unless already there).
@@ -396,7 +345,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
 
     const body = document.getElementById('modal-history-body');
     if (!body) return;
-    
+
     // Check if user is at the bottom BEFORE updating content
     const isAtBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 50;
     const oldScrollTop = body.scrollTop;
@@ -420,25 +369,14 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
 
     // Re-render timeline items in chronological order (oldest top, newest bottom)
     body.replaceChildren();
-    [...filteredHistory].reverse().forEach(item => {
+    filteredHistory.reverse().forEach(item => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
-
-        const time = document.createElement('span');
-        time.className = 'history-time';
-        time.textContent = String(item.time ?? '');
-        historyItem.appendChild(time);
-
-        const state = document.createElement('span');
-        state.className = 'history-state';
-        state.textContent = String(item.state ?? '');
-        historyItem.appendChild(state);
-
-        const details = document.createElement('span');
-        details.className = 'history-details';
+        historyItem.appendChild(textSpan('history-time', item.time));
+        historyItem.appendChild(textSpan('history-state', item.state));
+        const details = textSpan('history-details', '');
         appendDetails(details, item);
         historyItem.appendChild(details);
-
         body.appendChild(historyItem);
     });
 

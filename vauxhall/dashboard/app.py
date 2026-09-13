@@ -67,14 +67,7 @@ class DashboardApp:
                 self.window.invoke("agent-update", pending_update)
 
     def on_telemetry(self, data: object) -> None:
-        """Handle telemetry data received from MQTT.
-
-        If the frontend is ready, the data is invoked immediately.
-        Otherwise, it is queued until the frontend signals readiness.
-
-        Args:
-            data: The decoded telemetry data.
-        """
+        """Forward valid telemetry, or queue it until the frontend is ready."""
         try:
             error = telemetry_validation_error(data)
             if error is not None:
@@ -89,15 +82,12 @@ class DashboardApp:
                     logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
                     if len(self.pending_updates) == self.pending_updates.maxlen:
                         self.discarded_pending_updates += 1
-                        if (
-                            self.discarded_pending_updates
-                            & (self.discarded_pending_updates - 1)
-                            == 0
-                        ):
+                        discarded = self.discarded_pending_updates
+                        if discarded & (discarded - 1) == 0:
                             logger.warning(
                                 "Discarded oldest pending telemetry update; "
                                 "total discarded: %d",
-                                self.discarded_pending_updates,
+                                discarded,
                             )
                     self.pending_updates.append(telemetry)
                     return
@@ -108,11 +98,7 @@ class DashboardApp:
             logger.exception("Error in on_telemetry")
 
     def on_status(self, message: str) -> None:
-        """Handle status updates from MQTT.
-
-        Args:
-            message: The status message.
-        """
+        """Record an MQTT status and forward it when the frontend is ready."""
         try:
             with self._updates_lock:
                 self.last_status = message
@@ -137,16 +123,17 @@ class DashboardApp:
         try:
             self.mqtt.start()
 
-            ui_dir = Path(__file__).parent / "ui"
-
-            ui_dir_abs = ui_dir.resolve()
-            url = pyloid_serve(str(ui_dir_abs), port=settings.dashboard.port)
-            logger.info("Serving UI from %s at %s", ui_dir_abs, url)
+            ui_dir = (Path(__file__).parent / "ui").resolve()
+            url = pyloid_serve(str(ui_dir), port=settings.dashboard.port)
+            logger.info("Serving UI from %s at %s", ui_dir, url)
 
             self.window.load_url(url)
             self.window.show_and_focus()
             self.app.run()
         finally:
+            # The window is gone once the UI loop exits; queue any late updates.
+            with self._updates_lock:
+                self.ipc.is_ready = False
             self.mqtt.stop()
             logger.info("Vauxhall Dashboard shutting down...")
 

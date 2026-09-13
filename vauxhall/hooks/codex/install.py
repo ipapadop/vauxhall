@@ -5,20 +5,16 @@
 
 import base64
 import json
-import os
 import shlex
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from vauxhall import __version__
+from vauxhall.hooks import common
+from vauxhall.hooks.common import WINDOWS_ENCODED_COMMAND_PREFIX, setup_venv
 
 HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
-WINDOWS_ENCODED_COMMAND_PREFIX = (
-    "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
-)
 HOOK_EVENTS = (
     "SessionStart",
     "UserPromptSubmit",
@@ -56,43 +52,7 @@ def _validate_hook_config(config: dict[str, Any]) -> None:
 
 def build_hook_command(venv_python: Path) -> str:
     """Build a platform-appropriate command for the Codex hook."""
-    arguments = [str(venv_python), "-m", HOOK_MODULE]
-    if os.name == "nt":
-        python_path = str(venv_python).replace("'", "''")
-        script = f"& '{python_path}' -m {HOOK_MODULE}"
-        encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
-        return f"{WINDOWS_ENCODED_COMMAND_PREFIX}{encoded_script}"
-    return shlex.join(arguments)
-
-
-def setup_venv(venv_dir: Path) -> Path:
-    """Create an isolated environment containing the Vauxhall hooks package.
-
-    Args:
-        venv_dir: Destination for the virtual environment.
-
-    Returns:
-        Path to the environment's Python executable.
-    """
-    if venv_dir.exists():
-        print(f"Removing existing venv at {venv_dir}...")
-        shutil.rmtree(venv_dir)
-
-    print(f"Creating virtual environment in {venv_dir}...")
-    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-    if os.name == "nt":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    requirement = f"vauxhall[hooks]=={__version__}"
-    print(f"Installing {requirement}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", requirement],
-        check=True,
-        capture_output=True,
-    )
-    return venv_python
+    return common.build_hook_command(venv_python, HOOK_MODULE)
 
 
 def load_hooks(hooks_path: Path) -> dict[str, Any]:
@@ -187,10 +147,7 @@ def _is_vauxhall_invocation(command: str) -> bool:
         return False
     executable_name = executable.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
     is_python = executable_name.casefold() in {"python", "python.exe"}
-    return is_python and arguments[-2:] == [
-        "-m",
-        HOOK_MODULE,
-    ]
+    return is_python and arguments[-2:] == ["-m", HOOK_MODULE]
 
 
 def register_hook(config: dict[str, Any], event: str, command: str) -> None:

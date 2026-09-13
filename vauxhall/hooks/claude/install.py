@@ -19,7 +19,11 @@ HOOK_EVENTS = (
     "PostToolUse",
     "PostToolUseFailure",
     "Notification",
+    "SubagentStart",
+    "PreCompact",
+    "PostCompact",
     "Stop",
+    "StopFailure",
     "SessionEnd",
 )
 

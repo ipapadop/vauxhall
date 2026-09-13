@@ -159,22 +159,38 @@ telemetry. Rejection logs never include payload values. The dashboard and
 
 | Claude Code event | Vauxhall state |
 | :--- | :--- |
-| `SessionStart` | `Idle` (`Session started`) |
+| `SessionStart` | `Idle`, with a normalized source; ignored after compaction |
 | `UserPromptSubmit` | `Thinking` (with `prompt`) |
 | `PreToolUse` | `Acting`; `Waiting for Input` for `AskUserQuestion` |
 | `PermissionRequest` | `Waiting for Input` |
 | `PostToolUse` | `Thinking` (`completed`); `Idle` (`cancelled`) when interrupted |
 | `PostToolUseFailure` | `Error` (`failed`); `Idle` (`cancelled`) for `is_interrupt` |
-| `Notification` | `Waiting for Input` for `idle_prompt` and `elicitation_dialog`; others are ignored |
+| `Notification` | `Waiting for Input` for `permission_prompt`, `idle_prompt`, `elicitation_dialog`, and `elicitation_url_dialog`; others are ignored |
+| `SubagentStart` | `Acting` (`tool` is `Agent`, `cmd` is the agent type) |
+| `PreCompact` | `Thinking` (`Compacting context`, with the trigger) |
+| `PostCompact` | `Context compacted`: `Idle` after `manual`, `Thinking` after `auto` |
 | `Stop` | `Idle` (`Ready`) |
+| `StopFailure` | `Error` (`API error: <error type>`) |
 | `SessionEnd` | `Idle`, with a normalized reason |
 
 Events follow the documented
-[Claude Code hooks](https://code.claude.com/docs/en/hooks) input fields. Other
-events, such as `SubagentStop` and `PreCompact`, are not registered and are
-ignored. `SessionEnd` reports `session cleared`, `logged out`, or `input closed`
-for the `clear`, `logout`, and `prompt_input_exit` reasons, and `session ended`
-otherwise.
+[Claude Code hooks](https://code.claude.com/docs/en/hooks) input fields.
+`SessionStart` reports `Session started`, `Session resumed`, `Session cleared`,
+or `Session forked`; its `compact` source is ignored because `PostCompact`
+reports compaction. `SessionEnd` reports `session cleared`, `session switched`,
+`logged out`, or `input closed` for the `clear`, `resume`, `logout`, and
+`prompt_input_exit` reasons, and `session ended` otherwise. `StopFailure`
+reports the documented error types and `unknown` for anything else.
+
+Some signals are intentionally absent:
+
+- `SubagentStop` is not registered. For a foreground subagent, `PostToolUse`
+  for the `Agent` tool already reports completion; for a background subagent,
+  it would mark an idle session as working.
+- Claude Code has no interrupt event, and `Stop` does not fire when the user
+  interrupts a turn, so the card keeps its last state until the next event.
+- Token counts are not reported. Hook inputs do not include them, and the
+  transcript is written asynchronously, so it can lag the current turn.
 
 ### Published Data
 
@@ -182,9 +198,11 @@ otherwise.
   tool inputs are not published.
 - `PermissionRequest` publishes the tool input's `description` as the prompt,
   when present.
-- `tool_response` and `error` contents are never published.
-- Tool durations use a timing file per session and `tool_use_id` in the system
-  temporary directory, so concurrent tool calls do not overwrite each other.
+- `tool_response` and `error` contents are never published. For `StopFailure`,
+  only the error type is published, not `error_details` or the error message.
+- Tool durations use Claude Code's `duration_ms` when reported. Otherwise they
+  use a timing file per session and `tool_use_id` in the system temporary
+  directory, so concurrent tool calls do not overwrite each other.
 
 ### Failure Handling
 
@@ -240,7 +258,11 @@ Add the command handler to each event in `.claude/settings.local.json`:
     "PostToolUse": [...],
     "PostToolUseFailure": [...],
     "Notification": [...],
+    "SubagentStart": [...],
+    "PreCompact": [...],
+    "PostCompact": [...],
     "Stop": [...],
+    "StopFailure": [...],
     "SessionEnd": [...]
   }
 }
@@ -358,6 +380,8 @@ generates the encoded PowerShell command needed for safe path handling.
 | `Notification` | `Waiting for Input` for `ToolPermission`; others are ignored |
 | `AfterAgent` | `Idle` (`Ready`) |
 | `SessionEnd` | `Idle`, with a normalized reason |
+| `SessionStart` | `Idle` (`Session started`, `Session resumed`, or `Session cleared`) |
+| `PreCompress` | `Compacting context`: `Thinking` for `auto`, `Idle` for `manual` |
 | Any other event | `Idle`, with the event name in `hook` |
 
 `AfterTool` outcomes follow the documented
@@ -416,8 +440,9 @@ The installer:
 - Registers `vauxhall-thinking` (`BeforeAgent`), `vauxhall-idle`
   (`AfterAgent`), `vauxhall-model` (`AfterModel`), `vauxhall-acting`
   (`BeforeTool`), `vauxhall-done` (`AfterTool`), `vauxhall-waiting`
-  (`Notification`), and `vauxhall-session-end` (`SessionEnd`), and replaces the
-  settings file atomically.
+  (`Notification`), `vauxhall-session-start` (`SessionStart`),
+  `vauxhall-compress` (`PreCompress`), and `vauxhall-session-end`
+  (`SessionEnd`), and replaces the settings file atomically.
 - Writes commands that run `python -m vauxhall.hooks.gemini.telemetry_hook`,
   quoted the same way as the Codex installer.
 
@@ -445,6 +470,8 @@ Add the hook to each event in `.gemini/settings.json`:
     "BeforeTool": [...],
     "AfterTool": [...],
     "Notification": [...],
+    "SessionStart": [...],
+    "PreCompress": [...],
     "SessionEnd": [...]
   }
 }

@@ -21,6 +21,20 @@ from vauxhall.hooks.client import TelemetryClient
 
 logger = get_logger(__name__)
 
+# Operations matching the lifecycle hook events for session restarts,
+# subagents, permission notifications, context compaction, and API failures.
+LIFECYCLE_OPERATIONS: list[dict[str, Any]] = [
+    {"state": "Idle", "details": {"status": "Session resumed"}},
+    {"state": "Acting", "details": {"tool": "Agent", "cmd": "Explore"}},
+    {"state": "Waiting for Input", "details": {"prompt": "Permission required..."}},
+    {"state": "Thinking", "details": {"status": "Compacting context (auto)"}},
+    {"state": "Thinking", "details": {"status": "Context compacted"}},
+    {
+        "state": "Error",
+        "details": {"status": "failed", "error": "API error: rate_limit"},
+    },
+]
+
 POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
     {
         "state": "Thinking",
@@ -37,6 +51,7 @@ POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
         "state": "Waiting",
         "details": {"status": "Waiting for background task to complete"},
     },
+    *LIFECYCLE_OPERATIONS,
 ]
 
 

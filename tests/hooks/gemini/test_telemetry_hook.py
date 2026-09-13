@@ -634,3 +634,51 @@ def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == "{}\n"
+
+
+@pytest.mark.parametrize(
+    ("hook_data", "expected"),
+    [
+        (
+            {"hook_event_name": "SessionStart", "source": "startup"},
+            {"state": "Idle", "status": "Session started"},
+        ),
+        (
+            {"hook_event_name": "SessionStart", "source": "resume"},
+            {"state": "Idle", "status": "Session resumed"},
+        ),
+        (
+            {"hook_event_name": "SessionStart", "source": ["clear"]},
+            {"state": "Idle", "status": "Session started"},
+        ),
+        (
+            {"hook_event_name": "PreCompress", "trigger": "auto"},
+            {"state": "Thinking", "status": "Compacting context"},
+        ),
+        (
+            {"hook_event_name": "PreCompress", "trigger": "manual"},
+            {"state": "Idle", "status": "Compacting context"},
+        ),
+    ],
+)
+def test_gemini_lifecycle_events_publish_dashboard_states(
+    hook_data: dict, expected: dict
+) -> None:
+    """SessionStart and PreCompress must publish normalized dashboard states."""
+    event = {**hook_data, "session_id": "session-123", "cwd": "/workspace"}
+
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(event))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        main()
+
+    client.send.assert_called_once_with(
+        agent="Gemini",
+        workspace="/workspace",
+        session_id="native:session-123",
+        **expected,
+    )

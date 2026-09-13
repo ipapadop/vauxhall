@@ -11,6 +11,7 @@ import hashlib
 import json
 import tempfile
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -49,6 +50,11 @@ def _tool_time_file(
     return Path(tempfile.gettempdir()) / f"vauxhall-gemini-{digest}.time"
 
 
+_SESSION_START_STATUSES = {
+    "startup": "Session started",
+    "resume": "Session resumed",
+    "clear": "Session cleared",
+}
 _SESSION_END_STATUSES = {
     "exit": "session exited",
     "clear": "session cleared",
@@ -163,6 +169,23 @@ def handle_session_end(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]
     return "Idle", {"status": status}
 
 
+def handle_session_start(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Handle Gemini CLI SessionStart events without publishing raw sources."""
+    source = input_data.get("source")
+    status = (
+        _SESSION_START_STATUSES.get(source, "Session started")
+        if isinstance(source, str)
+        else "Session started"
+    )
+    return "Idle", {"status": status}
+
+
+def handle_pre_compress(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Manual compression runs at the prompt; automatic compression is mid-turn."""
+    state = "Idle" if input_data.get("trigger") == "manual" else "Thinking"
+    return state, {"status": "Compacting context"}
+
+
 def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Map AfterModel to a thinking state with its token count, when present."""
     state = "Thinking"
@@ -172,6 +195,14 @@ def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]
     if tokens is not None:
         details["tokens"] = tokens
     return state, details
+
+
+_EVENT_HANDLERS: dict[str, Callable[[dict[str, Any]], tuple[str, dict[str, Any]]]] = {
+    "AfterModel": handle_after_model,
+    "SessionStart": handle_session_start,
+    "SessionEnd": handle_session_end,
+    "PreCompress": handle_pre_compress,
+}
 
 
 def _send_telemetry(input_data: dict[str, Any]) -> None:
@@ -202,14 +233,12 @@ def _send_telemetry(input_data: dict[str, Any]) -> None:
         details = {"prompt": input_data.get("prompt", "Processing...")}
     elif hook_type == "AfterAgent":
         state, details = "Idle", {"status": "Ready"}
-    elif hook_type == "AfterModel":
-        state, details = handle_after_model(input_data)
     elif hook_type == "BeforeTool":
         state, details = handle_before_tool(input_data, time_file)
     elif hook_type == "AfterTool":
         state, details = handle_after_tool(input_data, time_file)
-    elif hook_type == "SessionEnd":
-        state, details = handle_session_end(input_data)
+    elif hook_type in _EVENT_HANDLERS:
+        state, details = _EVENT_HANDLERS[hook_type](input_data)
     else:
         state, details = "Idle", {"hook": hook_type}
 

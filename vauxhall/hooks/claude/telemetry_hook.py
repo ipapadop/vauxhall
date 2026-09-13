@@ -22,18 +22,45 @@ logger = get_logger(__name__)
 
 _Telemetry = tuple[str, dict[str, Any]]
 
+_SESSION_START_STATUSES = {
+    "startup": "Session started",
+    "resume": "Session resumed",
+    "clear": "Session cleared",
+    "fork": "Session forked",
+}
 _SESSION_END_STATUSES = {
     "clear": "session cleared",
+    "resume": "session switched",
     "logout": "logged out",
     "prompt_input_exit": "input closed",
 }
 # Notification types that mean Claude Code is waiting for the user, with the
-# prompt shown when the notification carries no message. Permission prompts
-# are reported by the PermissionRequest event instead.
+# prompt shown when the notification carries no message. PermissionRequest
+# reports tool permissions immediately; permission_prompt follows after a delay
+# and is the only signal for sandboxed network requests.
 _WAITING_NOTIFICATIONS = {
+    "permission_prompt": "Permission required...",
     "idle_prompt": "Waiting for your input",
     "elicitation_dialog": "Input requested",
+    "elicitation_url_dialog": "Input requested",
 }
+_COMPACTION_TRIGGERS = ("manual", "auto")
+_STOP_FAILURE_ERRORS = frozenset(
+    {
+        "rate_limit",
+        "overloaded",
+        "authentication_failed",
+        "oauth_org_not_allowed",
+        "account_on_hold",
+        "billing_error",
+        "invalid_request",
+        "model_not_found",
+        "server_error",
+        "max_output_tokens",
+        "cloud_credential_error",
+        "unknown",
+    }
+)
 
 
 def _create_telemetry_client() -> "TelemetryClient":
@@ -62,13 +89,17 @@ def _tool_details(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _add_duration(input_data: dict[str, Any], details: dict[str, Any]) -> None:
-    """Add the duration recorded for a finished tool call, when available."""
+    """Add a finished tool call's duration, preferring Claude Code's own timing."""
+    duration_ms = input_data.get("duration_ms")
+    if isinstance(duration_ms, int | float) and not isinstance(duration_ms, bool):
+        details["duration"] = round(duration_ms / 1000, 1)
     time_file = _tool_time_file(input_data)
     if time_file is None:
         return
     with suppress(Exception):
-        started_at = float(time_file.read_text().strip())
-        details["duration"] = round(time.time() - started_at, 1)
+        if "duration" not in details:
+            started_at = float(time_file.read_text().strip())
+            details["duration"] = round(time.time() - started_at, 1)
         time_file.unlink()
 
 
@@ -157,6 +188,19 @@ def _handle_notification(input_data: dict[str, Any]) -> _Telemetry | None:
     return "Waiting for Input", {"prompt": prompt}
 
 
+def _handle_session_start(input_data: dict[str, Any]) -> _Telemetry | None:
+    """Translate SessionStart; PostCompact reports restarts after compaction."""
+    source = input_data.get("source")
+    if source == "compact":
+        return None
+    status = (
+        _SESSION_START_STATUSES.get(source, "Session started")
+        if isinstance(source, str)
+        else "Session started"
+    )
+    return "Idle", {"status": status}
+
+
 def _handle_session_end(input_data: dict[str, Any]) -> _Telemetry:
     """Translate SessionEnd without publishing raw reasons."""
     reason = input_data.get("reason")
@@ -168,8 +212,40 @@ def _handle_session_end(input_data: dict[str, Any]) -> _Telemetry:
     return "Idle", {"status": status}
 
 
+def _handle_subagent_start(input_data: dict[str, Any]) -> _Telemetry:
+    """Translate SubagentStart into the Agent tool running the subagent type."""
+    details: dict[str, Any] = {"tool": "Agent"}
+    agent_type = input_data.get("agent_type")
+    if isinstance(agent_type, str) and agent_type:
+        details["cmd"] = agent_type
+    return "Acting", details
+
+
+def _handle_pre_compact(input_data: dict[str, Any]) -> _Telemetry:
+    """Translate PreCompact, naming a documented trigger when present."""
+    trigger = input_data.get("trigger")
+    status = "Compacting context"
+    if trigger in _COMPACTION_TRIGGERS:
+        status = f"{status} ({trigger})"
+    return "Thinking", {"status": status}
+
+
+def _handle_post_compact(input_data: dict[str, Any]) -> _Telemetry:
+    """Manual compaction returns to the prompt; automatic compaction resumes work."""
+    state = "Idle" if input_data.get("trigger") == "manual" else "Thinking"
+    return state, {"status": "Context compacted"}
+
+
+def _handle_stop_failure(input_data: dict[str, Any]) -> _Telemetry:
+    """Translate StopFailure, publishing only the documented error type."""
+    error = input_data.get("error")
+    if not isinstance(error, str) or error not in _STOP_FAILURE_ERRORS:
+        error = "unknown"
+    return "Error", {"status": "failed", "error": f"API error: {error}"}
+
+
 _HANDLERS: dict[str, Callable[[dict[str, Any]], _Telemetry | None]] = {
-    "SessionStart": lambda _: ("Idle", {"status": "Session started"}),
+    "SessionStart": _handle_session_start,
     "UserPromptSubmit": lambda data: (
         "Thinking",
         {"prompt": data.get("prompt", "Processing...")},
@@ -179,7 +255,11 @@ _HANDLERS: dict[str, Callable[[dict[str, Any]], _Telemetry | None]] = {
     "PostToolUse": _handle_post_tool,
     "PostToolUseFailure": _handle_post_tool_failure,
     "Notification": _handle_notification,
+    "SubagentStart": _handle_subagent_start,
+    "PreCompact": _handle_pre_compact,
+    "PostCompact": _handle_post_compact,
     "Stop": lambda _: ("Idle", {"status": "Ready"}),
+    "StopFailure": _handle_stop_failure,
     "SessionEnd": _handle_session_end,
 }
 

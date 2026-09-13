@@ -216,11 +216,14 @@ def test_claude_events_publish_dashboard_states(
 @pytest.mark.parametrize(
     "hook_data",
     [
-        {"hook_event_name": "Notification", "notification_type": "permission_prompt"},
+        {
+            "hook_event_name": "Notification",
+            "notification_type": "elicitation_complete",
+        },
         {"hook_event_name": "Notification", "notification_type": "auth_success"},
         {"hook_event_name": "Notification", "notification_type": ["idle_prompt"]},
         {"hook_event_name": "SubagentStop"},
-        {"hook_event_name": "PreCompact"},
+        {"hook_event_name": "SessionStart", "source": "compact"},
     ],
 )
 def test_claude_ignores_events_without_dashboard_state(hook_data: dict) -> None:
@@ -294,3 +297,123 @@ def test_claude_hook_skips_event_without_stable_session_identity() -> None:
         main()
 
     client_factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("hook_data", "expected"),
+    [
+        (
+            {"hook_event_name": "SessionStart", "source": "resume"},
+            {"state": "Idle", "status": "Session resumed"},
+        ),
+        (
+            {"hook_event_name": "SessionStart", "source": "fork"},
+            {"state": "Idle", "status": "Session forked"},
+        ),
+        (
+            {"hook_event_name": "SessionEnd", "reason": "resume"},
+            {"state": "Idle", "status": "session switched"},
+        ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "permission_prompt",
+                "message": "Claude needs your permission",
+                "title": "Permission needed",
+            },
+            {"state": "Waiting for Input", "prompt": "Claude needs your permission"},
+        ),
+        (
+            {
+                "hook_event_name": "SubagentStart",
+                "agent_id": "agent-abc123",
+                "agent_type": "Explore",
+            },
+            {"state": "Acting", "tool": "Agent", "cmd": "Explore"},
+        ),
+        (
+            {"hook_event_name": "SubagentStart", "agent_id": "agent-abc123"},
+            {"state": "Acting", "tool": "Agent"},
+        ),
+        (
+            {
+                "hook_event_name": "PreCompact",
+                "trigger": "auto",
+                "custom_instructions": None,
+            },
+            {"state": "Thinking", "status": "Compacting context (auto)"},
+        ),
+        (
+            {"hook_event_name": "PreCompact", "trigger": ["auto"]},
+            {"state": "Thinking", "status": "Compacting context"},
+        ),
+        (
+            {
+                "hook_event_name": "PostCompact",
+                "trigger": "manual",
+                "compact_summary": "secret",
+            },
+            {"state": "Idle", "status": "Context compacted"},
+        ),
+        (
+            {
+                "hook_event_name": "PostCompact",
+                "trigger": "auto",
+                "compact_summary": "secret",
+            },
+            {"state": "Thinking", "status": "Context compacted"},
+        ),
+        (
+            {
+                "hook_event_name": "StopFailure",
+                "error": "rate_limit",
+                "error_details": "secret",
+                "last_assistant_message": "secret",
+            },
+            {"state": "Error", "status": "failed", "error": "API error: rate_limit"},
+        ),
+        (
+            {"hook_event_name": "StopFailure", "error": "secret"},
+            {"state": "Error", "status": "failed", "error": "API error: unknown"},
+        ),
+    ],
+)
+def test_claude_lifecycle_events_publish_dashboard_states(
+    hook_data: dict, expected: dict
+) -> None:
+    """Lifecycle events must publish only normalized dashboard states."""
+    client = _run({**BASE, **hook_data})
+
+    client.send.assert_called_once_with(
+        agent="Claude Code",
+        workspace="/workspace",
+        session_id="native:session-123",
+        **expected,
+    )
+    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+
+
+def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
+    """Claude Code's duration_ms must win over the hook's own timing file."""
+    before = {
+        **BASE,
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm test"},
+        "tool_use_id": "toolu_reported",
+    }
+    after = {
+        **before,
+        "hook_event_name": "PostToolUse",
+        "tool_response": {},
+        "duration_ms": 4187,
+    }
+
+    with (
+        patch(f"{HOOK}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{HOOK}.time.time", side_effect=[1000.0, 2000.0]),
+    ):
+        client = _run(before, after)
+
+    assert client.send.call_args.kwargs["duration"] == 4.2
+    assert not list(tmp_path.iterdir())

@@ -40,6 +40,14 @@ HOOK_CONFIGS = {
         "name": "vauxhall-waiting",
         "description": "Vauxhall telemetry for Gemini waiting for input",
     },
+    "SessionStart": {
+        "name": "vauxhall-session-start",
+        "description": "Vauxhall telemetry for Gemini session start",
+    },
+    "PreCompress": {
+        "name": "vauxhall-compress",
+        "description": "Vauxhall telemetry for Gemini context compression",
+    },
 }
 # Hook-system options that older Gemini CLI releases keep beside event entries.
 _HOOK_OPTION_KEYS = frozenset({"enabled", "disabled", "notifications"})

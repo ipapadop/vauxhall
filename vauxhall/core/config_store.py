@@ -101,6 +101,41 @@ def save_user_config(
         ConfigurationError: If a field is unknown or not editable, the existing
             file is malformed, or the merged configuration is invalid.
     """
+    path, data = _prepare(filename, config_type, changes)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json_atomically(path, data)
+    return path
+
+
+def check_user_config(
+    filename: str,
+    config_type: type[Any],
+    changes: Mapping[str, Mapping[str, object]],
+) -> Path:
+    """Check that changes could be saved, without writing anything.
+
+    Use this to validate several files before saving any of them.
+
+    Args:
+        filename: The configuration file name, such as "vauxhall_dashboard.json".
+        config_type: The configuration dataclass loaded from that file.
+        changes: New values, grouped by section.
+
+    Returns:
+        Path: The file that ``save_user_config`` would write.
+
+    Raises:
+        ConfigurationError: In the same cases as ``save_user_config``.
+    """
+    return _prepare(filename, config_type, changes)[0]
+
+
+def _prepare(
+    filename: str,
+    config_type: type[Any],
+    changes: Mapping[str, Mapping[str, object]],
+) -> tuple[Path, dict[str, Any]]:
+    """Merge and validate changes, returning the target path and its new data."""
     path = user_config_path(filename)
     _check_editable(field_sources(filename, config_type), changes, path)
 
@@ -121,9 +156,7 @@ def save_user_config(
             data.pop(section, None)
 
     _validate(config_type, data, path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _write_json_atomically(path, data)
-    return path
+    return path, data
 
 
 def _check_editable(

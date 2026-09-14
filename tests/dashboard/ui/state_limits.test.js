@@ -10,6 +10,7 @@ import {
     agents,
     clearAgents,
     ensureAgentCapacity,
+    evictAgents,
 } from '../../../vauxhall/dashboard/ui/js/state.js';
 
 let document;
@@ -39,7 +40,7 @@ test('capacity evicts the least recently seen card', () => {
     agents.oldest = oldestCard;
     agents.middle = middleCard;
 
-    assert.equal(ensureAgentCapacity(3), 'oldest');
+    assert.deepEqual(ensureAgentCapacity(3), ['oldest']);
     assert.deepEqual(Object.keys(agents).sort(), ['middle', 'newer']);
     assert.equal(document.body.contains(oldestCard), false);
     assert.equal(document.body.contains(newerCard), true);
@@ -49,8 +50,34 @@ test('capacity evicts the least recently seen card', () => {
 test('capacity does nothing below the limit', () => {
     agents.only = makeCard('100');
 
-    assert.equal(ensureAgentCapacity(3), null);
+    assert.deepEqual(ensureAgentCapacity(3), []);
     assert.ok(agents.only);
+});
+
+test('capacity evicts every surplus card after the limit is lowered', () => {
+    agents.newest = makeCard('400');
+    agents.oldest = makeCard('100');
+    agents.newer = makeCard('300');
+    agents.older = makeCard('200');
+
+    assert.deepEqual(ensureAgentCapacity(2), ['oldest', 'older', 'newer']);
+    assert.deepEqual(Object.keys(agents), ['newest']);
+});
+
+test('lowering the limit evicts the oldest surplus cards immediately', () => {
+    const newestCard = makeCard('300');
+    const oldestCard = makeCard('100');
+    const middleCard = makeCard('200');
+    agents.newest = newestCard;
+    agents.oldest = oldestCard;
+    agents.middle = middleCard;
+
+    assert.deepEqual(evictAgents(1), ['oldest', 'middle']);
+    assert.deepEqual(Object.keys(agents), ['newest']);
+    assert.equal(document.body.contains(oldestCard), false);
+    assert.equal(document.body.contains(middleCard), false);
+    assert.equal(document.body.contains(newestCard), true);
+    assert.deepEqual(evictAgents(1), []);
 });
 
 test('capacity breaks equal last-seen timestamps by lexical key', () => {
@@ -59,7 +86,7 @@ test('capacity breaks equal last-seen timestamps by lexical key', () => {
     agents.beta = betaCard;
     agents.alpha = alphaCard;
 
-    assert.equal(ensureAgentCapacity(2), 'alpha');
+    assert.deepEqual(ensureAgentCapacity(2), ['alpha']);
     assert.equal(document.body.contains(alphaCard), false);
     assert.equal(document.body.contains(betaCard), true);
 });
@@ -68,7 +95,7 @@ test('capacity evicts the sole card when limit is one', () => {
     const onlyCard = makeCard('100');
     agents.only = onlyCard;
 
-    assert.equal(ensureAgentCapacity(1), 'only');
+    assert.deepEqual(ensureAgentCapacity(1), ['only']);
     assert.deepEqual(Object.keys(agents), []);
     assert.equal(document.body.contains(onlyCard), false);
 });

@@ -19,23 +19,34 @@ export function agentKey(data) {
 }
 
 /**
- * Removes the least recently seen card when a new card would exceed capacity.
+ * Removes the least recently seen cards until at most `maxAgents` remain.
  * @param {number} maxAgents - Maximum number of cards to retain.
- * @returns {string | null} The evicted card key, if any.
+ * @returns {string[]} The evicted card keys, oldest first.
  */
-export function ensureAgentCapacity(maxAgents) {
+export function evictAgents(maxAgents) {
     const entries = Object.entries(agents);
-    if (entries.length < maxAgents) return null;
+    const surplus = entries.length - Math.max(maxAgents, 0);
+    if (surplus <= 0) return [];
 
     entries.sort(([leftKey, left], [rightKey, right]) => {
         const age = Number(left.dataset.lastSeen || 0) - Number(right.dataset.lastSeen || 0);
         return age || leftKey.localeCompare(rightKey);
     });
 
-    const [key, card] = entries[0];
-    card.remove();
-    delete agents[key];
-    return key;
+    return entries.slice(0, surplus).map(([key, card]) => {
+        card.remove();
+        delete agents[key];
+        return key;
+    });
+}
+
+/**
+ * Removes the least recently seen cards so a new card fits within capacity.
+ * @param {number} maxAgents - Maximum number of cards to retain.
+ * @returns {string[]} The evicted card keys, oldest first.
+ */
+export function ensureAgentCapacity(maxAgents) {
+    return evictAgents(maxAgents - 1);
 }
 
 /**

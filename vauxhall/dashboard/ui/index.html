@@ -22,6 +22,7 @@
                 </div>
             </div>
             <div class="toolbar">
+                <button id="settings-btn" class="secondary-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙️</button>
                 <button id="theme-toggle" class="secondary-btn" title="Toggle Light/Dark Theme">🌓</button>
                 <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar" title="Filter agents by name or workspace path">
                 <select id="sort-select" class="secondary-btn" title="Sort agent cards">
@@ -62,6 +63,29 @@
             </div>
         </div>
     </div>
+
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+        <form id="settings-form" novalidate>
+            <h2 id="settings-title">Settings</h2>
+            <p id="settings-message" class="settings-message" role="status" aria-live="polite"></p>
+            <div id="settings-fields"></div>
+            <div id="settings-hooks" class="settings-hooks" hidden>
+                <label>
+                    <input type="checkbox" id="settings-update-hooks">
+                    Also update hooks configuration (<code id="settings-hooks-path"></code>)
+                </label>
+                <p class="settings-note">
+                    Hooks are not affected if they get <code>VAUXHALL_MQTT_*</code> environment
+                    variables, run in a workspace with its own <code>vauxhall_hooks.json</code>,
+                    or run on another machine.
+                </p>
+            </div>
+            <div class="settings-actions">
+                <button type="button" id="settings-cancel" class="secondary-btn">Cancel</button>
+                <button type="submit" id="settings-save" class="secondary-btn primary-btn">Save</button>
+            </div>
+        </form>
+    </dialog>
 
     <script type="module" src="app.js"></script>
 </body>

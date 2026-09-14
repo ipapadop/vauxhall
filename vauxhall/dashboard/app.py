@@ -3,6 +3,7 @@
 
 """Main entry point for the Vauxhall Dashboard application."""
 
+import logging
 from collections import deque
 from pathlib import Path
 from threading import Lock
@@ -11,11 +12,22 @@ from typing import Any
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
 
+from vauxhall.core.config import ConfigurationError
+from vauxhall.core.config_store import check_user_config, save_user_config
 from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.core.telemetry import telemetry_validation_error
+from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.dashboard.settings_editor import (
+    DASHBOARD_FILE,
+    HOOKS_FILE,
+    apply_mode,
+    changed_fields,
+    error_field,
+    hook_config_type,
+)
 
 logger = get_logger(__name__)
 
@@ -33,7 +45,11 @@ class DashboardApp:
         self.window: Any = None
         self._updates_lock = Lock()
         self._dispatch_lock = Lock()
-        self.ipc = DashboardIPC(on_ready_callback=self._on_frontend_ready)
+        self._settings_lock = Lock()
+        self.ipc = DashboardIPC(
+            on_ready_callback=self._on_frontend_ready,
+            on_save_settings=self.save_settings,
+        )
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
         )
@@ -108,6 +124,110 @@ class DashboardApp:
                     self.window.invoke("status-update", message)
         except Exception:
             logger.exception("Error in on_status")
+
+    def save_settings(
+        self, changes: dict[str, dict[str, object]], *, update_hooks: bool
+    ) -> dict[str, Any]:
+        """Save settings changes and apply those that don't need a restart.
+
+        Both files are validated before either is written, so an invalid
+        dashboard or hooks change saves nothing.
+
+        Args:
+            changes: New values, grouped by section.
+            update_hooks: Whether to also save MQTT changes to the hooks file.
+
+        Returns:
+            dict[str, Any]: The outcome for the settings editor.
+        """
+        hook_changes = (
+            {"mqtt": changes["mqtt"]} if update_hooks and changes.get("mqtt") else None
+        )
+        with self._settings_lock:
+            file = "dashboard"
+            try:
+                check_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+                if hook_changes:
+                    file = "hooks"
+                    check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                    file = "dashboard"
+                save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+                new_config = DashboardConfig.load()
+            except (ConfigurationError, OSError) as error:
+                logger.warning("Settings not saved: %s", error)
+                return {
+                    "ok": False,
+                    "error": str(error),
+                    "field": error_field(str(error)),
+                    "file": file,
+                }
+
+            hooks_error = None
+            if hook_changes:
+                try:
+                    save_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                except (ConfigurationError, OSError) as error:
+                    logger.warning("Hooks configuration not saved: %s", error)
+                    hooks_error = str(error)
+
+            changed = changed_fields(settings, new_config)
+            reconnecting = self._apply_settings(new_config, changed)
+
+        return {
+            "ok": True,
+            "restart_required": [
+                key for key in changed if apply_mode(key) == "restart"
+            ],
+            "reconnecting": reconnecting,
+            "hooks_updated": hook_changes is not None and hooks_error is None,
+            "hooks_error": hooks_error,
+        }
+
+    def _apply_settings(self, new_config: DashboardConfig, changed: list[str]) -> bool:
+        """Replace the running settings and apply changes that take effect now.
+
+        Returns:
+            bool: Whether the MQTT subscriber was restarted.
+        """
+        settings.mqtt = new_config.mqtt
+        settings.logging = new_config.logging
+        settings.dashboard = new_config.dashboard
+        if not changed:
+            return False
+
+        if "logging.level" in changed:
+            logging.getLogger().setLevel(new_config.logging.level)
+
+        reconnecting = self.mqtt is not None and any(
+            apply_mode(key) == "reconnect" for key in changed
+        )
+        if reconnecting:
+            self._reconnect()
+
+        with self._updates_lock:
+            is_ready = self.ipc.is_ready
+        if is_ready:
+            with self._dispatch_lock:
+                self.window.invoke(
+                    "settings-changed",
+                    {
+                        "stale_threshold": settings.dashboard.stale_threshold,
+                        "max_active_agents": settings.dashboard.max_active_agents,
+                    },
+                )
+        return reconnecting
+
+    def _reconnect(self) -> None:
+        """Replace the MQTT subscriber with one using the current broker settings."""
+        assert self.mqtt is not None
+        self.mqtt.stop()
+        self.mqtt = DashboardSubscriber(
+            self.on_telemetry, self.on_status, settings.mqtt.host, settings.mqtt.port
+        )
+        try:
+            self.mqtt.start()
+        except Exception:
+            logger.exception("Could not reconnect to the MQTT broker")
 
     def run(self) -> None:
         """Run the application."""

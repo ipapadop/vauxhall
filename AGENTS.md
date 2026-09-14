@@ -131,6 +131,13 @@ telemetry. Rejection logs never include payload values. The dashboard and
   default) turns gray and shows `STALE`. Staleness is checked every 10 seconds.
 - **Copying**: Clicking a card copies the raw `workspace` value. Telemetry is
   never inserted into HTML markup or shell commands.
+- **Settings**: The ⚙️ button opens a `<dialog>` built from
+  `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
+  error per field. Read-only fields are disabled with the reason shown. Escape
+  or Cancel closes it and focus returns to the button. Save sends only changed
+  values to `DashboardIPC.save_settings()`; server errors appear next to the
+  named field, and the dialog stays open to show restart or hooks notes. See
+  [README.md](README.md#settings-dialog) for when each field takes effect.
 
 ## Dashboard Internals
 
@@ -145,6 +152,16 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **Connection status**: The status line shows `Connecting...`,
   `Connected to Agent Fleet`, retry messages after connection failures or
   disconnects, and `Disconnected` on shutdown.
+- **Saving settings**: `DashboardApp.save_settings` runs under one lock, so
+  saves never overlap. It checks the dashboard file and, when requested, the
+  hooks file with `check_user_config` before writing either one. It then reloads
+  `DashboardConfig`, replaces the running `mqtt`, `logging`, and `dashboard`
+  settings, and sets the root log level if it changed. Broker changes stop the
+  current `DashboardSubscriber` and start a new one with the new host and port;
+  a failed start is logged, and the saved settings stay. If the frontend is
+  ready, it receives a `settings-changed` event with the new stale threshold
+  and card limit. `vauxhall.hooks.config` is imported lazily, so a malformed
+  hooks file only disables the hooks option.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are

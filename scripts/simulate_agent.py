@@ -27,15 +27,26 @@ POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
         "details": {"thought": "Analyzing the directory structure..."},
     },
     {"state": "Acting", "details": {"tool": "run_shell_command", "cmd": "ls -al"}},
-    {"state": "Acting", "details": {"tool": "view_file", "path": "src/main.py"}},
+    {"state": "Acting", "details": {"tool": "read_file", "cmd": "src/main.py"}},
     {
         "state": "Waiting for Input",
         "details": {"prompt": "Shall I proceed with the deletion? [y/n]"},
     },
     {"state": "Error", "details": {"error": "Connection reset by peer"}},
     {
-        "state": "Waiting",
+        "state": "Idle",
         "details": {"status": "Waiting for background task to complete"},
+    },
+    # Operations matching the lifecycle hook events for session restarts,
+    # subagents, permission notifications, context compaction, and API failures.
+    {"state": "Idle", "details": {"status": "Session resumed"}},
+    {"state": "Acting", "details": {"tool": "Agent", "cmd": "Explore"}},
+    {"state": "Waiting for Input", "details": {"prompt": "Permission required..."}},
+    {"state": "Thinking", "details": {"status": "Compacting context (auto)"}},
+    {"state": "Thinking", "details": {"status": "Context compacted"}},
+    {
+        "state": "Error",
+        "details": {"status": "failed", "error": "API error: rate_limit"},
     },
 ]
 

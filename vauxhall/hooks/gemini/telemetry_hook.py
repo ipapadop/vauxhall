@@ -3,19 +3,16 @@
 
 """Vauxhall telemetry hook for Gemini CLI.
 
-Reads one hook event (BeforeAgent, AfterAgent, AfterModel, BeforeTool, AfterTool,
-Notification, or SessionEnd) as JSON from stdin and publishes its telemetry.
+Reads one hook event (SessionStart, BeforeAgent, AfterAgent, AfterModel,
+BeforeTool, AfterTool, Notification, PreCompress, or SessionEnd) as JSON from
+stdin and publishes its telemetry.
 """
 
-import hashlib
 import json
-import time
-from contextlib import suppress
-from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
-from vauxhall.core.logging import get_logger
-from vauxhall.hooks.common import is_cancelled, run_hook
+from vauxhall.hooks import common
 from vauxhall.hooks.identity import resolve_session_id
 
 if TYPE_CHECKING:
@@ -23,34 +20,42 @@ if TYPE_CHECKING:
 else:
     TelemetryClient = None
 
-logger = get_logger(__name__)
-
-
-def _tool_time_file(
-    workspace: str, session_id: str, input_data: dict[str, Any]
-) -> Path:
-    """Return a collision-resistant timing file for one Gemini tool call."""
-    tool_call_id = input_data.get("tool_call_id")
-    identity = session_id
-    if isinstance(tool_call_id, str) and tool_call_id.strip():
-        identity = f"{identity}\0{tool_call_id.strip()}"
-    digest = hashlib.sha256(identity.encode()).hexdigest()
-    return Path(workspace) / ".gemini" / f".vauxhall_tool_start.{digest}.time"
-
-
+# Finish reasons that do not end a streamed model response.
+_UNFINISHED_REASONS = ("", "FINISH_REASON_UNSPECIFIED")
 _SESSION_END_STATUSES = {
     "exit": "session exited",
     "clear": "session cleared",
     "logout": "logged out",
     "prompt_input_exit": "input closed",
 }
+# The tool input field shown as cmd for each tool.
+_COMMAND_FIELDS = {
+    "run_shell_command": "command",
+    "read_file": "file_path",
+    "write_file": "file_path",
+    "replace": "file_path",
+}
+
+
+def _tool_call_identity(input_data: dict[str, Any]) -> list[object]:
+    """Identify one Gemini tool call, for which Gemini CLI sends no ID.
+
+    BeforeTool and AfterTool both carry the workspace, session, tool name, and
+    tool input.
+    """
+    return [
+        input_data.get("cwd"),
+        resolve_session_id(input_data),
+        input_data.get("tool_name"),
+        input_data.get("tool_input"),
+    ]
 
 
 def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     """Map a Gemini tool response to a truthful telemetry outcome."""
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
-    if is_cancelled(response):
+    if common.is_cancelled(response):
         return "Idle", "cancelled", None
     if response.get("error") is not None:
         return "Error", "failed", "Tool reported an error"
@@ -69,152 +74,101 @@ def _create_telemetry_client() -> "TelemetryClient":
     return _TelemetryClient()
 
 
-def handle_notification(
-    input_data: dict[str, Any],
-) -> tuple[str, dict[str, Any]] | None:
+def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
     """Map a ToolPermission notification to a waiting state; ignore others."""
-    notification_type = input_data.get("notification_type", "")
-    if notification_type == "ToolPermission":
-        state = "Waiting for Input"
-        tool_name = input_data.get("details", {}).get("tool_name", "unknown")
-        details = {
-            "prompt": input_data.get("message", "Permission required..."),
-        }
-        if tool_name != "unknown":
-            details["tool"] = tool_name
-        return state, details
-    return None
+    if input_data.get("notification_type", "") != "ToolPermission":
+        return None
+    # Gemini CLI names the tool only for MCP confirmations, as toolName.
+    confirmation = input_data.get("details")
+    tool_name = confirmation.get("toolName") if isinstance(confirmation, dict) else None
+    details = {"prompt": input_data.get("message", "Permission required...")}
+    if isinstance(tool_name, str) and tool_name:
+        details["tool"] = tool_name
+    return "Waiting for Input", details
 
 
-def handle_before_tool(
-    input_data: dict[str, Any], time_file: Path
-) -> tuple[str, dict[str, Any]]:
+def _handle_before_tool(input_data: dict[str, Any]) -> common.Telemetry:
     """Record a tool's start time and map BeforeTool to a state and details."""
-    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
-    tool_input = input_data.get("tool_input", input_data.get("arguments", {}))
-
-    # Record start time for duration calculation
-    with suppress(Exception):
-        time_file.write_text(str(time.time()))
-
-    # Handle explicit 'ask_user' and 'ask_question' tool calls
-    if tool_name in ("ask_user", "ask_question"):
-        questions = tool_input.get("questions", [])
-        if "question" in tool_input and not questions:
-            questions = [{"question": tool_input.get("question")}]
-        if questions:
-            prompt = "\n".join(q.get("question", "") for q in questions)
-        else:
-            prompt = "User input required"
-        return "Waiting for Input", {"prompt": prompt}
-
-    # Extract a friendly display string based on the tool being used
-    cmd_display = ""
-    if tool_name == "run_shell_command":
-        cmd_display = tool_input.get("command", "")
-    elif tool_name in ("read_file", "write_file", "replace", "view_file"):
-        cmd_display = tool_input.get("file_path", "")
-
-    details = {"cmd": cmd_display, "args": json.dumps(tool_input)}
-    if tool_name != "unknown":
-        details["tool"] = tool_name
-    return "Acting", details
+    common.record_tool_start("gemini", _tool_call_identity(input_data))
+    tool_input = input_data.get("tool_input", {})
+    if input_data.get("tool_name") == "ask_user":
+        return "Waiting for Input", {"prompt": common.question_prompt(tool_input)}
+    return "Acting", {
+        "cmd": "",
+        "args": json.dumps(tool_input),
+        **common.tool_details(input_data, _COMMAND_FIELDS),
+    }
 
 
-def handle_after_tool(
-    input_data: dict[str, Any], time_file: Path
-) -> tuple[str, dict[str, Any]]:
+def _handle_after_tool(input_data: dict[str, Any]) -> common.Telemetry:
     """Map an AfterTool outcome and its duration to a state and details."""
-    tool_name = input_data.get("tool_name", input_data.get("tool", "unknown"))
     state, status, error = _classify_tool_response(input_data.get("tool_response"))
-    details: dict[str, Any] = {"status": status}
-    if tool_name != "unknown":
-        details["tool"] = tool_name
+    details = {**common.tool_details(input_data, {}), "status": status}
     if error is not None:
         details["error"] = error
-
-    # Calculate duration
-    with suppress(Exception):
-        start_time = float(time_file.read_text().strip())
-        details["duration"] = round(time.time() - start_time, 1)
-        time_file.unlink()
+    duration = common.claim_tool_duration("gemini", _tool_call_identity(input_data))
+    if duration is not None:
+        details["duration"] = duration
     return state, details
 
 
-def handle_session_end(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Handle Gemini CLI SessionEnd events without publishing raw reasons."""
-    reason = input_data.get("reason")
-    status = (
-        _SESSION_END_STATUSES.get(reason, "session ended")
-        if isinstance(reason, str)
-        else "session ended"
+def _handle_pre_compress(input_data: dict[str, Any]) -> common.Telemetry:
+    """Manual compression runs at the prompt; automatic compression is mid-turn."""
+    state = "Idle" if input_data.get("trigger") == "manual" else "Thinking"
+    return state, {"status": "Compacting context"}
+
+
+def _is_final_model_response(llm_response: object) -> bool:
+    """Return whether a model response chunk carries a finish reason."""
+    if not isinstance(llm_response, dict):
+        return False
+    candidates = llm_response.get("candidates")
+    if not isinstance(candidates, list):
+        return False
+    return any(
+        isinstance(candidate, dict)
+        and isinstance(candidate.get("finishReason"), str)
+        and candidate["finishReason"] not in _UNFINISHED_REASONS
+        for candidate in candidates
     )
-    return "Idle", {"status": status}
 
 
-def handle_after_model(input_data: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Map AfterModel to a thinking state with its token count, when present."""
-    state = "Thinking"
-    details = {"status": "Model replied"}
-    usage = input_data.get("llm_response", {}).get("usageMetadata", {})
-    tokens = usage.get("totalTokenCount")
-    if tokens is not None:
-        details["tokens"] = tokens
-    return state, details
+def _handle_after_model(input_data: dict[str, Any]) -> common.Telemetry | None:
+    """Map the final AfterModel chunk to a thinking state with its token count.
+
+    Gemini CLI fires AfterModel for every streamed chunk, so only the chunk that
+    finishes the response is published.
+    """
+    llm_response = input_data.get("llm_response")
+    if not _is_final_model_response(llm_response):
+        return None
+    details: dict[str, Any] = {"status": "Model replied"}
+    usage = llm_response.get("usageMetadata")
+    if isinstance(usage, dict) and usage.get("totalTokenCount") is not None:
+        details["tokens"] = usage["totalTokenCount"]
+    return "Thinking", details
 
 
-def _send_telemetry(input_data: dict[str, Any]) -> None:
-    """Translate one Gemini hook event and publish its telemetry."""
-    hook_type = input_data.get(
-        "hook_event_name", input_data.get("hook_type", "BeforeTool")
-    )
-    workspace = input_data.get("cwd", input_data.get("workspace", str(Path.cwd())))
-
-    notification_result: tuple[str, dict[str, Any]] | None = None
-    if (
-        hook_type == "Notification"
-        and (notification_result := handle_notification(input_data)) is None
-    ):
-        return
-
-    session_id = resolve_session_id(input_data)
-    if session_id is None:
-        logger.warning("Skipping telemetry: no stable session identity is available")
-        return
-
-    time_file = _tool_time_file(workspace, session_id, input_data)
-    details: dict[str, Any]
-    if notification_result is not None:
-        state, details = notification_result
-    elif hook_type == "BeforeAgent":
-        state = "Thinking"
-        details = {"prompt": input_data.get("prompt", "Processing...")}
-    elif hook_type == "AfterAgent":
-        state, details = "Idle", {"status": "Ready"}
-    elif hook_type == "AfterModel":
-        state, details = handle_after_model(input_data)
-    elif hook_type == "BeforeTool":
-        state, details = handle_before_tool(input_data, time_file)
-    elif hook_type == "AfterTool":
-        state, details = handle_after_tool(input_data, time_file)
-    elif hook_type == "SessionEnd":
-        state, details = handle_session_end(input_data)
-    else:
-        state, details = "Idle", {"hook": hook_type}
-
-    with _create_telemetry_client() as client:
-        client.send(
-            agent="Gemini",
-            workspace=workspace,
-            session_id=session_id,
-            state=state,
-            **details,
-        )
+_HANDLERS: dict[str, common.EventHandler] = {
+    "SessionStart": common.session_start_telemetry,
+    "BeforeAgent": common.prompt_submit_telemetry,
+    "AfterAgent": common.ready_telemetry,
+    "AfterModel": _handle_after_model,
+    "BeforeTool": _handle_before_tool,
+    "AfterTool": _handle_after_tool,
+    "Notification": _handle_notification,
+    "PreCompress": _handle_pre_compress,
+    "SessionEnd": partial(common.session_end_telemetry, statuses=_SESSION_END_STATUSES),
+}
 
 
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
-    run_hook(_send_telemetry)
+    common.run_hook(
+        lambda input_data: common.publish_telemetry(
+            input_data, "Gemini", _HANDLERS, _create_telemetry_client
+        )
+    )
 
 
 if __name__ == "__main__":

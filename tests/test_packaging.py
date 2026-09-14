@@ -73,6 +73,9 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
         "vauxhall/dashboard/ui/style.css",
         "vauxhall/core/telemetry.py",
         "vauxhall/hooks/identity.py",
+        "vauxhall/hooks/claude/__init__.py",
+        "vauxhall/hooks/claude/install.py",
+        "vauxhall/hooks/claude/telemetry_hook.py",
         "vauxhall/hooks/codex/__init__.py",
         "vauxhall/hooks/codex/install.py",
         "vauxhall/hooks/codex/telemetry_hook.py",
@@ -197,6 +200,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
     } <= set(metadata.get_all("Classifier"))
     assert entry_points["console_scripts"] == {
         "vauxhall": "vauxhall.dashboard.app:main",
+        "vauxhall-install-claude": "vauxhall.hooks.claude.install:install",
         "vauxhall-install-codex": "vauxhall.hooks.codex.install:install",
         "vauxhall-install-gemini": "vauxhall.hooks.gemini.install:install",
     }
@@ -211,6 +215,11 @@ def test_package_version_matches_installed_distribution() -> None:
 @pytest.mark.parametrize(
     ("command", "config_path", "hook_module"),
     [
+        (
+            "vauxhall-install-claude",
+            Path(".claude/settings.local.json"),
+            "vauxhall.hooks.claude.telemetry_hook",
+        ),
         (
             "vauxhall-install-codex",
             Path(".codex/hooks.json"),

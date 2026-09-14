@@ -1,149 +1,121 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Vauxhall hook installer."""
+"""Tests for the Gemini-specific behavior of the Vauxhall hook installer."""
 
-import base64
 import json
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 
-import pytest
-
+from vauxhall.hooks import installation
 from vauxhall.hooks.gemini import install as installer
 
 
-def test_load_settings(tmp_path: Path) -> None:
-    """Verify load_settings creates backup and returns dict."""
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text('{"existing": "value"}')
-
-    settings = installer.load_settings(settings_file)
-    assert settings == {"existing": "value"}
-    assert (tmp_path / "settings.json.bak").exists()
-
-
-def test_load_settings_empty(tmp_path: Path) -> None:
-    """Verify load_settings returns empty dict if file is missing."""
-    settings_file = tmp_path / "settings.json"
-    settings = installer.load_settings(settings_file)
-    assert settings == {}
+def _install(workspace: Path) -> dict:
+    """Install into a workspace with a stubbed environment and return settings."""
+    with (
+        patch.object(Path, "cwd", return_value=workspace),
+        patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
+        patch.object(installation.os, "name", "posix"),
+    ):
+        installer.install()
+    return json.loads((workspace / installer.SETTINGS_PATH).read_text())
 
 
-def test_purge_vauxhall_hooks() -> None:
-    """Verify purge_vauxhall_hooks removes old vauxhall hooks."""
+def test_purge_removes_only_generated_vauxhall_handlers() -> None:
+    """Purging must match generated commands, not every vauxhall- name."""
+    generated = {
+        "name": "vauxhall-acting",
+        "type": "command",
+        "command": "/venv/bin/python -m vauxhall.hooks.gemini.telemetry_hook",
+    }
+    legacy = {
+        "name": "vauxhall-acting",
+        "type": "command",
+        "command": "/venv/bin/python /src/vauxhall/hooks/gemini/telemetry_hook.py",
+    }
+    user_prefixed = {
+        "name": "vauxhall-custom",
+        "type": "command",
+        "command": "python custom.py",
+    }
+    user_named_like_vauxhall = {
+        "name": "vauxhall-acting",
+        "type": "command",
+        "command": "python custom.py",
+    }
     settings = {
         "hooks": {
-            "BeforeAgent": [
+            "BeforeTool": [
                 {
                     "matcher": "*",
                     "hooks": [
-                        {"name": "vauxhall-acting"},
-                        {"name": "user-custom-hook"},
+                        generated,
+                        legacy,
+                        user_prefixed,
+                        user_named_like_vauxhall,
                     ],
                 }
+            ],
+            "AfterTool": [{"matcher": "*", "hooks": [generated]}],
+        }
+    }
+
+    installation.purge_hook_handlers(
+        settings, installer._is_vauxhall_handler, installer._HOOK_OPTION_KEYS
+    )
+
+    assert settings == {
+        "hooks": {
+            "BeforeTool": [
+                {"matcher": "*", "hooks": [user_prefixed, user_named_like_vauxhall]}
             ]
         }
     }
-    installer.purge_vauxhall_hooks(settings)
-    assert len(settings["hooks"]["BeforeAgent"][0]["hooks"]) == 1
-    assert settings["hooks"]["BeforeAgent"][0]["hooks"][0]["name"] == "user-custom-hook"
 
 
-def test_register_hook() -> None:
-    """Verify register_hook appends or updates correctly."""
-    settings = {}
-    config = {"name": "vauxhall-test", "description": "Test hook"}
-    command = "python test.py"
+def test_reinstall_keeps_hook_options(tmp_path: Path) -> None:
+    """Hook-system options stored beside events must be preserved."""
+    settings_file = tmp_path / installer.SETTINGS_PATH
+    settings_file.parent.mkdir()
+    options = {"enabled": True, "disabled": ["other-hook"], "notifications": False}
+    settings_file.write_text(json.dumps({"hooks": options}))
 
-    installer.register_hook(settings, "AfterAgent", config, command)
+    settings = _install(tmp_path)
 
-    assert "AfterAgent" in settings["hooks"]
-    assert settings["hooks"]["AfterAgent"][0]["matcher"] == "*"
-
-    hook = settings["hooks"]["AfterAgent"][0]["hooks"][0]
-    assert hook["name"] == "vauxhall-test"
-    assert hook["command"] == command
+    assert {key: settings["hooks"][key] for key in options} == options
 
 
-def test_hook_command_uses_posix_module_invocation() -> None:
-    """Gemini hooks must use the installed module with safe POSIX quoting."""
-    python = Path("/opt/Vauxhall $(touch marker)/bin/python")
-
-    with patch.object(installer.common.os, "name", "posix"):
-        command = installer.build_hook_command(python)
-
-    assert command == (
-        "'/opt/Vauxhall $(touch marker)/bin/python' "
-        "-m vauxhall.hooks.gemini.telemetry_hook"
+def test_reinstall_replaces_legacy_source_checkout_handlers(tmp_path: Path) -> None:
+    """Handlers that ran the hook from a source checkout must be replaced."""
+    settings_file = tmp_path / installer.SETTINGS_PATH
+    settings_file.parent.mkdir()
+    legacy_handler = {
+        "name": "vauxhall-acting",
+        "type": "command",
+        "command": "/old/venv/bin/python /src/vauxhall/hooks/gemini/telemetry_hook.py",
+        "description": "Vauxhall telemetry for Gemini tool execution",
+    }
+    settings_file.write_text(
+        json.dumps(
+            {"hooks": {"BeforeTool": [{"matcher": "*", "hooks": [legacy_handler]}]}}
+        )
     )
 
+    settings = _install(tmp_path)
 
-def test_hook_command_uses_windows_module_invocation() -> None:
-    """Gemini hooks must encode Windows paths and execute the installed module."""
-    python = Path("/Program Files/Vauxhall & %TEMP%/(owner's)/python.exe")
-
-    with patch.object(installer.common.os, "name", "nt"):
-        command = installer.build_hook_command(python)
-
-    prefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
-    assert command.startswith(prefix)
-    encoded_script = command.removeprefix(prefix)
-    script = base64.b64decode(encoded_script).decode("utf-16-le")
-    assert script == (
-        "& '/Program Files/Vauxhall & %TEMP%/(owner''s)/python.exe' "
-        "-m vauxhall.hooks.gemini.telemetry_hook"
-    )
-
-
-def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
-    """Gemini hook environments must install an immutable published release."""
-    venv_dir = tmp_path / "hooks-venv"
-    if installer.common.os.name == "nt":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    with patch.object(installer.common.subprocess, "run") as run:
-        result = installer.setup_venv(venv_dir)
-
-    assert result == venv_python
-    assert run.call_args_list == [
-        call(
-            [installer.sys.executable, "-m", "venv", str(venv_dir)],
-            check=True,
-        ),
-        call(
-            [
-                str(venv_python),
-                "-m",
-                "pip",
-                "install",
-                "vauxhall[hooks]==0.1.0",
-            ],
-            check=True,
-            capture_output=True,
-        ),
-    ]
-
-
-def test_install_registers_session_end_handler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Gemini installation must register Vauxhall's SessionEnd lifecycle hook."""
-    monkeypatch.chdir(tmp_path)
-    venv_python = tmp_path / ".vauxhall-venv" / "bin" / "python"
-
-    with patch.object(installer, "setup_venv", return_value=venv_python):
-        installer.install()
-
-    settings = json.loads((tmp_path / ".gemini" / "settings.json").read_text())
-    session_end_hooks = settings["hooks"]["SessionEnd"][0]["hooks"]
-    assert session_end_hooks == [
+    assert settings["hooks"]["BeforeTool"] == [
         {
-            "name": "vauxhall-session-end",
-            "type": "command",
-            "command": installer.build_hook_command(venv_python.absolute()),
-            "description": "Vauxhall telemetry for Gemini session end",
+            "matcher": "*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "/venv/bin/python -m vauxhall.hooks.gemini.telemetry_hook"
+                    ),
+                    "name": "vauxhall-acting",
+                    "description": "Vauxhall telemetry for Gemini tool execution",
+                }
+            ],
         }
     ]

@@ -6,13 +6,23 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
@@ -20,19 +30,41 @@ jobs:
         run: |
           npm ci
           npm test
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: '3.13'
       - name: Install OS dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install .
-          pip install pytest
       - name: Test with pytest
-        run: pytest
+        run: uv run --locked pytest
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: '3.13'
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Check distribution metadata
+        run: uv run --locked --only-group test twine check --strict dist/*
+      - name: Smoke-test the built wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          uv venv smoke
+          uv pip install --python smoke "$GITHUB_WORKSPACE"/dist/*.whl
+          smoke/bin/python -c "
+          from importlib.resources import files
+          import vauxhall.hooks.client, vauxhall.hooks.codex.telemetry_hook
+          ui = files('vauxhall.dashboard') / 'ui'
+          for asset in ('index.html', 'app.js', 'style.css', 'js/ui.js'):
+              assert (ui / asset).is_file(), asset
+          "

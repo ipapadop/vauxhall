@@ -13,6 +13,7 @@ import pytest
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.config_store import (
     FieldSource,
+    check_user_config,
     field_sources,
     save_user_config,
     user_config_path,
@@ -68,6 +69,18 @@ def test_saved_values_load_back(
     for section, values in changes.items():
         for key, value in values.items():
             assert getattr(getattr(config, section), key) == value
+
+
+def test_check_user_config_validates_without_writing() -> None:
+    """Checking reports the target path and errors but never writes the file."""
+    path = check_user_config(
+        DASHBOARD_FILE, DashboardConfig, {"mqtt": {"host": "broker"}}
+    )
+
+    assert path == user_config_path(DASHBOARD_FILE)
+    assert not path.exists()
+    with pytest.raises(ConfigurationError, match=r"mqtt\.port"):
+        check_user_config(DASHBOARD_FILE, DashboardConfig, {"mqtt": {"port": 0}})
 
 
 def test_save_keeps_unknown_sections_and_other_keys() -> None:

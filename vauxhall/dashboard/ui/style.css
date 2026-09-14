@@ -409,3 +409,142 @@ header {
 .env-remote {
     background-color: #1f6feb; /* Blue */
 }
+
+/* Settings Dialog */
+.settings-dialog {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    width: min(720px, 90vw);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.settings-dialog::backdrop {
+    background-color: var(--modal-overlay);
+    backdrop-filter: blur(4px);
+}
+
+.settings-dialog h2 {
+    margin-top: 0;
+}
+
+.settings-section {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin: 0 0 15px;
+    padding: 10px 15px;
+}
+
+.settings-section legend {
+    color: var(--accent-color);
+    font-weight: bold;
+    padding: 0 5px;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 160px 1fr auto auto;
+    grid-template-areas:
+        "label input badge reset"
+        ". note note note"
+        ". error error error";
+    gap: 4px 10px;
+    align-items: center;
+    padding: 6px 0;
+}
+
+.settings-label {
+    grid-area: label;
+    text-transform: capitalize;
+}
+
+.settings-row input,
+.settings-row select {
+    grid-area: input;
+    min-width: 0;
+    justify-self: start;
+}
+
+.settings-row input[type="checkbox"] {
+    width: auto;
+}
+
+.settings-row .source-badge {
+    grid-area: badge;
+    font-size: 0.7em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--badge-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+.settings-row .source-environment {
+    color: var(--waiting-color);
+}
+
+.settings-reset {
+    grid-area: reset;
+}
+
+.settings-note {
+    grid-area: note;
+    color: var(--text-muted);
+    font-size: 0.8em;
+}
+
+.settings-error {
+    grid-area: error;
+    color: var(--error-color);
+    font-size: 0.8em;
+}
+
+.settings-error:empty {
+    display: none;
+}
+
+.settings-message:empty {
+    display: none;
+}
+
+.settings-message {
+    color: var(--waiting-color);
+}
+
+.settings-hooks {
+    margin-bottom: 15px;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.primary-btn {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #ffffff;
+}
+
+.settings-dialog button:focus-visible,
+.settings-dialog input:focus-visible,
+.settings-dialog select:focus-visible,
+#settings-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+    .settings-row {
+        grid-template-columns: 1fr auto auto;
+        grid-template-areas:
+            "label badge reset"
+            "input input input"
+            "note note note"
+            "error error error";
+    }
+}

@@ -11,6 +11,7 @@
 import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
+import { initSettings } from './js/settings.js';
 
 async function init() {
     console.log("Vauxhall Dashboard Initialized");
@@ -79,6 +80,8 @@ async function init() {
     try {
         if (!window.pyloid) return;
 
+        initSettings(window.ipc?.DashboardIPC);
+
         if (window.ipc?.DashboardIPC) {
             try {
                 maxActiveAgents = await window.ipc.DashboardIPC.get_max_active_agents();
@@ -116,6 +119,11 @@ async function init() {
             },
             onStatusUpdate: (msg) => {
                 if (status) status.innerText = msg;
+            },
+            onSettingsChanged: (changed) => {
+                staleThresholdMs = changed.stale_threshold * 1000;
+                maxActiveAgents = changed.max_active_agents;
+                checkStaleness(agents, staleThresholdMs);
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";

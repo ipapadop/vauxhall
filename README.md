@@ -28,6 +28,9 @@ shows each agent session as a card in a grid.
 - **Stale detection**: Cards show a "last seen" timer and turn gray after the
   stale threshold (120 seconds by default). **Clear Stale** removes them.
 - **Copy workspace**: Clicking a card copies its raw workspace path.
+- **Settings**: The ⚙️ button opens a settings dialog that saves to
+  `~/.config/vauxhall/`, applies most changes without a restart, and can also
+  update the hooks configuration.
 - **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
   report prompts,
   tool activity, permission waits, tool outcomes (completed, failed, cancelled,
@@ -183,6 +186,30 @@ A field can't be saved when an environment variable sets it, or when a
 configuration file exists in the current directory, because that file hides the
 per-user file entirely. Unknown or read-only fields, malformed files, and
 invalid values raise `ConfigurationError` and leave the file unchanged.
+
+### Settings dialog
+
+The ⚙️ toolbar button opens a dialog with one row per field. Each row shows
+where the value comes from (default, file, or environment) and has a reset
+button. Fields set by an environment variable, and every field when a
+configuration file exists in the current directory, are read-only. Values are
+checked as you type and again when saving; if anything is invalid, nothing is
+saved.
+
+Saved changes take effect as follows:
+
+| When | Fields |
+| --- | --- |
+| Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes` |
+| After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive` |
+| After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
+
+A lower `max_active_agents` evicts cards only as new sessions arrive. When MQTT
+fields change, **Also update hooks configuration** saves those fields to
+`~/.config/vauxhall/vauxhall_hooks.json` as well. Both files are validated
+before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
+environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
+run on another machine.
 
 ## Telemetry
 

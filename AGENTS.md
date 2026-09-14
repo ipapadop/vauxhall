@@ -134,8 +134,11 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
   `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
-  or Cancel closes it and focus returns to the button. Save sends only changed
-  values to `DashboardIPC.save_settings()`; server errors appear next to the
+  or Cancel closes it and focus returns to the button. The hooks option
+  appears when an editable MQTT value differs from `hooks_mqtt`, the values
+  the hooks use. Save sends only changed values to
+  `DashboardIPC.save_settings()`, with `update_hooks` set when the option is
+  checked; server errors appear next to the
   named field, and the dialog stays open to show restart or hooks notes. See
   [README.md](README.md#settings-dialog) for when each field takes effect.
 

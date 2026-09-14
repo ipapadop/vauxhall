@@ -205,12 +205,16 @@ Saved changes take effect as follows:
 | After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
 
 Lowering `max_active_agents` removes the least recently seen surplus cards
-right away. When MQTT
-fields change, **Also update hooks configuration** saves those fields to
-`~/.config/vauxhall/vauxhall_hooks.json` as well. Both files are validated
+right away. When the MQTT
+values in the dialog differ from the ones the hooks use, including after a
+reset, **Also update hooks configuration** saves the differing values to
+`~/.config/vauxhall/vauxhall_hooks.json`, even if the dashboard's own values
+are unchanged. Both files are validated
 before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
 environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
-run on another machine.
+run on another machine. The option is unavailable, with the reason shown, when
+the hooks configuration is malformed or a `vauxhall_hooks.json` in the current
+directory takes precedence over the per-user file.
 
 ## Telemetry
 

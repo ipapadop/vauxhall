@@ -26,6 +26,7 @@ from vauxhall.dashboard.settings_editor import (
     apply_mode,
     changed_fields,
     error_field,
+    hook_changes_for,
     hook_config_type,
 )
 
@@ -126,7 +127,7 @@ class DashboardApp:
             logger.exception("Error in on_status")
 
     def save_settings(
-        self, changes: dict[str, dict[str, object]], *, update_hooks: bool
+        self, changes: dict[str, dict[str, object]], *, update_hooks: bool = False
     ) -> dict[str, Any]:
         """Save settings changes and apply those that don't need a restart.
 
@@ -134,24 +135,26 @@ class DashboardApp:
         dashboard or hooks change saves nothing.
 
         Args:
-            changes: New values, grouped by section.
-            update_hooks: Whether to also save MQTT changes to the hooks file.
+            changes: New dashboard values, grouped by section.
+            update_hooks: Whether to also save the editable MQTT values that
+                differ from the ones the hooks use to the hooks file.
 
         Returns:
             dict[str, Any]: The outcome for the settings editor.
         """
-        hook_changes = (
-            {"mqtt": changes["mqtt"]} if update_hooks and changes.get("mqtt") else None
-        )
         with self._settings_lock:
             file = "dashboard"
+            hook_changes: dict[str, dict[str, object]] = {}
             try:
                 check_user_config(DASHBOARD_FILE, DashboardConfig, changes)
-                if hook_changes:
+                if update_hooks:
                     file = "hooks"
-                    check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                    hook_changes = hook_changes_for(changes, settings.mqtt)
+                    if hook_changes:
+                        check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
                     file = "dashboard"
-                save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+                if changes:
+                    save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
                 new_config = DashboardConfig.load()
             except (ConfigurationError, OSError) as error:
                 logger.warning("Settings not saved: %s", error)
@@ -179,7 +182,7 @@ class DashboardApp:
                 key for key in changed if apply_mode(key) == "restart"
             ],
             "reconnecting": reconnecting,
-            "hooks_updated": hook_changes is not None and hooks_error is None,
+            "hooks_updated": bool(hook_changes) and hooks_error is None,
             "hooks_error": hooks_error,
         }
 

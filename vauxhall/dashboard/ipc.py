@@ -19,6 +19,13 @@ from vauxhall.dashboard.settings_editor import describe_settings
 logger = get_logger(__name__)
 
 
+def _is_section_map(value: object) -> bool:
+    """Return whether a value maps section names to objects of field values."""
+    return isinstance(value, dict) and all(
+        isinstance(values, dict) for values in value.values()
+    )
+
+
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
 
@@ -105,8 +112,8 @@ class DashboardIPC(PyloidIPC):
         """Save settings changes sent by the settings editor.
 
         Args:
-            payload: JSON object with ``changes`` (new values grouped by
-                section) and an optional boolean ``update_hooks``.
+            payload: JSON object with ``changes`` (new dashboard values grouped
+                by section) and an optional boolean ``update_hooks``.
 
         Returns:
             str: JSON describing the outcome.
@@ -121,8 +128,7 @@ class DashboardIPC(PyloidIPC):
         update_hooks = request.get("update_hooks", False)
         if (
             self.on_save_settings is None
-            or not isinstance(changes, dict)
-            or not all(isinstance(values, dict) for values in changes.values())
+            or not _is_section_map(changes)
             or not isinstance(update_hooks, bool)
         ):
             return json.dumps({"ok": False, "error": "Invalid settings request"})

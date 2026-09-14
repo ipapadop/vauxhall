@@ -12,6 +12,7 @@ import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, remo
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
+import { cacheTheme, cachedTheme, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
 
 async function init() {
     console.log("Vauxhall Dashboard Initialized");
@@ -24,13 +25,26 @@ async function init() {
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
     const modal = document.getElementById('history-modal');
+    const historyFilter = document.getElementById('modal-state-filter');
 
-    // Theme Management
-    document.documentElement.setAttribute('data-theme', localStorage.getItem('vauxhall-theme') || 'dark');
+    // Theme and view preferences. Saving starts once the Python bridge is available,
+    // and preferences changed before the saved ones load are not overwritten.
+    let preferences = { save: () => {}, flush: () => {} };
+    const changedPreferences = new Set();
+    const changePreference = (key, value) => {
+        changedPreferences.add(key);
+        preferences.save({ [key]: value });
+    };
+    const applyTheme = (theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+        cacheTheme(theme);
+    };
+    const initialTheme = cachedTheme();
+    document.documentElement.setAttribute('data-theme', isTheme(initialTheme) ? initialTheme : 'dark');
     document.getElementById('theme-toggle')?.addEventListener('click', () => {
         const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('vauxhall-theme', newTheme);
+        applyTheme(newTheme);
+        changePreference('theme', newTheme);
     });
 
     logoLink?.addEventListener('click', (e) => {
@@ -64,10 +78,16 @@ async function init() {
     });
 
     searchInput?.addEventListener('input', (e) => filterGrid(e.target.value.toLowerCase(), agents));
-    sortSelect?.addEventListener('change', (e) => sortGrid(e.target.value, grid));
+    sortSelect?.addEventListener('change', (e) => {
+        sortGrid(e.target.value, grid);
+        changePreference('sort', e.target.value);
+    });
     document.querySelector('.close-btn')?.addEventListener('click', closeModal);
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
-    document.getElementById('modal-state-filter')?.addEventListener('change', refreshModal);
+    historyFilter?.addEventListener('change', (e) => {
+        refreshModal();
+        changePreference('history_filter', e.target.value);
+    });
 
     // Close modal on background click
     window.onclick = (event) => {
@@ -79,6 +99,21 @@ async function init() {
     let maxActiveAgents = 100;
     try {
         if (!window.pyloid) return;
+
+        // Restoring preferences must not delay IPC setup, so it isn't awaited.
+        preferences = createPreferenceSaver(window.ipc?.DashboardIPC);
+        window.addEventListener?.('pagehide', preferences.flush);
+        restorePreferences(window.ipc?.DashboardIPC, {
+            cached: initialTheme,
+            changed: changedPreferences,
+            applyTheme,
+            applySort: (sort) => {
+                if (grid.children.length) sortGrid(sort, grid);
+            },
+            save: preferences.save,
+            sortSelect,
+            historyFilter,
+        });
 
         initSettings(window.ipc?.DashboardIPC);
 

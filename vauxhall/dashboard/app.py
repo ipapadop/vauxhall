@@ -29,6 +29,12 @@ from vauxhall.dashboard.settings_editor import (
     hook_changes_for,
     hook_config_type,
 )
+from vauxhall.dashboard.ui_state import (
+    load_ui_state,
+    update_ui_state,
+    visible_position,
+    window_geometry,
+)
 
 logger = get_logger(__name__)
 
@@ -232,15 +238,39 @@ class DashboardApp:
         except Exception:
             logger.exception("Could not reconnect to the MQTT broker")
 
-    def run(self) -> None:
-        """Run the application."""
+    def _create_window(self) -> dict[str, Any]:
+        """Create the window with its saved size and, if still on screen, position.
+
+        Returns:
+            dict[str, Any]: The window geometry saved by the previous run.
+        """
+        saved_window = load_ui_state().get("window", {})
         self.window = self.app.create_window(
             title=settings.dashboard.window_title,
-            width=settings.dashboard.width,
-            height=settings.dashboard.height,
+            width=saved_window.get("width", settings.dashboard.width),
+            height=saved_window.get("height", settings.dashboard.height),
             dev_tools=settings.dashboard.debug,
             IPCs=[self.ipc],
         )
+        if {"x", "y"} <= saved_window.keys():
+            screens = [
+                monitor.available_geometry() for monitor in self.app.get_all_monitors()
+            ]
+            position = visible_position(saved_window, screens)
+            if position is not None:
+                self.window.set_position(*position)
+        return saved_window
+
+    def _save_window_state(self, previous: dict[str, Any]) -> None:
+        """Remember the window's size, position, and maximized state."""
+        try:
+            update_ui_state({"window": window_geometry(self.window, previous)})
+        except Exception:
+            logger.exception("Could not save the dashboard window state")
+
+    def run(self) -> None:
+        """Run the application."""
+        saved_window = self._create_window()
 
         self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
         try:
@@ -252,11 +282,14 @@ class DashboardApp:
 
             self.window.load_url(url)
             self.window.show_and_focus()
+            if saved_window.get("maximized"):
+                self.window.maximize()
             self.app.run()
         finally:
             # The window is gone once the UI loop exits; queue any late updates.
             with self._updates_lock:
                 self.ipc.is_ready = False
+            self._save_window_state(saved_window)
             self.mqtt.stop()
             logger.info("Vauxhall Dashboard shutting down...")
 

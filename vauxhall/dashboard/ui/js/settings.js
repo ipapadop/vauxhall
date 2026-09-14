@@ -8,6 +8,8 @@
  * @description Settings dialog: renders configuration fields and saves changes through the Python bridge.
  */
 
+import { selectOption } from './preferences.js';
+
 const SECTION_TITLES = { mqtt: 'MQTT', logging: 'Logging', dashboard: 'Dashboard' };
 const SOURCE_LABELS = { default: 'Default', file: 'File', environment: 'Environment' };
 const APPLY_NOTES = {
@@ -40,9 +42,7 @@ function setValue(input, field, value) {
     if (field.type === 'boolean') {
         input.checked = Boolean(value);
     } else if (field.choices) {
-        // Selecting one option deselects the others in a single-choice select.
-        const option = [...input.options].find(candidate => candidate.value === String(value));
-        if (option) option.selected = true;
+        selectOption(input, String(value));
     } else {
         input.value = String(value);
     }

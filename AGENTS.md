@@ -141,6 +141,15 @@ telemetry. Rejection logs never include payload values. The dashboard and
   checked; server errors appear next to the
   named field, and the dialog stays open to show restart or hooks notes. See
   [README.md](README.md#settings-dialog) for when each field takes effect.
+- **Remembered view**: The first paint uses the theme cached in the
+  `vauxhall-theme` localStorage key. On startup the frontend then applies the
+  theme, sort order, and history state filter from
+  `DashboardIPC.get_ui_state()` without delaying IPC setup, skipping any
+  preference the user already changed, and re-sorts existing cards. If no theme
+  is saved, the cached theme (from earlier versions) is saved. Changes are
+  batched and sent to `DashboardIPC.save_ui_state()` 500 ms after the last one,
+  or immediately on `pagehide`; a `false` result is logged. Theme changes also
+  update the localStorage cache.
 
 ## Dashboard Internals
 
@@ -165,6 +174,16 @@ telemetry. Rejection logs never include payload values. The dashboard and
   ready, it receives a `settings-changed` event with the new stale threshold
   and card limit. `vauxhall.hooks.config` is imported lazily, so a malformed
   hooks file only disables the hooks option.
+- **View state**: `vauxhall.dashboard.ui_state` reads and writes
+  `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
+  valid values, treats an unreadable file as empty, and writes atomically.
+  `save_ui_state` accepts only `theme`, `sort`, and `history_filter`; only
+  Python writes `window`. `run()` creates the window with the saved size, calls
+  `set_position` only when `visible_position` finds the top edge on a monitor's
+  available area, and maximizes after showing the window. When the UI loop
+  exits, it saves the size and position from Pyloid's public `get_size`,
+  `get_position`, and `is_maximized`. A maximized window keeps its previous
+  normal size, and a save failure is logged without blocking shutdown.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are

@@ -31,6 +31,9 @@ shows each agent session as a card in a grid.
 - **Settings**: The ⚙️ button opens a settings dialog that saves to
   `~/.config/vauxhall/`, applies most changes without a restart, and can also
   update the hooks configuration.
+- **Remembered view**: The theme, sort order, history state filter, and window
+  size, position, and maximized state are restored the next time the dashboard
+  starts.
 - **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
   report prompts,
   tool activity, permission waits, tool outcomes (completed, failed, cancelled,
@@ -215,6 +218,29 @@ environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
 run on another machine. The option is unavailable, with the reason shown, when
 the hooks configuration is malformed or a `vauxhall_hooks.json` in the current
 directory takes precedence over the per-user file.
+
+### Remembered view
+
+The dashboard keeps view preferences in `~/.config/vauxhall/dashboard_state.json`,
+separate from the configuration files. It writes this file itself; you don't
+need to edit it.
+
+- **Theme, sort order, and history state filter** are saved half a second after
+  you change them, or right away when the dashboard closes. A change you make
+  before the saved preferences load is kept. The search text is not saved.
+- **Window size, position, and maximized state** are saved when the dashboard
+  closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
+  only set the size on first start. A saved position is used only if the
+  window's top edge would still be on a connected screen. A maximized window
+  keeps the normal size and position it had when the dashboard started, so if
+  you move it to another monitor before maximizing, it reopens on the first one.
+- **Theme on first paint**: the theme is also kept in the page's local storage,
+  so the dashboard starts with the right theme before the state file is read.
+  A theme saved there by earlier versions is copied to the state file the first
+  time the dashboard starts.
+
+Unknown keys and invalid values are ignored. An unreadable or corrupt file is
+logged and treated as empty.
 
 ## Telemetry
 

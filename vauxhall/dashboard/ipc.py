@@ -15,6 +15,11 @@ from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.settings_editor import describe_settings
+from vauxhall.dashboard.ui_state import (
+    frontend_preferences,
+    load_ui_state,
+    update_ui_state,
+)
 
 logger = get_logger(__name__)
 
@@ -139,6 +144,41 @@ class DashboardIPC(PyloidIPC):
             logger.exception("Failed to save settings")
             return json.dumps({"ok": False, "error": "Settings could not be saved"})
         return json.dumps(result)
+
+    @Bridge(result=str)
+    def get_ui_state(self) -> str:
+        """Return the saved view preferences.
+
+        Returns:
+            str: JSON with any saved ``theme``, ``sort``, and ``history_filter``.
+        """
+        return json.dumps(frontend_preferences(load_ui_state()))
+
+    @Bridge(str, result=bool)
+    def save_ui_state(self, payload: str) -> bool:
+        """Save view preferences sent by the frontend.
+
+        Unknown keys, invalid values, and window geometry are ignored.
+
+        Args:
+            payload: JSON object with any of ``theme``, ``sort``, and
+                ``history_filter``.
+
+        Returns:
+            bool: True if the request was valid and the state file was written.
+        """
+        try:
+            changes = json.loads(payload)
+        except json.JSONDecodeError:
+            changes = None
+        if not isinstance(changes, dict):
+            return False
+        try:
+            update_ui_state(frontend_preferences(changes))
+        except OSError:
+            logger.exception("Could not save dashboard preferences")
+            return False
+        return True
 
     @Bridge(str, result=bool)
     def open_url(self, url: str) -> bool:

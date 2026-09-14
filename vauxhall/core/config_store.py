@@ -103,7 +103,7 @@ def save_user_config(
     """
     path, data = _prepare(filename, config_type, changes)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_json_atomically(path, data)
+    write_json_atomically(path, data)
     return path
 
 
@@ -194,7 +194,7 @@ def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
             raise ConfigurationError(message) from None
 
 
-def _write_json_atomically(path: Path, data: dict[str, Any]) -> None:
+def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
     """Replace a JSON file so readers see either the old or the new content."""
     temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:

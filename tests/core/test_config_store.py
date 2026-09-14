@@ -188,6 +188,25 @@ def test_sources_user_file_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
     assert sources["mqtt.keepalive"] == FieldSource("default", None, editable=True)
 
 
+@pytest.mark.parametrize("in_current_directory", [False, True])
+def test_sources_refuse_non_object_section(*, in_current_directory: bool) -> None:
+    """A known section that is not an object is rejected, as the loader does."""
+    path = (
+        Path.cwd() / DASHBOARD_FILE
+        if in_current_directory
+        else user_config_path(DASHBOARD_FILE)
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"mqtt": 5}', encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="mqtt must be an object"):
+        DashboardConfig.load()
+    with pytest.raises(ConfigurationError, match="mqtt must be an object") as error:
+        field_sources(DASHBOARD_FILE, DashboardConfig)
+
+    assert str(path.resolve()) in str(error.value)
+
+
 def test_sources_current_directory_file_hides_user_file() -> None:
     """A current-directory file makes every non-environment field read-only."""
     write_user_file('{"mqtt": {"port": 1884}}')

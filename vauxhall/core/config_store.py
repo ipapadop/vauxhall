@@ -47,7 +47,8 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
         dict[str, FieldSource]: The source of each field, keyed by "section.key".
 
     Raises:
-        ConfigurationError: If the loaded configuration file is malformed.
+        ConfigurationError: If the loaded configuration file is malformed or a
+            known section is not an object.
     """
     loaded_path = find_config_file(filename)
     data = load_config_data(loaded_path) if loaded_path else {}
@@ -58,14 +59,17 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
 
     sources = {}
     for section, values in asdict(config_type()).items():
-        section_data = data.get(section)
+        section_data = data.get(section, {})
+        if not isinstance(section_data, dict):
+            message = f"{location}: {section} must be an object, got {section_data!r}"
+            raise ConfigurationError(message)
         for key in values:
             environment_variable = f"VAUXHALL_{section.upper()}_{key.upper()}"
             if environment_variable in os.environ:
                 source = FieldSource(
                     "environment", environment_variable, editable=False
                 )
-            elif isinstance(section_data, dict) and key in section_data:
+            elif key in section_data:
                 source = FieldSource("file", location, editable=editable)
             else:
                 source = FieldSource("default", None, editable=editable)
@@ -102,11 +106,9 @@ def save_user_config(
 
     defaults = asdict(config_type())
     data = load_config_data(path)
+    # field_sources has already checked the sections of the file being saved.
     for section, values in changes.items():
         section_data = data.get(section, {})
-        if not isinstance(section_data, dict):
-            message = f"{path}: {section} must be an object, got {section_data!r}"
-            raise ConfigurationError(message)
         for key, value in values.items():
             default = defaults[section][key]
             if type(value) is type(default) and value == default:

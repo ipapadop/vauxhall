@@ -1,9 +1,0 @@
-build>=1.2.2
-paho-mqtt>=2.0.0
-pyperclip>=1.8.2
-pyloid>=0.27.2
-pytest>=9.0.1
-ruff==0.16.6
-setuptools>=77.0.0
-twine>=6.2.0
-wheel>=0.45.1

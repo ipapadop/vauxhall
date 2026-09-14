@@ -208,6 +208,10 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
 
 Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
 
+- **Setup**: Install [uv](https://docs.astral.sh/uv/) and run
+  `uv sync --locked`. It creates `.venv` with the exact versions in `uv.lock`,
+  the same environment CI uses. After changing dependencies in
+  `pyproject.toml`, run `uv lock` and commit `uv.lock`.
 - **Python**: Run `ruff format .` and `ruff check .` with the pinned Ruff
   version, then `.venv/bin/pytest`.
 - **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then

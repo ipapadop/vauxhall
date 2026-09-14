@@ -5,7 +5,6 @@
 
 import json
 import logging
-import os
 from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -24,19 +23,12 @@ from vauxhall.dashboard.settings_editor import (
     error_field,
 )
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 @pytest.fixture(autouse=True)
-def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Isolate files, environment, running settings, and the root log level."""
-    home = tmp_path / "home"
-    cwd = tmp_path / "cwd"
-    home.mkdir()
-    cwd.mkdir()
-    monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.chdir(cwd)
-    for name in list(os.environ):
-        if name.startswith("VAUXHALL_"):
-            monkeypatch.delenv(name)
+def default_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Run each test with default running settings and restore the root log level."""
     monkeypatch.setattr(dashboard_settings, "mqtt", MQTTConfig())
     monkeypatch.setattr(dashboard_settings, "logging", LoggingConfig())
     monkeypatch.setattr(dashboard_settings, "dashboard", UIConfig())
@@ -101,6 +93,20 @@ def test_describe_settings_lists_every_field() -> None:
         "hooks": str(user_config_path(HOOKS_FILE)),
     }
     assert described["hooks_error"] is None
+    assert described["hooks_mqtt"] == {
+        "host": "localhost",
+        "port": 1883,
+        "keepalive": 60,
+    }
+
+
+def test_describe_settings_reports_hooks_mqtt_values() -> None:
+    """The MQTT values the hooks use are reported for comparison with the form."""
+    write_user_file(HOOKS_FILE, '{"mqtt": {"host": "hooks-broker"}}')
+
+    described = describe_settings(dashboard_settings)
+
+    assert described["hooks_mqtt"]["host"] == "hooks-broker"
 
 
 def test_describe_settings_reports_hooks_file_error() -> None:
@@ -110,7 +116,20 @@ def test_describe_settings_reports_hooks_file_error() -> None:
     described = describe_settings(dashboard_settings)
 
     assert "not valid JSON" in described["hooks_error"]
+    assert described["hooks_mqtt"] is None
     assert len(described["fields"]) == 13
+
+
+def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
+    isolated_cwd: Path,
+) -> None:
+    """A hooks file in the current directory makes saving to the user file pointless."""
+    (isolated_cwd / HOOKS_FILE).write_text('{"mqtt": {"host": "local"}}')
+
+    described = describe_settings(dashboard_settings)
+
+    assert described["hooks_mqtt"] is None
+    assert "current directory takes precedence" in described["hooks_error"]
 
 
 @pytest.mark.parametrize(
@@ -135,9 +154,7 @@ def test_error_field(message: str, expected: str | None) -> None:
 
 def test_save_applies_live_settings(dashboard: DashboardApp) -> None:
     """Live settings are saved, applied, and sent to the frontend."""
-    result = dashboard.save_settings(
-        {"dashboard": {"stale_threshold": 300}}, update_hooks=False
-    )
+    result = dashboard.save_settings({"dashboard": {"stale_threshold": 300}})
 
     assert result == {
         "ok": True,
@@ -157,7 +174,7 @@ def test_save_applies_live_settings(dashboard: DashboardApp) -> None:
 
 def test_save_applies_logging_level(dashboard: DashboardApp) -> None:
     """A new logging level is applied to the root logger immediately."""
-    dashboard.save_settings({"logging": {"level": "DEBUG"}}, update_hooks=False)
+    dashboard.save_settings({"logging": {"level": "DEBUG"}})
 
     assert logging.getLogger().level == logging.DEBUG
 
@@ -165,8 +182,7 @@ def test_save_applies_logging_level(dashboard: DashboardApp) -> None:
 def test_save_reports_restart_required(dashboard: DashboardApp) -> None:
     """Changes that need a restart are reported."""
     result = dashboard.save_settings(
-        {"dashboard": {"window_title": "Fleet", "stale_threshold": 60}},
-        update_hooks=False,
+        {"dashboard": {"window_title": "Fleet", "stale_threshold": 60}}
     )
 
     assert result["restart_required"] == ["dashboard.window_title"]
@@ -176,14 +192,14 @@ def test_frontend_not_notified_before_ready(dashboard: DashboardApp) -> None:
     """Settings changes are not sent to a frontend that is not ready."""
     dashboard.ipc.is_ready = False
 
-    dashboard.save_settings({"dashboard": {"stale_threshold": 60}}, update_hooks=False)
+    dashboard.save_settings({"dashboard": {"stale_threshold": 60}})
 
     dashboard.window.invoke.assert_not_called()
 
 
 def test_invalid_save_changes_nothing(dashboard: DashboardApp) -> None:
     """An invalid value is reported for its field and nothing is saved or applied."""
-    result = dashboard.save_settings({"mqtt": {"port": 0}}, update_hooks=False)
+    result = dashboard.save_settings({"mqtt": {"port": 0}})
 
     assert result["ok"] is False
     assert result["field"] == "mqtt.port"
@@ -199,7 +215,7 @@ def test_environment_field_is_rejected(
     """A field set by an environment variable is reported as not saved."""
     monkeypatch.setenv("VAUXHALL_MQTT_HOST", "env-broker")
 
-    result = dashboard.save_settings({"mqtt": {"host": "b"}}, update_hooks=False)
+    result = dashboard.save_settings({"mqtt": {"host": "b"}})
 
     assert result["ok"] is False
     assert result["field"] == "mqtt.host"
@@ -211,9 +227,7 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
     dashboard.mqtt = old_subscriber
 
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
-        result = dashboard.save_settings(
-            {"mqtt": {"host": "broker", "keepalive": 30}}, update_hooks=False
-        )
+        result = dashboard.save_settings({"mqtt": {"host": "broker", "keepalive": 30}})
 
     assert result["reconnecting"] is True
     assert result["restart_required"] == []
@@ -236,8 +250,8 @@ def test_second_mqtt_change_replaces_reconnected_subscriber(
     with patch(
         "vauxhall.dashboard.app.DashboardSubscriber", side_effect=[first, second]
     ):
-        dashboard.save_settings({"mqtt": {"host": "one"}}, update_hooks=False)
-        dashboard.save_settings({"mqtt": {"host": "two"}}, update_hooks=False)
+        dashboard.save_settings({"mqtt": {"host": "one"}})
+        dashboard.save_settings({"mqtt": {"host": "two"}})
 
     first.stop.assert_called_once_with()
     second.start.assert_called_once_with()
@@ -250,7 +264,7 @@ def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None
 
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
         subscriber_type.return_value.start.side_effect = OSError("unreachable")
-        result = dashboard.save_settings({"mqtt": {"port": 1884}}, update_hooks=False)
+        result = dashboard.save_settings({"mqtt": {"port": 1884}})
 
     assert result["ok"] is True
     assert dashboard_settings.mqtt.port == 1884
@@ -259,14 +273,14 @@ def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None
 def test_mqtt_change_before_start_does_not_reconnect(dashboard: DashboardApp) -> None:
     """Without a running subscriber, broker changes are only saved."""
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
-        result = dashboard.save_settings({"mqtt": {"port": 1884}}, update_hooks=False)
+        result = dashboard.save_settings({"mqtt": {"port": 1884}})
 
     assert result["reconnecting"] is False
     subscriber_type.assert_not_called()
 
 
-def test_update_hooks_writes_only_mqtt(dashboard: DashboardApp) -> None:
-    """Hook updates save only the MQTT changes to the hooks file."""
+def test_update_hooks_writes_differing_mqtt_values(dashboard: DashboardApp) -> None:
+    """Hook updates save only the MQTT values that differ from the hooks' values."""
     result = dashboard.save_settings(
         {"mqtt": {"host": "broker"}, "dashboard": {"stale_threshold": 300}},
         update_hooks=True,
@@ -278,8 +292,34 @@ def test_update_hooks_writes_only_mqtt(dashboard: DashboardApp) -> None:
     }
 
 
+def test_update_hooks_without_dashboard_changes(dashboard: DashboardApp) -> None:
+    """The hooks file can be brought in line with unchanged dashboard values."""
+    hooks_path = write_user_file(HOOKS_FILE, '{"mqtt": {"port": 1884}}')
+
+    result = dashboard.save_settings({}, update_hooks=True)
+
+    assert result["ok"] is True
+    assert result["hooks_updated"] is True
+    assert json.loads(hooks_path.read_text()) == {}
+    assert not user_config_path(DASHBOARD_FILE).exists()
+    dashboard.window.invoke.assert_not_called()
+
+
+def test_update_hooks_when_hooks_match_writes_nothing(
+    dashboard: DashboardApp,
+) -> None:
+    """When the hooks already use the dashboard's MQTT values, nothing is written."""
+    result = dashboard.save_settings(
+        {"dashboard": {"stale_threshold": 300}}, update_hooks=True
+    )
+
+    assert result["ok"] is True
+    assert result["hooks_updated"] is False
+    assert not user_config_path(HOOKS_FILE).exists()
+
+
 def test_invalid_hooks_file_blocks_both_saves(dashboard: DashboardApp) -> None:
-    """If the hooks change is invalid, the dashboard file is not written either."""
+    """If the hooks file cannot be read, the dashboard file is not written either."""
     write_user_file(HOOKS_FILE, "{")
 
     result = dashboard.save_settings({"mqtt": {"host": "broker"}}, update_hooks=True)
@@ -290,15 +330,11 @@ def test_invalid_hooks_file_blocks_both_saves(dashboard: DashboardApp) -> None:
     assert dashboard_settings.mqtt.host == "localhost"
 
 
-def test_update_hooks_without_mqtt_changes_skips_hooks(
-    dashboard: DashboardApp,
-) -> None:
-    """Hook updates are skipped when no MQTT field changed."""
+def test_hooks_file_is_ignored_without_update_hooks(dashboard: DashboardApp) -> None:
+    """Without a hooks update, a malformed hooks file does not block saving."""
     write_user_file(HOOKS_FILE, "{")
 
-    result = dashboard.save_settings(
-        {"dashboard": {"stale_threshold": 300}}, update_hooks=True
-    )
+    result = dashboard.save_settings({"dashboard": {"stale_threshold": 300}})
 
     assert result["ok"] is True
     assert result["hooks_updated"] is False
@@ -344,6 +380,9 @@ def test_ipc_save_settings_forwards_request() -> None:
 
     assert json.loads(response) == {"ok": True}
     callback.assert_called_once_with({"mqtt": {"port": 1884}}, update_hooks=True)
+
+    ipc.save_settings('{"changes": {}}')
+    callback.assert_called_with({}, update_hooks=False)
 
 
 @pytest.mark.parametrize(

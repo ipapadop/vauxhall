@@ -26,7 +26,14 @@ from vauxhall.dashboard.settings_editor import (
     apply_mode,
     changed_fields,
     error_field,
+    hook_changes_for,
     hook_config_type,
+)
+from vauxhall.dashboard.ui_state import (
+    load_ui_state,
+    update_ui_state,
+    visible_position,
+    window_geometry,
 )
 
 logger = get_logger(__name__)
@@ -126,7 +133,7 @@ class DashboardApp:
             logger.exception("Error in on_status")
 
     def save_settings(
-        self, changes: dict[str, dict[str, object]], *, update_hooks: bool
+        self, changes: dict[str, dict[str, object]], *, update_hooks: bool = False
     ) -> dict[str, Any]:
         """Save settings changes and apply those that don't need a restart.
 
@@ -134,24 +141,26 @@ class DashboardApp:
         dashboard or hooks change saves nothing.
 
         Args:
-            changes: New values, grouped by section.
-            update_hooks: Whether to also save MQTT changes to the hooks file.
+            changes: New dashboard values, grouped by section.
+            update_hooks: Whether to also save the editable MQTT values that
+                differ from the ones the hooks use to the hooks file.
 
         Returns:
             dict[str, Any]: The outcome for the settings editor.
         """
-        hook_changes = (
-            {"mqtt": changes["mqtt"]} if update_hooks and changes.get("mqtt") else None
-        )
         with self._settings_lock:
             file = "dashboard"
+            hook_changes: dict[str, dict[str, object]] = {}
             try:
                 check_user_config(DASHBOARD_FILE, DashboardConfig, changes)
-                if hook_changes:
+                if update_hooks:
                     file = "hooks"
-                    check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                    hook_changes = hook_changes_for(changes, settings.mqtt)
+                    if hook_changes:
+                        check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
                     file = "dashboard"
-                save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+                if changes:
+                    save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
                 new_config = DashboardConfig.load()
             except (ConfigurationError, OSError) as error:
                 logger.warning("Settings not saved: %s", error)
@@ -179,7 +188,7 @@ class DashboardApp:
                 key for key in changed if apply_mode(key) == "restart"
             ],
             "reconnecting": reconnecting,
-            "hooks_updated": hook_changes is not None and hooks_error is None,
+            "hooks_updated": bool(hook_changes) and hooks_error is None,
             "hooks_error": hooks_error,
         }
 
@@ -229,15 +238,39 @@ class DashboardApp:
         except Exception:
             logger.exception("Could not reconnect to the MQTT broker")
 
-    def run(self) -> None:
-        """Run the application."""
+    def _create_window(self) -> dict[str, Any]:
+        """Create the window with its saved size and, if still on screen, position.
+
+        Returns:
+            dict[str, Any]: The window geometry saved by the previous run.
+        """
+        saved_window = load_ui_state().get("window", {})
         self.window = self.app.create_window(
             title=settings.dashboard.window_title,
-            width=settings.dashboard.width,
-            height=settings.dashboard.height,
+            width=saved_window.get("width", settings.dashboard.width),
+            height=saved_window.get("height", settings.dashboard.height),
             dev_tools=settings.dashboard.debug,
             IPCs=[self.ipc],
         )
+        if {"x", "y"} <= saved_window.keys():
+            screens = [
+                monitor.available_geometry() for monitor in self.app.get_all_monitors()
+            ]
+            position = visible_position(saved_window, screens)
+            if position is not None:
+                self.window.set_position(*position)
+        return saved_window
+
+    def _save_window_state(self, previous: dict[str, Any]) -> None:
+        """Remember the window's size, position, and maximized state."""
+        try:
+            update_ui_state({"window": window_geometry(self.window, previous)})
+        except Exception:
+            logger.exception("Could not save the dashboard window state")
+
+    def run(self) -> None:
+        """Run the application."""
+        saved_window = self._create_window()
 
         self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
         try:
@@ -249,11 +282,14 @@ class DashboardApp:
 
             self.window.load_url(url)
             self.window.show_and_focus()
+            if saved_window.get("maximized"):
+                self.window.maximize()
             self.app.run()
         finally:
             # The window is gone once the UI loop exits; queue any late updates.
             with self._updates_lock:
                 self.ipc.is_ready = False
+            self._save_window_state(saved_window)
             self.mqtt.stop()
             logger.info("Vauxhall Dashboard shutting down...")
 

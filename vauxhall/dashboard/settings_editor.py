@@ -54,6 +54,34 @@ def _field_type(default: object) -> str:
     return "string"
 
 
+def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
+    """Return the MQTT values the hooks use, or why the hooks file can't be updated.
+
+    Returns:
+        tuple[dict[str, Any] | None, str | None]: The hooks' MQTT values and no
+            error, or no values and the reason saving to the hooks file would
+            fail or have no effect.
+    """
+    try:
+        hook_type = hook_config_type()
+        sources = field_sources(HOOKS_FILE, hook_type)
+        hooks_mqtt = asdict(hook_type.load().mqtt)
+    except ConfigurationError as error:
+        return None, str(error)
+    # Hooks read a hooks file in the current directory instead of the per-user
+    # file, so saving to the per-user file would have no effect.
+    if any(
+        not source.editable and source.kind != "environment"
+        for source in sources.values()
+    ):
+        message = (
+            f"A {HOOKS_FILE} in the current directory takes precedence over "
+            f"{user_config_path(HOOKS_FILE)}"
+        )
+        return None, message
+    return hooks_mqtt, None
+
+
 def describe_settings(config: DashboardConfig) -> dict[str, Any]:
     """Describe every dashboard setting for the settings editor.
 
@@ -62,19 +90,15 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
 
     Returns:
         dict[str, Any]: The fields with their values, constraints, sources, and
-            when changes apply; the paths settings are saved to; and the error
-            that prevents updating the hooks file, if any.
+            when changes apply; the paths settings are saved to; the MQTT
+            values the hooks currently use; and the error that prevents
+            updating the hooks file, if any.
 
     Raises:
         ConfigurationError: If the dashboard configuration file is malformed.
     """
     sources = field_sources(DASHBOARD_FILE, DashboardConfig)
-    try:
-        field_sources(HOOKS_FILE, hook_config_type())
-    except ConfigurationError as error:
-        hooks_error = str(error)
-    else:
-        hooks_error = None
+    hooks_mqtt, hooks_error = _hooks_mqtt()
 
     described = []
     for section in fields(config):
@@ -108,6 +132,7 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
             "dashboard": str(user_config_path(DASHBOARD_FILE)),
             "hooks": str(user_config_path(HOOKS_FILE)),
         },
+        "hooks_mqtt": hooks_mqtt,
         "hooks_error": hooks_error,
     }
 
@@ -121,6 +146,32 @@ def changed_fields(old: DashboardConfig, new: DashboardConfig) -> list[str]:
         for key, value in values.items()
         if old_values[section][key] != value
     ]
+
+
+def hook_changes_for(
+    changes: dict[str, dict[str, object]], current_mqtt: object
+) -> dict[str, dict[str, object]]:
+    """Return the editable MQTT values that differ from the ones the hooks use.
+
+    Args:
+        changes: Validated new dashboard values, grouped by section.
+        current_mqtt: The running dashboard MQTT configuration.
+
+    Returns:
+        dict[str, dict[str, object]]: Changes for the hooks file, or an empty dict.
+
+    Raises:
+        ConfigurationError: If the dashboard or hooks configuration is malformed.
+    """
+    sources = field_sources(DASHBOARD_FILE, DashboardConfig)
+    hooks_mqtt = asdict(hook_config_type().load().mqtt)
+    form = {**asdict(current_mqtt), **changes.get("mqtt", {})}
+    differing = {
+        key: value
+        for key, value in form.items()
+        if sources[f"mqtt.{key}"].editable and value != hooks_mqtt[key]
+    }
+    return {"mqtt": differing} if differing else {}
 
 
 def error_field(message: str) -> str | None:

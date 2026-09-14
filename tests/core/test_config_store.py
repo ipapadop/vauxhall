@@ -4,7 +4,6 @@
 """Tests for saving per-user configuration files."""
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -25,18 +24,7 @@ DASHBOARD_FILE = "vauxhall_dashboard.json"
 HOOKS_FILE = "vauxhall_hooks.json"
 
 
-@pytest.fixture(autouse=True)
-def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate the home directory, working directory, and environment."""
-    home = tmp_path / "home"
-    cwd = tmp_path / "cwd"
-    home.mkdir()
-    cwd.mkdir()
-    monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.chdir(cwd)
-    for name in list(os.environ):
-        if name.startswith("VAUXHALL_"):
-            monkeypatch.delenv(name)
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
 
 
 def write_user_file(content: str) -> Path:

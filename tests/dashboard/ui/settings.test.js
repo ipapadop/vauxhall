@@ -8,6 +8,7 @@ import { Event as DOMEvent, parseHTML } from 'linkedom';
 
 import {
     collectChanges,
+    collectHookChanges,
     initSettings,
     renderSettingsForm,
     savedNotes,
@@ -73,6 +74,7 @@ function descriptor() {
             dashboard: '/home/u/.config/vauxhall/vauxhall_dashboard.json',
             hooks: '/home/u/.config/vauxhall/vauxhall_hooks.json',
         },
+        hooks_mqtt: { host: 'localhost', port: 1883, keepalive: 60 },
         hooks_error: null,
     };
 }
@@ -275,4 +277,82 @@ test('dialog shows a load error instead of fields', async () => {
 
     assert.equal(document.getElementById('settings-message').textContent, '/x: mqtt must be an object, got 5');
     assert.equal(document.getElementById('settings-fields').children.length, 0);
+});
+
+test('hook changes compare editable MQTT fields with the values the hooks use', () => {
+    const document = setup();
+    const container = document.getElementById('fields');
+    const settings = { ...descriptor(), hooks_mqtt: { host: 'hooks-broker', port: 1884, keepalive: 60 } };
+    renderSettingsForm(container, settings);
+
+    assert.deepEqual(collectHookChanges(container, settings), { mqtt: { port: 1883 } });
+
+    setInput(document, 'setting-mqtt-port', '1884');
+    assert.deepEqual(collectHookChanges(container, settings), {});
+
+    setInput(document, 'setting-mqtt-port', '0');
+    assert.deepEqual(collectHookChanges(container, settings), {});
+});
+
+function hooksDialog(hooksPort) {
+    const document = setup(DIALOG);
+    const requests = [];
+    initSettings({
+        get_settings: async () => JSON.stringify({
+            ...descriptor(),
+            hooks_mqtt: { host: 'localhost', port: hooksPort, keepalive: 60 },
+        }),
+        save_settings: async (payload) => {
+            requests.push(JSON.parse(payload));
+            return JSON.stringify({ ok: true, restart_required: [], reconnecting: false, hooks_updated: true, hooks_error: null });
+        },
+    });
+    return { document, requests, hooks: document.getElementById('settings-hooks') };
+}
+
+test('reset offers a hooks update when only the hooks file differs', async () => {
+    const { document, requests, hooks } = hooksDialog(1884);
+
+    document.getElementById('settings-btn').dispatchEvent(new Event('click'));
+    await flush();
+    assert.equal(hooks.hasAttribute('hidden'), false);
+
+    document.getElementById('setting-mqtt-port').parentElement.querySelector('.settings-reset')
+        .dispatchEvent(new Event('click'));
+    assert.equal(hooks.hasAttribute('hidden'), false);
+
+    document.getElementById('settings-update-hooks').checked = true;
+    document.getElementById('settings-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+
+    assert.deepEqual(requests, [{ changes: {}, update_hooks: true }]);
+    assert.equal(document.getElementById('settings-dialog').hasAttribute('open'), false);
+});
+
+test('hooks option stays hidden when the hooks already match', async () => {
+    const { document, requests, hooks } = hooksDialog(1883);
+
+    document.getElementById('settings-btn').dispatchEvent(new Event('click'));
+    await flush();
+    document.getElementById('setting-mqtt-port').parentElement.querySelector('.settings-reset')
+        .dispatchEvent(new Event('click'));
+    assert.ok(hooks.hasAttribute('hidden'));
+
+    document.getElementById('settings-update-hooks').checked = true;
+    document.getElementById('settings-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+
+    assert.deepEqual(requests, []);
+});
+
+test('an unchecked hooks option saves nothing when only the hooks file differs', async () => {
+    const { document, requests } = hooksDialog(1884);
+
+    document.getElementById('settings-btn').dispatchEvent(new Event('click'));
+    await flush();
+    document.getElementById('settings-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+
+    assert.deepEqual(requests, []);
+    assert.equal(document.getElementById('settings-dialog').hasAttribute('open'), false);
 });

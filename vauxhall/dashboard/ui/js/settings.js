@@ -8,6 +8,8 @@
  * @description Settings dialog: renders configuration fields and saves changes through the Python bridge.
  */
 
+import { selectOption } from './preferences.js';
+
 const SECTION_TITLES = { mqtt: 'MQTT', logging: 'Logging', dashboard: 'Dashboard' };
 const SOURCE_LABELS = { default: 'Default', file: 'File', environment: 'Environment' };
 const APPLY_NOTES = {
@@ -40,9 +42,7 @@ function setValue(input, field, value) {
     if (field.type === 'boolean') {
         input.checked = Boolean(value);
     } else if (field.choices) {
-        // Selecting one option deselects the others in a single-choice select.
-        const option = [...input.options].find(candidate => candidate.value === String(value));
-        if (option) option.selected = true;
+        selectOption(input, String(value));
     } else {
         input.value = String(value);
     }
@@ -169,6 +169,24 @@ export function collectChanges(container, descriptor) {
 }
 
 /**
+ * Returns the editable MQTT values in the form that differ from the values the hooks use.
+ * @param {HTMLElement} container - Element holding the rendered fields.
+ * @param {object} descriptor - Result of DashboardIPC.get_settings().
+ * @returns {object} Changes for the hooks file, grouped by section.
+ */
+export function collectHookChanges(container, descriptor) {
+    const mqtt = {};
+    for (const field of descriptor.fields) {
+        const input = field.section === 'mqtt' && field.editable && container.querySelector(`#${inputId(field)}`);
+        if (!input) continue;
+        const value = readValue(input, field);
+        const hooksValue = descriptor.hooks_mqtt ? descriptor.hooks_mqtt[field.name] : field.value;
+        if (!validate(field, value) && value !== hooksValue) mqtt[field.name] = value;
+    }
+    return Object.keys(mqtt).length ? { mqtt } : {};
+}
+
+/**
  * Shows error messages next to their fields and clears the others.
  * @param {HTMLElement} container - Element holding the rendered fields.
  * @param {object} errors - Error messages keyed by "section.key".
@@ -226,7 +244,7 @@ export function initSettings(ipc) {
     let descriptor = null;
 
     const refreshHooks = () => {
-        setHidden(hooks, !collectChanges(container, descriptor).changes.mqtt);
+        setHidden(hooks, !collectHookChanges(container, descriptor).mqtt);
     };
 
     const load = async (text = '') => {
@@ -273,7 +291,8 @@ export function initSettings(ipc) {
             message.textContent = 'Fix the highlighted settings.';
             return;
         }
-        if (!Object.keys(changes).length) {
+        const updateHookFile = updateHooks.checked && Boolean(collectHookChanges(container, descriptor).mqtt);
+        if (!Object.keys(changes).length && !updateHookFile) {
             closeDialog(dialog);
             return;
         }
@@ -282,7 +301,7 @@ export function initSettings(ipc) {
         try {
             result = JSON.parse(await ipc.save_settings(JSON.stringify({
                 changes,
-                update_hooks: Boolean(changes.mqtt) && updateHooks.checked,
+                update_hooks: updateHookFile,
             })));
         } catch (err) {
             console.error('Failed to save settings:', err);

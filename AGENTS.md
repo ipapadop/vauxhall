@@ -134,10 +134,22 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
   `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
-  or Cancel closes it and focus returns to the button. Save sends only changed
-  values to `DashboardIPC.save_settings()`; server errors appear next to the
+  or Cancel closes it and focus returns to the button. The hooks option
+  appears when an editable MQTT value differs from `hooks_mqtt`, the values
+  the hooks use. Save sends only changed values to
+  `DashboardIPC.save_settings()`, with `update_hooks` set when the option is
+  checked; server errors appear next to the
   named field, and the dialog stays open to show restart or hooks notes. See
   [README.md](README.md#settings-dialog) for when each field takes effect.
+- **Remembered view**: The first paint uses the theme cached in the
+  `vauxhall-theme` localStorage key. On startup the frontend then applies the
+  theme, sort order, and history state filter from
+  `DashboardIPC.get_ui_state()` without delaying IPC setup, skipping any
+  preference the user already changed, and re-sorts existing cards. If no theme
+  is saved, the cached theme (from earlier versions) is saved. Changes are
+  batched and sent to `DashboardIPC.save_ui_state()` 500 ms after the last one,
+  or immediately on `pagehide`; a `false` result is logged. Theme changes also
+  update the localStorage cache.
 
 ## Dashboard Internals
 
@@ -162,6 +174,18 @@ telemetry. Rejection logs never include payload values. The dashboard and
   ready, it receives a `settings-changed` event with the new stale threshold
   and card limit. `vauxhall.hooks.config` is imported lazily, so a malformed
   hooks file only disables the hooks option.
+- **View state**: `vauxhall.dashboard.ui_state` reads and writes
+  `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
+  valid values, treats an unreadable file as empty, and writes atomically.
+  Each update holds one lock across load, merge, and write, so a frontend save
+  and the shutdown window save can't discard each other's fields.
+  `save_ui_state` accepts only `theme`, `sort`, and `history_filter`; only
+  Python writes `window`. `run()` creates the window with the saved size, calls
+  `set_position` only when `visible_position` finds the top edge on a monitor's
+  available area, and maximizes after showing the window. When the UI loop
+  exits, it saves the size and position from Pyloid's public `get_size`,
+  `get_position`, and `is_maximized`. A maximized window keeps its previous
+  normal size, and a save failure is logged without blocking shutdown.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are

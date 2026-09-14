@@ -6,9 +6,9 @@
 
 # Vauxhall Agent Dashboard
 
-Vauxhall is a real-time dashboard for AI coding agents such as Codex and Gemini
-CLI. Agents publish telemetry over MQTT, and the dashboard shows each agent
-session as a card in a grid.
+Vauxhall is a real-time dashboard for AI coding agents such as Claude Code,
+Codex, and Gemini CLI. Agents publish telemetry over MQTT, and the dashboard
+shows each agent session as a card in a grid.
 
 ## Features
 
@@ -28,7 +28,8 @@ session as a card in a grid.
 - **Stale detection**: Cards show a "last seen" timer and turn gray after the
   stale threshold (120 seconds by default). **Clear Stale** removes them.
 - **Copy workspace**: Clicking a card copies its raw workspace path.
-- **Codex and Gemini CLI hooks**: Installers register hooks that report prompts,
+- **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
+  report prompts,
   tool activity, permission waits, tool outcomes (completed, failed, cancelled,
   or result unavailable), and idle state. Tool results are never published.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
@@ -51,16 +52,30 @@ session as a card in a grid.
 
 ## Installation
 
+Vauxhall isn't published on PyPI yet. Install it from GitHub with pip, which
+needs Git on the machine.
+
 Dashboard:
 
 ```bash
-pip install "vauxhall[dashboard]"
+pip install "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"
 ```
 
 Agent machines (installs only `paho-mqtt`):
 
 ```bash
-pip install "vauxhall[hooks]"
+pip install "vauxhall[hooks] @ git+https://github.com/ipapadop/vauxhall.git"
+```
+
+To install a specific branch, tag, or commit, add `@<ref>` to the URL, for
+example `git+https://github.com/ipapadop/vauxhall.git@main`.
+
+To install from a local clone instead:
+
+```bash
+git clone https://github.com/ipapadop/vauxhall.git
+cd vauxhall
+pip install ".[dashboard]"  # or ".[hooks]" on agent machines
 ```
 
 ## Usage
@@ -84,6 +99,9 @@ From a source checkout, run `uv run vauxhall`.
 Run the installer from the agent's workspace:
 
 ```bash
+# Claude Code
+vauxhall-install-claude
+
 # Codex
 vauxhall-install-codex
 
@@ -91,11 +109,18 @@ vauxhall-install-codex
 vauxhall-install-gemini
 ```
 
-Each installer recreates `.vauxhall-venv` in the workspace, installs the same
-Vauxhall release into it, and registers hooks that run the packaged hook
-module, so the hooks do not depend on a source checkout. Unrelated hooks are
-preserved. For Codex, open `/hooks` after installing to review and trust the
-new project hooks.
+Each installer recreates `.vauxhall-venv` in the workspace and installs
+Vauxhall into it from the same source as the running copy: the same Git
+commit, local directory, or wheel file, or otherwise the matching PyPI
+release. It then registers hooks that run the installed hook module, so the
+hooks don't run code from a source checkout. Before changing an
+existing hook or settings file, the installer backs it up and validates it. If
+the file is invalid, the installer leaves it unchanged and exits with an error.
+Reinstalling replaces only Vauxhall's own handlers and writes the file
+atomically, preserving unrelated settings and hooks. The Claude Code installer
+writes `.claude/settings.local.json`; restart Claude Code or open `/hooks` to
+apply the hooks. For Codex, open `/hooks` after installing to review and trust
+the new project hooks.
 
 See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and
 integrating other agents.
@@ -174,8 +199,8 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
 - `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
   the dashboard and hooks.
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
-- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Codex
-  and Gemini CLI hooks and installers.
+- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
+  Code, Codex, and Gemini CLI hooks and installers.
 - `scripts/`: The agent simulator and a logging color check.
 - `tests/`: Python tests mirroring the `vauxhall/` package layout, with frontend tests in `tests/dashboard/ui/`.
 

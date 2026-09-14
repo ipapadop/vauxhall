@@ -1,41 +1,43 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <giannis.papadopoulos@gmail.com>
 # SPDX-License-Identifier: MIT
 
-"""Installation utility for Vauxhall Codex hooks."""
+"""Installation utility for Vauxhall Claude Code hooks."""
 
 from pathlib import Path
 
 from vauxhall.hooks import installation
 
-HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
-SETTINGS_PATH = Path(".codex") / "hooks.json"
+HOOK_MODULE = "vauxhall.hooks.claude.telemetry_hook"
+# The hook command contains a machine-specific path, so it belongs in local settings.
+SETTINGS_PATH = Path(".claude") / "settings.local.json"
 HANDLERS = {
-    event: {"statusMessage": "Sending Vauxhall telemetry", "timeout": 3}
+    event: {"timeout": 3}
     for event in (
         "SessionStart",
         "UserPromptSubmit",
         "PreToolUse",
         "PermissionRequest",
         "PostToolUse",
+        "PostToolUseFailure",
+        "Notification",
         "SubagentStart",
         "PreCompact",
         "PostCompact",
         "Stop",
-        "Interrupt",
+        "StopFailure",
         "SessionEnd",
     )
 }
 
 
 def install() -> None:
-    """Install Vauxhall telemetry hooks into the current Codex project."""
+    """Install Vauxhall telemetry hooks into the current Claude Code project."""
     installation.install_hooks(
-        agent="Codex",
+        agent="Claude Code",
         module=HOOK_MODULE,
         settings_path=Path.cwd() / SETTINGS_PATH,
         handlers=HANDLERS,
-        defaults={"description": "Vauxhall telemetry hooks for Codex."},
-        next_step="Review and trust the hooks with /hooks in Codex.",
+        next_step="Restart Claude Code, or review the new hooks with /hooks.",
     )
 
 

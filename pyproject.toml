@@ -65,7 +65,7 @@ dev = [
     "vauxhall[dashboard]",
 ]
 lint = [
-    "ruff==0.16.6",
+    "ruff==0.16.7",
 ]
 test = [
     "build>=1.2.2",

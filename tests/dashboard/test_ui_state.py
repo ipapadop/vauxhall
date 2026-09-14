@@ -6,11 +6,12 @@
 import json
 import logging
 from pathlib import Path
+from threading import Event, Thread
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vauxhall.core.config_store import user_config_path
+from vauxhall.core.config_store import user_config_path, write_json_atomically
 from vauxhall.dashboard.app import DashboardApp
 from vauxhall.dashboard.config import UIConfig, dashboard_settings
 from vauxhall.dashboard.ipc import DashboardIPC
@@ -120,6 +121,38 @@ def test_update_creates_state_file() -> None:
 
     assert json.loads(state_path().read_text(encoding="utf-8")) == {
         "history_filter": "Error"
+    }
+
+
+def test_concurrent_updates_do_not_discard_each_other() -> None:
+    """A second update waits for the first to finish, so both values are kept."""
+    first_writing = Event()
+    release_first = Event()
+
+    def blocking_write(path: Path, data: dict[str, object]) -> None:
+        if data.get("theme") == "light":
+            first_writing.set()
+            assert release_first.wait(5)
+        write_json_atomically(path, data)
+
+    with patch(
+        "vauxhall.dashboard.ui_state.write_json_atomically", side_effect=blocking_write
+    ):
+        first = Thread(target=update_ui_state, args=({"theme": "light"},))
+        first.start()
+        assert first_writing.wait(5)
+        second = Thread(target=update_ui_state, args=({"sort": "recent"},))
+        second.start()
+        second.join(0.2)
+        assert second.is_alive()
+
+        release_first.set()
+        first.join(5)
+        second.join(5)
+
+    assert json.loads(state_path().read_text(encoding="utf-8")) == {
+        "theme": "light",
+        "sort": "recent",
     }
 
 

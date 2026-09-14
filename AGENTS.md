@@ -177,6 +177,8 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **View state**: `vauxhall.dashboard.ui_state` reads and writes
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.
+  Each update holds one lock across load, merge, and write, so a frontend save
+  and the shutdown window save can't discard each other's fields.
   `save_ui_state` accepts only `theme`, `sort`, and `history_filter`; only
   Python writes `window`. `run()` creates the window with the saved size, calls
   `set_position` only when `visible_position` finds the top edge on a monitor's

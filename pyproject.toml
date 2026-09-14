@@ -87,7 +87,7 @@ include = ["vauxhall*"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-required-version = "==0.16.6"
+required-version = "==0.16.7"
 extend-exclude = ["docs/superpowers"]
 
 [tool.ruff.lint]

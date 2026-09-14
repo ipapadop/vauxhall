@@ -167,6 +167,23 @@ error names the environment variable or file path, the field, the value, and
 the expected constraint. Hooks print the error to stderr and still return valid
 protocol JSON. MQTT authentication and TLS are not supported yet (issue #3).
 
+`vauxhall.core.config_store` saves configuration for the planned settings
+editor (issue #29):
+
+- `save_user_config(filename, config_type, changes)` always writes the per-user
+  file `~/.config/vauxhall/<filename>`. It merges the changes into the existing
+  file, keeps other keys, removes values equal to their defaults, validates the
+  result with the same loader the dashboard or hooks use, and replaces the file
+  atomically.
+- `field_sources(filename, config_type)` reports whether each field comes from
+  an environment variable, a file, or its default, and whether saving can
+  change it.
+
+A field can't be saved when an environment variable sets it, or when a
+configuration file exists in the current directory, because that file hides the
+per-user file entirely. Unknown or read-only fields, malformed files, and
+invalid values raise `ConfigurationError` and leave the file unchanged.
+
 ## Telemetry
 
 Producers publish schema version 1 JSON to

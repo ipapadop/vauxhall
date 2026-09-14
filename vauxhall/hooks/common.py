@@ -1,28 +1,41 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <giannis.papadopoulos@gmail.com>
 # SPDX-License-Identifier: MIT
 
-"""Helpers shared by the built-in Codex and Gemini hooks and installers."""
+"""Runtime helpers shared by the built-in agent telemetry hooks."""
 
-import base64
+import hashlib
 import json
 import os
-import shlex
-import shutil
-import subprocess
 import sys
-from collections.abc import Callable
-from contextlib import redirect_stdout
+import tempfile
+import time
+from collections.abc import Callable, Mapping
+from contextlib import redirect_stdout, suppress
 from pathlib import Path
-from typing import Any
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
 
-from vauxhall import __version__
 from vauxhall.core.config import ConfigurationError
+from vauxhall.core.logging import get_logger
+from vauxhall.hooks.identity import resolve_session_id
 
-WINDOWS_ENCODED_COMMAND_PREFIX = (
-    "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
-)
+if TYPE_CHECKING:
+    from vauxhall.hooks.client import TelemetryClient
+
+logger = get_logger(__name__)
+
+Telemetry = tuple[str, dict[str, Any]]
+EventHandler = Callable[[dict[str, Any]], Telemetry | None]
+
 _CANCELLATION_MARKERS = frozenset({"cancelled", "canceled", "aborted"})
+_SESSION_START_STATUSES = {
+    "startup": "Session started",
+    "resume": "Session resumed",
+    "clear": "Session cleared",
+    "fork": "Session forked",
+}
+_COMPACTION_TRIGGERS = ("manual", "auto")
+# Timing directories are per user because the system temporary directory is shared.
+_USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
 
 
 def is_cancelled(response: dict[str, Any]) -> bool:
@@ -37,6 +50,229 @@ def is_cancelled(response: dict[str, Any]) -> bool:
         isinstance(value, str) and value.lower() in _CANCELLATION_MARKERS
         for value in candidates
     )
+
+
+def question_prompt(tool_input: object) -> str:
+    """Extract user-facing question text from a question tool's input."""
+    questions = tool_input.get("questions") if isinstance(tool_input, dict) else None
+    if isinstance(questions, list):
+        prompt = "\n".join(
+            question["question"]
+            for question in questions
+            if isinstance(question, dict) and isinstance(question.get("question"), str)
+        )
+        if prompt:
+            return prompt
+    return "User input required"
+
+
+def tool_details(
+    input_data: dict[str, Any], command_fields: Mapping[str, str]
+) -> dict[str, Any]:
+    """Return the tool name and, for listed tools, the input field shown as cmd."""
+    tool_name = input_data.get("tool_name")
+    if not isinstance(tool_name, str) or not tool_name:
+        return {}
+    details: dict[str, Any] = {"tool": tool_name}
+    tool_input = input_data.get("tool_input")
+    field = command_fields.get(tool_name)
+    if field is not None and isinstance(tool_input, dict):
+        command = tool_input.get(field)
+        if isinstance(command, str):
+            details["cmd"] = command
+    return details
+
+
+def prompt_submit_telemetry(input_data: dict[str, Any]) -> Telemetry:
+    """Translate a submitted user prompt into a thinking state."""
+    return "Thinking", {"prompt": input_data.get("prompt", "Processing...")}
+
+
+def ready_telemetry(_input_data: dict[str, Any]) -> Telemetry:
+    """Translate the end of an agent turn into an idle state."""
+    return "Idle", {"status": "Ready"}
+
+
+def permission_request_telemetry(input_data: dict[str, Any]) -> Telemetry:
+    """Translate a tool permission request into a waiting state."""
+    tool_input = input_data.get("tool_input")
+    description = (
+        tool_input.get("description") if isinstance(tool_input, dict) else None
+    )
+    prompt = description if isinstance(description, str) and description else None
+    return "Waiting for Input", {
+        **tool_details(input_data, {}),
+        "prompt": prompt or "Permission required...",
+    }
+
+
+def session_start_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
+    """Translate SessionStart without publishing raw sources.
+
+    A restart after compaction can happen in the middle of a turn, so it must not
+    mark the session idle.
+    """
+    source = input_data.get("source")
+    if source == "compact":
+        return None
+    status = (
+        _SESSION_START_STATUSES.get(source, "Session started")
+        if isinstance(source, str)
+        else "Session started"
+    )
+    return "Idle", {"status": status}
+
+
+def session_end_telemetry(
+    input_data: dict[str, Any], statuses: Mapping[str, str]
+) -> Telemetry:
+    """Translate SessionEnd using an agent's reason statuses, never raw reasons."""
+    reason = input_data.get("reason")
+    status = (
+        statuses.get(reason, "session ended")
+        if isinstance(reason, str)
+        else "session ended"
+    )
+    return "Idle", {"status": status}
+
+
+def subagent_start_telemetry(input_data: dict[str, Any]) -> Telemetry:
+    """Report a starting subagent as the Agent tool running its agent type."""
+    details: dict[str, Any] = {"tool": "Agent"}
+    agent_type = input_data.get("agent_type")
+    if isinstance(agent_type, str) and agent_type:
+        details["cmd"] = agent_type
+    return "Acting", details
+
+
+def _is_subagent_event(input_data: dict[str, Any]) -> bool:
+    """Return whether an event fired inside a subagent, not the main thread."""
+    return isinstance(input_data.get("agent_id"), str)
+
+
+def pre_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
+    """Translate main-thread PreCompact, naming a documented trigger."""
+    if _is_subagent_event(input_data):
+        return None
+    trigger = input_data.get("trigger")
+    status = "Compacting context"
+    if trigger in _COMPACTION_TRIGGERS:
+        status = f"{status} ({trigger})"
+    return "Thinking", {"status": status}
+
+
+def post_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
+    """Translate main-thread PostCompact.
+
+    Manual compaction returns to the prompt; automatic compaction resumes work.
+    """
+    if _is_subagent_event(input_data):
+        return None
+    state = "Idle" if input_data.get("trigger") == "manual" else "Thinking"
+    return state, {"status": "Context compacted"}
+
+
+def tool_use_identity(input_data: dict[str, Any]) -> tuple[str, str] | None:
+    """Return the session and tool-use IDs that identify one tool call, if any."""
+    session_id = input_data.get("session_id")
+    tool_use_id = input_data.get("tool_use_id")
+    if isinstance(session_id, str) and isinstance(tool_use_id, str):
+        return session_id, tool_use_id
+    return None
+
+
+def _tool_start_location(agent: str, identity: object) -> tuple[Path, str]:
+    """Return an agent's timing directory and the file prefix for one tool call."""
+    key = json.dumps(identity, sort_keys=True, default=str)
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    directory = Path(tempfile.gettempdir()) / f"vauxhall-{agent}{_USER_SUFFIX}"
+    return directory, f"{digest}-"
+
+
+def record_tool_start(agent: str, identity: object) -> None:
+    """Record one tool call's start time in its own file.
+
+    Calls that share an identity each get a file; the nanosecond timestamp in the
+    name orders them for claim_tool_duration.
+    """
+    directory, prefix = _tool_start_location(agent, identity)
+    with suppress(OSError):
+        directory.mkdir(exist_ok=True)
+        name = f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"
+        pending = directory / f"{name}.tmp"
+        pending.write_text(str(time.time()))
+        pending.replace(directory / f"{name}.time")
+
+
+def claim_tool_duration(agent: str, identity: object) -> float | None:
+    """Claim the most recent start recorded for a tool call and return its age.
+
+    A start is claimed by renaming its file before reading it, so concurrent
+    finishing hooks never share one. Claiming the most recent start keeps a
+    start left by a call that never finished from inflating a later call's
+    duration. Identical overlapping calls cannot be told apart, so they may
+    report each other's durations.
+    """
+    directory, prefix = _tool_start_location(agent, identity)
+    try:
+        starts = sorted(directory.glob(f"{prefix}*.time"), reverse=True)
+    except OSError:
+        return None
+    for path in starts:
+        claimed = path.with_name(f"{path.stem}.{os.urandom(8).hex()}.claimed")
+        try:
+            path.rename(claimed)
+        except OSError:
+            continue  # Another finishing hook claimed this start first.
+        try:
+            started_at = float(claimed.read_text())
+        except (OSError, ValueError):
+            continue
+        finally:
+            claimed.unlink(missing_ok=True)
+        return round(time.time() - started_at, 1)
+    return None
+
+
+def create_telemetry_client() -> "TelemetryClient":
+    """Create a telemetry client whose connection attempt fits the hook timeout."""
+    from vauxhall.hooks.client import TelemetryClient  # noqa: PLC0415
+
+    client = TelemetryClient()
+    client.client.connect_timeout = 1.0
+    return client
+
+
+def publish_telemetry(
+    input_data: dict[str, Any],
+    agent: str,
+    handlers: Mapping[str, EventHandler],
+    create_client: Callable[[], "TelemetryClient"] | None = None,
+) -> None:
+    """Translate one hook event with its handler and publish the telemetry.
+
+    Events without a handler, or whose handler returns None, publish nothing.
+    """
+    hook_type = input_data.get("hook_event_name")
+    handler = handlers.get(hook_type) if isinstance(hook_type, str) else None
+    telemetry = handler(input_data) if handler is not None else None
+    if telemetry is None:
+        return
+
+    session_id = resolve_session_id(input_data)
+    if session_id is None:
+        logger.warning("Skipping telemetry: no stable session identity is available")
+        return
+
+    state, details = telemetry
+    with (create_client or create_telemetry_client)() as client:
+        client.send(
+            agent=agent,
+            workspace=input_data.get("cwd", str(Path.cwd())),
+            session_id=session_id,
+            state=state,
+            **details,
+        )
 
 
 def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:
@@ -55,195 +291,3 @@ def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:
     except Exception:
         pass
     print("{}")
-
-
-def is_hook_handler(handler: object, module: str) -> bool:
-    """Return whether a handler is a generated command that runs a hook module."""
-    if not isinstance(handler, dict) or handler.get("type") != "command":
-        return False
-    command = handler.get("command")
-    if not isinstance(command, str):
-        return False
-    if _is_hook_invocation(command, module):
-        return True
-    if not command.startswith(WINDOWS_ENCODED_COMMAND_PREFIX):
-        return False
-    encoded_script = command.removeprefix(WINDOWS_ENCODED_COMMAND_PREFIX)
-    try:
-        script = base64.b64decode(encoded_script, validate=True).decode("utf-16-le")
-    except (UnicodeError, ValueError):
-        return False
-    return _is_hook_invocation(script, module)
-
-
-def _is_hook_invocation(command: str, module: str) -> bool:
-    """Return whether a shell command has a generated hook invocation shape."""
-    try:
-        arguments = shlex.split(command)
-    except ValueError:
-        return False
-    if len(arguments) == 3:
-        executable = arguments[0]
-    elif len(arguments) == 4 and arguments[0] == "&":
-        executable = arguments[1]
-    else:
-        return False
-    executable_name = executable.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
-    is_python = executable_name.casefold() in {"python", "python.exe"}
-    return is_python and arguments[-2:] == ["-m", module]
-
-
-def _validate_hook_settings(
-    settings: object, agent: str, option_keys: frozenset[str]
-) -> None:
-    """Validate the nested settings structures modified by an installer."""
-    if not isinstance(settings, dict):
-        msg = f"{agent} settings must be a JSON object"
-        raise TypeError(msg)
-    hooks = settings.get("hooks", {})
-    if not isinstance(hooks, dict):
-        msg = f"{agent} hooks must be a JSON object"
-        raise TypeError(msg)
-    for event, groups in hooks.items():
-        if event in option_keys:
-            continue
-        if not isinstance(groups, list):
-            msg = f"{agent} hook event {event!r} must contain a JSON array"
-            raise TypeError(msg)
-        for group in groups:
-            if not isinstance(group, dict):
-                msg = f"{agent} hook event {event!r} contains a non-object group"
-                raise TypeError(msg)
-            handlers = group.get("hooks")
-            if not isinstance(handlers, list):
-                msg = f"{agent} hook event {event!r} group must contain a hooks array"
-                raise TypeError(msg)
-            if not all(isinstance(handler, dict) for handler in handlers):
-                msg = f"{agent} hook event {event!r} contains a non-object handler"
-                raise TypeError(msg)
-
-
-def load_hook_settings(
-    path: Path, agent: str, option_keys: frozenset[str] = frozenset()
-) -> dict[str, Any]:
-    """Back up, validate, and load an existing hook settings file.
-
-    Args:
-        path: Path to the agent's JSON settings file.
-        agent: Agent name used in error messages.
-        option_keys: Keys under ``hooks`` that hold options rather than events.
-
-    Returns:
-        The existing valid settings, or an empty dictionary when absent.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        return {}
-
-    print(f"Reading existing settings from {path}")
-    backup_path = path.with_suffix(".json.bak")
-    shutil.copy(path, backup_path)
-    print(f"Backup created at {backup_path}")
-    try:
-        with path.open() as file:
-            settings = json.load(file)
-    except Exception as error:
-        msg = f"Could not read existing settings: {error}"
-        raise ValueError(msg) from error
-    _validate_hook_settings(settings, agent, option_keys)
-    return settings
-
-
-def purge_hook_handlers(
-    settings: dict[str, Any],
-    is_owned: Callable[[object], bool],
-    option_keys: frozenset[str] = frozenset(),
-) -> None:
-    """Remove owned handlers and the groups and events they leave empty."""
-    hooks = settings.get("hooks")
-    if not isinstance(hooks, dict):
-        return
-
-    for event in list(hooks):
-        groups = hooks[event]
-        if event in option_keys or not isinstance(groups, list):
-            continue
-        for group in groups:
-            if isinstance(group, dict) and isinstance(group.get("hooks"), list):
-                group["hooks"] = [
-                    handler for handler in group["hooks"] if not is_owned(handler)
-                ]
-        hooks[event] = [
-            group for group in groups if isinstance(group, dict) and group.get("hooks")
-        ]
-        if not hooks[event]:
-            del hooks[event]
-
-
-def register_hook_handler(
-    settings: dict[str, Any], event: str, handler: dict[str, Any]
-) -> None:
-    """Append a handler to the event's catch-all matcher group."""
-    groups = settings.setdefault("hooks", {}).setdefault(event, [])
-    for group in groups:
-        if group.get("matcher") == "*":
-            group.setdefault("hooks", []).append(handler)
-            return
-    groups.append({"matcher": "*", "hooks": [handler]})
-
-
-def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
-    """Replace a JSON file so readers see either the old or the new content."""
-    temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary_path.open("x") as file:
-            json.dump(data, file, indent=2)
-            file.write("\n")
-            file.flush()
-            os.fsync(file.fileno())
-        if path.exists():
-            shutil.copymode(path, temporary_path)
-        temporary_path.replace(path)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
-
-
-def build_hook_command(venv_python: Path, module: str) -> str:
-    """Build a platform-appropriate command that runs a hook module."""
-    if os.name == "nt":
-        python_path = str(venv_python).replace("'", "''")
-        script = f"& '{python_path}' -m {module}"
-        encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
-        return f"{WINDOWS_ENCODED_COMMAND_PREFIX}{encoded_script}"
-    return shlex.join([str(venv_python), "-m", module])
-
-
-def setup_venv(venv_dir: Path) -> Path:
-    """Create an isolated environment containing the Vauxhall hooks package.
-
-    Args:
-        venv_dir: Destination for the virtual environment.
-
-    Returns:
-        Path to the environment's Python executable.
-    """
-    if venv_dir.exists():
-        print(f"Removing existing venv at {venv_dir}...")
-        shutil.rmtree(venv_dir)
-
-    print(f"Creating virtual environment in {venv_dir}...")
-    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-    if os.name == "nt":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    requirement = f"vauxhall[hooks]=={__version__}"
-    print(f"Installing {requirement}...")
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", requirement],
-        check=True,
-        capture_output=True,
-    )
-    return venv_python

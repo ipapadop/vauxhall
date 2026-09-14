@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -270,7 +270,12 @@ def test_notification_tool_permission() -> None:
         "hook_event_name": "Notification",
         "notification_type": "ToolPermission",
         "message": "Confirm deletion?",
-        "details": {"tool_name": "run_shell_command"},
+        "details": {
+            "type": "mcp",
+            "title": "Confirm MCP Tool Execution",
+            "serverName": "filesystem",
+            "toolName": "delete_file",
+        },
         "session_id": "session-123",
         "cwd": "/workspace",
     }
@@ -292,7 +297,7 @@ def test_notification_tool_permission() -> None:
             session_id="native:session-123",
             state="Waiting for Input",
             prompt="Confirm deletion?",
-            tool="run_shell_command",
+            tool="delete_file",
         )
 
 
@@ -323,36 +328,6 @@ def test_ask_user_tool() -> None:
             session_id="native:session-123",
             state="Waiting for Input",
             prompt="Continue?",
-        )
-
-
-def test_ask_question_tool() -> None:
-    """Verify that an ask_question tool call sets the state to 'Waiting for Input'."""
-    hook_data = {
-        "hook_event_name": "BeforeTool",
-        "tool_name": "ask_question",
-        "tool_input": {"question": "What is next?"},
-        "session_id": "session-123",
-        "cwd": "/workspace",
-    }
-
-    with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
-        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
-        patch("sys.stdout", new=io.StringIO()),
-    ):
-        mock_instance = mock_client_class.return_value
-        mock_instance.__enter__.return_value = mock_instance
-        main()
-
-        mock_instance.send.assert_called_once_with(
-            agent="Gemini",
-            workspace="/workspace",
-            session_id="native:session-123",
-            state="Waiting for Input",
-            prompt="What is next?",
         )
 
 
@@ -444,7 +419,7 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
     shutil.rmtree(workspace)
 
 
-def test_tool_durations_are_isolated_by_session_and_tool_call(tmp_path: Path) -> None:
+def test_tool_durations_are_isolated_by_session_and_tool(tmp_path: Path) -> None:
     """Concurrent Gemini tool calls must retain their own start times."""
     workspace = tmp_path / "vauxhall-concurrent-tools"
     (workspace / ".gemini").mkdir(parents=True)
@@ -453,42 +428,36 @@ def test_tool_durations_are_isolated_by_session_and_tool_call(tmp_path: Path) ->
             "hook_event_name": "BeforeTool",
             "tool_name": "alpha",
             "session_id": "session-one",
-            "tool_call_id": "call-one",
             "cwd": str(workspace),
         },
         {
             "hook_event_name": "BeforeTool",
             "tool_name": "beta",
             "session_id": "session-one",
-            "tool_call_id": "call-two",
             "cwd": str(workspace),
         },
         {
             "hook_event_name": "BeforeTool",
             "tool_name": "gamma",
             "session_id": "session-two",
-            "tool_call_id": "call-one",
             "cwd": str(workspace),
         },
         {
             "hook_event_name": "AfterTool",
             "tool_name": "alpha",
             "session_id": "session-one",
-            "tool_call_id": "call-one",
             "cwd": str(workspace),
         },
         {
             "hook_event_name": "AfterTool",
             "tool_name": "beta",
             "session_id": "session-one",
-            "tool_call_id": "call-two",
             "cwd": str(workspace),
         },
         {
             "hook_event_name": "AfterTool",
             "tool_name": "gamma",
             "session_id": "session-two",
-            "tool_call_id": "call-one",
             "cwd": str(workspace),
         },
     ]
@@ -499,7 +468,7 @@ def test_tool_durations_are_isolated_by_session_and_tool_call(tmp_path: Path) ->
         ) as mock_client_class,
         patch("sys.stdout", new=io.StringIO()),
         patch(
-            "vauxhall.hooks.gemini.telemetry_hook.time.time",
+            "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1001.0, 1002.0, 1003.0, 1005.0, 1008.0],
         ),
     ):
@@ -559,7 +528,7 @@ def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
     mock_client_class.assert_not_called()
 
 
-def test_tool_durations_without_call_ids_are_isolated_by_tool_input(
+def test_tool_durations_are_isolated_by_tool_input(
     tmp_path: Path,
 ) -> None:
     """Concurrent calls without IDs must not share one per-workspace start time."""
@@ -587,7 +556,7 @@ def test_tool_durations_without_call_ids_are_isolated_by_tool_input(
         ) as mock_client_class,
         patch("sys.stdout", new=io.StringIO()),
         patch(
-            "vauxhall.hooks.gemini.telemetry_hook.time.time",
+            "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1004.0, 1005.0, 1010.0],
         ),
     ):
@@ -639,6 +608,20 @@ def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
     assert completed.stdout == "{}\n"
 
 
+def _run(*events: dict) -> MagicMock:
+    """Run the hook for each event and return the mocked telemetry client."""
+    with (
+        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        for event in events:
+            with patch("sys.stdin", io.StringIO(json.dumps(event))):
+                main()
+    return client
+
+
 @pytest.mark.parametrize(
     ("hook_data", "expected"),
     [
@@ -662,22 +645,27 @@ def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
             {"hook_event_name": "PreCompress", "trigger": "manual"},
             {"state": "Idle", "status": "Compacting context"},
         ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "ToolPermission",
+                "message": "Allow execution?",
+                "details": {
+                    "type": "exec",
+                    "title": "Confirm Shell Command",
+                    "command": "rm -rf build",
+                    "rootCommand": "rm",
+                },
+            },
+            {"state": "Waiting for Input", "prompt": "Allow execution?"},
+        ),
     ],
 )
 def test_gemini_lifecycle_events_publish_dashboard_states(
     hook_data: dict, expected: dict
 ) -> None:
-    """SessionStart and PreCompress must publish normalized dashboard states."""
-    event = {**hook_data, "session_id": "session-123", "cwd": "/workspace"}
-
-    with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
-        patch("sys.stdin", io.StringIO(json.dumps(event))),
-        patch("sys.stdout", new=io.StringIO()),
-    ):
-        client = client_class.return_value
-        client.__enter__.return_value = client
-        main()
+    """Lifecycle events and notifications must publish normalized states."""
+    client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
 
     client.send.assert_called_once_with(
         agent="Gemini",
@@ -688,33 +676,83 @@ def test_gemini_lifecycle_events_publish_dashboard_states(
 
 
 @pytest.mark.parametrize(
-    "llm_response",
+    "hook_data",
     [
-        {"candidates": [{"content": {"role": "model", "parts": ["partial"]}}]},
-        {"candidates": [{"content": {"parts": ["partial"]}, "finishReason": ""}]},
-        {"candidates": [{"finishReason": "FINISH_REASON_UNSPECIFIED"}]},
-        {"candidates": ["not-a-candidate"], "usageMetadata": {"totalTokenCount": 9}},
-        {"candidates": "not-a-list"},
-        {"usageMetadata": {"totalTokenCount": 12}},
-        "not-an-object",
+        {"tool_name": "run_shell_command"},
+        {"hook_event_name": "BeforeModel"},
+    ]
+    + [
+        {"hook_event_name": "AfterModel", "llm_response": llm_response}
+        for llm_response in [
+            {"candidates": [{"content": {"role": "model", "parts": ["partial"]}}]},
+            {"candidates": [{"content": {"parts": ["partial"]}, "finishReason": ""}]},
+            {"candidates": [{"finishReason": "FINISH_REASON_UNSPECIFIED"}]},
+            {
+                "candidates": ["not-a-candidate"],
+                "usageMetadata": {"totalTokenCount": 9},
+            },
+            {"candidates": "not-a-list"},
+            {"usageMetadata": {"totalTokenCount": 12}},
+            "not-an-object",
+        ]
     ],
 )
-def test_gemini_after_model_skips_non_final_chunks(llm_response: object) -> None:
-    """Streaming AfterModel chunks must not publish until the response finishes."""
+def test_gemini_ignores_events_without_dashboard_state(hook_data: dict) -> None:
+    """Unnamed, unregistered, and non-final streaming events must not publish."""
+    client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
+
+    client.send.assert_not_called()
+
+
+def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) -> None:
+    """Identical overlapping calls must not share or overwrite a start time."""
     event = {
-        "hook_event_name": "AfterModel",
-        "llm_response": llm_response,
-        "session_id": "session-123",
+        "tool_name": "run_shell_command",
+        "tool_input": {"command": "make test"},
+        "tool_response": {"llmContent": "ok"},
+        "session_id": "session-one",
         "cwd": "/workspace",
     }
-    output = io.StringIO()
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
-        patch("sys.stdin", io.StringIO(json.dumps(event))),
-        patch("sys.stdout", new=output),
+        patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(
+            "vauxhall.hooks.common.time.time",
+            side_effect=[1000.0, 1002.0, 1005.0, 1009.0],
+        ),
     ):
-        main()
+        client = _run(
+            *(
+                {**event, "hook_event_name": hook}
+                for hook in ("BeforeTool", "BeforeTool", "AfterTool", "AfterTool")
+            )
+        )
 
-    client_class.assert_not_called()
-    assert output.getvalue() == "{}\n"
+    durations = [
+        call.kwargs.get("duration")
+        for call in client.send.call_args_list
+        if call.kwargs["state"] == "Thinking"
+    ]
+    assert durations == [3.0, 9.0]
+    assert not list(tmp_path.rglob("*.time"))
+
+
+def test_unfinished_tool_call_does_not_inflate_later_duration(tmp_path: Path) -> None:
+    """A start left by a call that never finished must not be claimed later."""
+    before = {
+        "hook_event_name": "BeforeTool",
+        "tool_name": "run_shell_command",
+        "tool_input": {"command": "make"},
+        "session_id": "session-one",
+        "cwd": "/workspace",
+    }
+    after = {**before, "hook_event_name": "AfterTool", "tool_response": {}}
+
+    with (
+        patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch("vauxhall.hooks.common.time.time", side_effect=[1000.0, 2000.0, 2003.0]),
+    ):
+        client = _run(before, before, after)
+
+    assert client.send.call_args.kwargs["duration"] == 3.0
+    assert len(list(tmp_path.rglob("*.time"))) == 1

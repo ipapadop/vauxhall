@@ -9,15 +9,25 @@ import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vauxhall.hooks.codex.telemetry_hook import (
-    _classify_tool_response,
-    _create_telemetry_client,
-    main,
-)
+from vauxhall.hooks.codex.telemetry_hook import _classify_tool_response, main
+from vauxhall.hooks.common import create_telemetry_client
+
+
+def _run(hook_data: dict) -> MagicMock:
+    """Run the Codex hook for one event and return the mocked client."""
+    with (
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        patch("sys.stdin", StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=StringIO()),
+    ):
+        client = client_factory.return_value
+        client.__enter__.return_value = client
+        main()
+    return client
 
 
 def test_codex_hook_outputs_valid_json() -> None:
@@ -46,7 +56,7 @@ def test_codex_hook_outputs_valid_json() -> None:
 
 def test_codex_telemetry_connect_timeout_fits_hook_budget() -> None:
     """MQTT connection setup must finish within the Codex hook timeout."""
-    client = _create_telemetry_client()
+    client = create_telemetry_client()
 
     assert client.client.connect_timeout == 1.0
 
@@ -198,9 +208,7 @@ def test_codex_post_tool_does_not_publish_response_content() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
@@ -313,9 +321,7 @@ def test_codex_events_publish_dashboard_states(hook_data: dict, expected: dict) 
     output = StringIO()
 
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", output),
     ):
@@ -341,9 +347,7 @@ def test_codex_request_user_input_is_waiting() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
@@ -372,9 +376,7 @@ def test_codex_tool_input_does_not_publish_arbitrary_fields() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
@@ -399,9 +401,7 @@ def test_codex_apply_patch_does_not_publish_patch_contents() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
@@ -435,12 +435,10 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
     }
 
     with (
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        patch("vauxhall.hooks.common.time.time") as current_time,
         patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
-        patch("vauxhall.hooks.codex.telemetry_hook.time.time") as current_time,
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook.tempfile.gettempdir",
+            "vauxhall.hooks.common.tempfile.gettempdir",
             return_value=str(tmp_path),
         ),
         patch("sys.stdout", new=StringIO()),
@@ -481,7 +479,7 @@ def test_codex_telemetry_failure_preserves_hook_protocol() -> None:
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", output),
         patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client",
+            "vauxhall.hooks.common.create_telemetry_client",
             side_effect=RuntimeError,
         ),
     ):
@@ -494,9 +492,7 @@ def test_codex_hook_skips_event_without_stable_session_identity() -> None:
     """Telemetry must be skipped when the hook has no stable identity source."""
     hook_data = {"hook_event_name": "SessionStart", "cwd": "/workspace"}
     with (
-        patch(
-            "vauxhall.hooks.codex.telemetry_hook._create_telemetry_client"
-        ) as client_factory,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
         patch.dict("os.environ", {}, clear=True),
@@ -504,3 +500,82 @@ def test_codex_hook_skips_event_without_stable_session_identity() -> None:
         main()
 
     client_factory.assert_not_called()
+
+
+def test_codex_bash_output_text_reports_result_unavailable() -> None:
+    """Codex sends Bash output as text without an exit code."""
+    assert _classify_tool_response("Process output\n") == (
+        "Thinking",
+        "result unavailable",
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("hook_data", "expected"),
+    [
+        (
+            {"hook_event_name": "SessionStart", "source": source},
+            {"state": "Idle", "status": status},
+        )
+        for source, status in [
+            ("startup", "Session started"),
+            ("resume", "Session resumed"),
+            ("clear", "Session cleared"),
+            ("fork", "Session forked"),
+            (None, "Session started"),
+            (["startup"], "Session started"),
+        ]
+    ]
+    + [
+        (
+            {
+                "hook_event_name": "SubagentStart",
+                "agent_id": "agent-1",
+                "agent_type": "explorer",
+                "turn_id": "turn-1",
+            },
+            {"state": "Acting", "tool": "Agent", "cmd": "explorer"},
+        ),
+        (
+            {"hook_event_name": "PreCompact", "trigger": "auto", "turn_id": "turn-1"},
+            {"state": "Thinking", "status": "Compacting context (auto)"},
+        ),
+        (
+            {"hook_event_name": "PostCompact", "trigger": "manual", "turn_id": "t"},
+            {"state": "Idle", "status": "Context compacted"},
+        ),
+        (
+            {"hook_event_name": "PostCompact", "trigger": "auto", "turn_id": "t"},
+            {"state": "Thinking", "status": "Context compacted"},
+        ),
+        (
+            {"hook_event_name": "SessionEnd", "reason": "other"},
+            {"state": "Idle", "status": "session ended"},
+        ),
+    ],
+)
+def test_codex_lifecycle_events_publish_dashboard_states(
+    hook_data: dict, expected: dict
+) -> None:
+    """Codex lifecycle events must publish normalized dashboard states."""
+    client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
+
+    client.send.assert_called_once_with(
+        agent="Codex", workspace="/w", session_id="native:session-123", **expected
+    )
+
+
+@pytest.mark.parametrize(
+    "hook_data",
+    [
+        {"hook_event_name": "SessionStart", "source": "compact"},
+        {"hook_event_name": "PreCompact", "trigger": "auto", "agent_id": "agent-1"},
+        {"hook_event_name": "PostCompact", "trigger": "auto", "agent_id": "agent-1"},
+    ],
+)
+def test_codex_ignores_events_without_dashboard_state(hook_data: dict) -> None:
+    """Events that do not change the main session's state must not publish."""
+    client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
+
+    client.send.assert_not_called()

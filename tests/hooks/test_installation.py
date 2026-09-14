@@ -9,7 +9,7 @@ import shlex
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -167,7 +167,14 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    with patch.object(installation.subprocess, "run") as run:
+    with (
+        patch.object(installation.subprocess, "run") as run,
+        patch.object(
+            installation.importlib.metadata,
+            "distribution",
+            side_effect=installation.importlib.metadata.PackageNotFoundError,
+        ),
+    ):
         result = installation.setup_venv(venv_dir)
 
     assert result == venv_python
@@ -340,3 +347,63 @@ def test_failed_write_leaves_existing_settings_unchanged(
     assert exit_info.value.code == 1
     assert settings_file.read_text() == original
     assert not list(settings_file.parent.glob("*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("direct_url", "requirement"),
+    [
+        pytest.param(None, "vauxhall[hooks]==0.1.0", id="package-index"),
+        pytest.param(
+            {
+                "url": "https://github.com/ipapadop/vauxhall.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "commit_id": "0123abc",
+                    "requested_revision": "main",
+                },
+            },
+            "vauxhall[hooks] @ git+https://github.com/ipapadop/vauxhall.git@0123abc",
+            id="git",
+        ),
+        pytest.param(
+            {
+                "url": "file:///src/vauxhall",
+                "vcs_info": {"vcs": "git", "commit_id": "abc"},
+            },
+            "git+file:///src/vauxhall@abc",
+            id="local-git",
+        ),
+        pytest.param(
+            {"url": "file:///src/vauxhall", "dir_info": {"editable": True}},
+            "vauxhall[hooks] @ file:///src/vauxhall",
+            id="local-directory",
+        ),
+        pytest.param(
+            {"url": "file:///dist/vauxhall-0.1.0-py3-none-any.whl", "archive_info": {}},
+            "vauxhall[hooks] @ file:///dist/vauxhall-0.1.0-py3-none-any.whl",
+            id="wheel",
+        ),
+        pytest.param(
+            {
+                "url": "https://example.com/mono.git",
+                "vcs_info": {"vcs": "git", "commit_id": "abc"},
+                "subdirectory": "python",
+            },
+            "vauxhall[hooks] @ git+https://example.com/mono.git@abc#subdirectory=python",
+            id="subdirectory",
+        ),
+    ],
+)
+def test_hook_environment_installs_from_the_installer_source(
+    direct_url: dict | None, requirement: str
+) -> None:
+    """Hook environments must install Vauxhall from where it was installed."""
+    distribution = MagicMock()
+    distribution.read_text.return_value = (
+        None if direct_url is None else json.dumps(direct_url)
+    )
+
+    with patch.object(
+        installation.importlib.metadata, "distribution", return_value=distribution
+    ):
+        assert installation._hooks_requirement() == requirement

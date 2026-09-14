@@ -52,16 +52,30 @@ shows each agent session as a card in a grid.
 
 ## Installation
 
+Vauxhall isn't published on PyPI yet. Install it from GitHub with pip, which
+needs Git on the machine.
+
 Dashboard:
 
 ```bash
-pip install "vauxhall[dashboard]"
+pip install "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"
 ```
 
 Agent machines (installs only `paho-mqtt`):
 
 ```bash
-pip install "vauxhall[hooks]"
+pip install "vauxhall[hooks] @ git+https://github.com/ipapadop/vauxhall.git"
+```
+
+To install a specific branch, tag, or commit, add `@<ref>` to the URL, for
+example `git+https://github.com/ipapadop/vauxhall.git@main`.
+
+To install from a local clone instead:
+
+```bash
+git clone https://github.com/ipapadop/vauxhall.git
+cd vauxhall
+pip install ".[dashboard]"  # or ".[hooks]" on agent machines
 ```
 
 ## Usage
@@ -95,9 +109,11 @@ vauxhall-install-codex
 vauxhall-install-gemini
 ```
 
-Each installer recreates `.vauxhall-venv` in the workspace, installs the same
-Vauxhall release into it, and registers hooks that run the packaged hook
-module, so the hooks do not depend on a source checkout. Before changing an
+Each installer recreates `.vauxhall-venv` in the workspace and installs
+Vauxhall into it from the same source as the running copy: the same Git
+commit, local directory, or wheel file, or otherwise the matching PyPI
+release. It then registers hooks that run the installed hook module, so the
+hooks don't run code from a source checkout. Before changing an
 existing hook or settings file, the installer backs it up and validates it. If
 the file is invalid, the installer leaves it unchanged and exits with an error.
 Reinstalling replaces only Vauxhall's own handlers and writes the file

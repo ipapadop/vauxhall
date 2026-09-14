@@ -4,6 +4,7 @@
 """Helpers shared by the built-in agent hook installers."""
 
 import base64
+import importlib.metadata
 import json
 import os
 import shlex
@@ -14,6 +15,7 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from vauxhall import __version__
@@ -185,6 +187,41 @@ def build_hook_command(venv_python: Path, module: str) -> str:
     return shlex.join([str(venv_python), "-m", module])
 
 
+def _hooks_requirement() -> str:
+    """Return a pip requirement for the Vauxhall source running this installer.
+
+    pip records where a distribution came from (PEP 610) when it is installed
+    from a Git repository, a local directory, or an archive, so hook
+    environments install from that same source. Other installations use the
+    matching release from the package index.
+    """
+    try:
+        recorded = importlib.metadata.distribution("vauxhall").read_text(
+            "direct_url.json"
+        )
+        direct_url = json.loads(recorded or "null")
+    except (importlib.metadata.PackageNotFoundError, ValueError):
+        direct_url = None
+    if not isinstance(direct_url, dict) or not isinstance(direct_url.get("url"), str):
+        return f"vauxhall[hooks]=={__version__}"
+
+    url = direct_url["url"]
+    vcs_info = direct_url.get("vcs_info")
+    if isinstance(vcs_info, dict):
+        url = f"{vcs_info.get('vcs', 'git')}+{url}"
+        commit_id = vcs_info.get("commit_id")
+        if isinstance(commit_id, str) and commit_id:
+            url = f"{url}@{commit_id}"
+    subdirectory = direct_url.get("subdirectory")
+    if isinstance(subdirectory, str) and subdirectory:
+        url = f"{url}#subdirectory={subdirectory}"
+    if isinstance(vcs_info, dict) and not urlsplit(direct_url["url"]).netloc:
+        # Requirement URLs need a host, so pip gets a local Git repository as a
+        # bare URL; the hooks extra adds no dependencies.
+        return url
+    return f"vauxhall[hooks] @ {url}"
+
+
 def setup_venv(venv_dir: Path) -> Path:
     """Create an isolated environment containing the Vauxhall hooks package.
 
@@ -205,7 +242,7 @@ def setup_venv(venv_dir: Path) -> Path:
     else:
         venv_python = venv_dir / "bin" / "python"
 
-    requirement = f"vauxhall[hooks]=={__version__}"
+    requirement = _hooks_requirement()
     print(f"Installing {requirement}...")
     subprocess.run(
         [str(venv_python), "-m", "pip", "install", requirement],

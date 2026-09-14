@@ -224,8 +224,9 @@ The installer:
 - Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`.
   If the file is invalid JSON or has an unexpected structure, it exits with an
   error and leaves the file unchanged.
-- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
-  that provided the command.
+- Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
+  same source as the running installer: the same Git commit, local directory,
+  or wheel file, or otherwise the matching PyPI release.
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
@@ -339,8 +340,9 @@ The installer:
 - Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. If the file is
   invalid JSON or has an unexpected structure, it exits with an error and leaves
   the file unchanged.
-- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
-  that provided the command.
+- Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
+  same source as the running installer: the same Git commit, local directory,
+  or wheel file, or otherwise the matching PyPI release.
 - Replaces existing Vauxhall handlers, keeps all other configuration, and
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
@@ -452,8 +454,9 @@ The installer:
 - Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. If the file
   is invalid JSON or has an unexpected structure, it exits with an error and
   leaves the file unchanged.
-- Recreates `.vauxhall-venv` and installs the exact `vauxhall[hooks]` release
-  that provided the command.
+- Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
+  same source as the running installer: the same Git commit, local directory,
+  or wheel file, or otherwise the matching PyPI release.
 - Removes only handlers that Vauxhall generated: commands with the installed
   hook module invocation, or the named handlers from earlier installers that
   ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including

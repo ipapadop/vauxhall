@@ -516,6 +516,17 @@ value, and the expected constraint. Hooks print that error to stderr and still
 write one JSON object to stdout. MQTT authentication and TLS are out of scope
 until issue #3.
 
+To change configuration from code, use `vauxhall.core.config_store` rather than
+writing JSON directly. `save_user_config` writes only
+`~/.config/vauxhall/<filename>`, validates with the unchanged
+`DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
+`field_sources` reports each field's source (`environment`, `file`, or
+`default`) and whether it is editable. Fields set by `VAUXHALL_*` environment
+variables are read-only, and so is every field when a configuration file exists
+in the current directory. Saving a read-only or unknown field, or saving to a
+malformed file, raises `ConfigurationError` without writing. See
+[README.md](README.md#configuration) for details.
+
 ## Development and Maintenance Rules
 
 All contributors, including AI agents, must:

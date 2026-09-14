@@ -204,7 +204,8 @@ Saved changes take effect as follows:
 | After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive` |
 | After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
 
-A lower `max_active_agents` evicts cards only as new sessions arrive. When MQTT
+Lowering `max_active_agents` removes the least recently seen surplus cards
+right away. When MQTT
 fields change, **Also update hooks configuration** saves those fields to
 `~/.config/vauxhall/vauxhall_hooks.json` as well. Both files are validated
 before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`

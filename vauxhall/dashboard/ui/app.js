@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
@@ -97,7 +97,7 @@ async function init() {
                 let card = agents[key];
 
                 if (!card) {
-                    if (ensureAgentCapacity(maxActiveAgents) === currentHistoryKey) closeModal();
+                    if (ensureAgentCapacity(maxActiveAgents).includes(currentHistoryKey)) closeModal();
                     card = createCard(data, window.ipc, () => {
                         currentHistoryKey = key; // Lock modal to this agent
                         openHistoryModal(key, agents);
@@ -123,6 +123,7 @@ async function init() {
             onSettingsChanged: (changed) => {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
+                if (evictAgents(maxActiveAgents).includes(currentHistoryKey)) closeModal();
                 checkStaleness(agents, staleThresholdMs);
             },
             onReady: () => {

@@ -104,6 +104,7 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
         "vauxhall/hooks/claude/telemetry_hook.py",
         "vauxhall/hooks/codex/__init__.py",
         "vauxhall/hooks/codex/install.py",
+        "vauxhall/hooks/codex/messages.py",
         "vauxhall/hooks/codex/telemetry_hook.py",
     } <= packaged_files
 

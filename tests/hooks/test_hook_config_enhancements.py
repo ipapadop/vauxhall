@@ -33,7 +33,11 @@ def test_hook_config_load_env_only() -> None:
 
 
 def test_hook_config_load_search_path(tmp_path: Path) -> None:
-    """Test search path resolution in HookConfig.load()."""
+    """Test search path resolution in HookConfig.load().
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "vauxhall_hooks.json"
     config_file.write_text('{"mqtt": {"host": "path-host"}}', encoding="utf-8")
 
@@ -43,7 +47,11 @@ def test_hook_config_load_search_path(tmp_path: Path) -> None:
 
 
 def test_hook_config_load_env_override(tmp_path: Path) -> None:
-    """Test that environment variables override file values."""
+    """Test that environment variables override file values.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "vauxhall_hooks.json"
     config_file.write_text('{"mqtt": {"host": "file-host"}}', encoding="utf-8")
 

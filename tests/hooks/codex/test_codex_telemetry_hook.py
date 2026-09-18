@@ -18,7 +18,14 @@ from vauxhall.hooks.common import create_telemetry_client
 
 
 def _run(hook_data: dict) -> MagicMock:
-    """Run the Codex hook for one event and return the mocked client."""
+    """Run the Codex hook for one event and return the mocked client.
+
+    Args:
+        hook_data: The hook event to feed the hook on stdin.
+
+    Returns:
+        The mocked telemetry client.
+    """
     with (
         patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
@@ -83,7 +90,11 @@ def test_codex_stop_publishes_final_message() -> None:
 
 
 def test_codex_publishes_new_interim_messages_from_transcript(tmp_path: Path) -> None:
-    """A tool hook forwards completed commentary from the current Codex turn."""
+    """A tool hook forwards completed commentary from the current Codex turn.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     transcript = tmp_path / "rollout.jsonl"
     transcript.write_text("", encoding="utf-8")
     base = {
@@ -224,7 +235,15 @@ def test_codex_hook_reports_invalid_configuration_without_breaking_protocol(
     expected_source: str,
     expected_value: str,
 ) -> None:
-    """Invalid hook configuration remains actionable without corrupting stdout."""
+    """Invalid hook configuration remains actionable without corrupting stdout.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        environment_value: The case's environment variable value.
+        file_payload: The case's file contents.
+        expected_source: The source the case expects.
+        expected_value: The value the case expects.
+    """
     if file_payload is not None:
         (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
     environment = {
@@ -286,7 +305,14 @@ def test_codex_hook_reports_invalid_configuration_without_breaking_protocol(
 def test_codex_post_tool_outcomes(
     response: object, state: str, status: str, error: str | None
 ) -> None:
-    """PostToolUse responses must map to truthful dashboard outcomes."""
+    """PostToolUse responses must map to truthful dashboard outcomes.
+
+    Args:
+        response: The case's tool response.
+        state: The case's telemetry state.
+        status: The case's status.
+        error: The case's error.
+    """
     assert _classify_tool_response(response) == (state, status, error)
 
 
@@ -410,7 +436,12 @@ def test_codex_post_tool_does_not_publish_response_content() -> None:
     ],
 )
 def test_codex_events_publish_dashboard_states(hook_data: dict, expected: dict) -> None:
-    """Each supported lifecycle event must publish its dashboard state."""
+    """Each supported lifecycle event must publish its dashboard state.
+
+    Args:
+        hook_data: The case's hook event.
+        expected: The result the case expects.
+    """
     output = StringIO()
 
     with (
@@ -512,7 +543,11 @@ def test_codex_apply_patch_does_not_publish_patch_contents() -> None:
 
 
 def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
-    """PostToolUse must report the duration recorded for its tool call."""
+    """PostToolUse must report the duration recorded for its tool call.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     before_data = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -651,7 +686,12 @@ def test_codex_bash_output_text_reports_result_unavailable() -> None:
 def test_codex_lifecycle_events_publish_dashboard_states(
     hook_data: dict, expected: dict
 ) -> None:
-    """Codex lifecycle events must publish normalized dashboard states."""
+    """Codex lifecycle events must publish normalized dashboard states.
+
+    Args:
+        hook_data: The case's hook event.
+        expected: The result the case expects.
+    """
     client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
 
     client.send.assert_called_once_with(
@@ -668,7 +708,11 @@ def test_codex_lifecycle_events_publish_dashboard_states(
     ],
 )
 def test_codex_ignores_events_without_dashboard_state(hook_data: dict) -> None:
-    """Events that do not change the main session's state must not publish."""
+    """Events that do not change the main session's state must not publish.
+
+    Args:
+        hook_data: The case's hook event.
+    """
     client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
 
     client.send.assert_not_called()

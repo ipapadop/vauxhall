@@ -31,17 +31,39 @@ INSTALLERS = pytest.mark.parametrize(
 
 
 def _encode(script: str) -> str:
-    """Return a Windows encoded command that runs a PowerShell script."""
+    """Return a Windows encoded command that runs a PowerShell script.
+
+    Args:
+        script: PowerShell script to encode.
+
+    Returns:
+        The encoded command.
+    """
     return PREFIX + base64.b64encode(script.encode("utf-16-le")).decode()
 
 
 def _decode(command: str) -> str:
-    """Return the PowerShell script inside a Windows encoded command."""
+    """Return the PowerShell script inside a Windows encoded command.
+
+    Args:
+        command: Windows encoded command to decode.
+
+    Returns:
+        The decoded script.
+    """
     return base64.b64decode(command.removeprefix(PREFIX)).decode("utf-16-le")
 
 
 def _handlers(settings: dict, event: str) -> list[dict]:
-    """Return every handler registered for one event."""
+    """Return every handler registered for one event.
+
+    Args:
+        settings: The settings file's parsed contents.
+        event: Hook event whose handlers are returned.
+
+    Returns:
+        The handlers registered for the event.
+    """
     return [
         handler
         for group in settings["hooks"].get(event, [])
@@ -50,7 +72,15 @@ def _handlers(settings: dict, event: str) -> list[dict]:
 
 
 def _settings_file(installer: ModuleType, workspace: Path) -> Path:
-    """Return the settings file an installer writes in a workspace."""
+    """Return the settings file an installer writes in a workspace.
+
+    Args:
+        installer: Installer module whose settings path is used.
+        workspace: Workspace the installer writes into.
+
+    Returns:
+        The path of the settings file.
+    """
     return workspace / installer.SETTINGS_PATH
 
 
@@ -60,7 +90,14 @@ def _install(
     venv_python: str = "/venv/bin/python",
     os_name: str = "posix",
 ) -> None:
-    """Run an installer in a workspace with a stubbed hook environment."""
+    """Run an installer in a workspace with a stubbed hook environment.
+
+    Args:
+        installer: Installer module to run.
+        workspace: Workspace the installer writes into.
+        venv_python: Python executable the generated command runs.
+        os_name: Value ``os.name`` is stubbed with.
+    """
     with (
         patch.object(Path, "cwd", return_value=workspace),
         patch.object(installation, "setup_venv", return_value=Path(venv_python)),
@@ -100,7 +137,11 @@ def test_hook_command_encodes_windows_metacharacters() -> None:
     ],
 )
 def test_is_hook_handler_matches_generated_commands(command: str) -> None:
-    """Generated invocations of the hook module must be recognized."""
+    """Generated invocations of the hook module must be recognized.
+
+    Args:
+        command: The case's command.
+    """
     handler = {"type": "command", "command": command}
 
     assert installation.is_hook_handler(handler, MODULE)
@@ -120,14 +161,22 @@ def test_is_hook_handler_matches_generated_commands(command: str) -> None:
     ],
 )
 def test_is_hook_handler_ignores_other_commands(command: str) -> None:
-    """Commands without the generated invocation shape must not be owned."""
+    """Commands without the generated invocation shape must not be owned.
+
+    Args:
+        command: The case's command.
+    """
     handler = {"type": "command", "command": command}
 
     assert not installation.is_hook_handler(handler, MODULE)
 
 
 def test_load_hook_settings_backs_up_existing_file(tmp_path: Path) -> None:
-    """Loading existing settings must preserve a backup."""
+    """Loading existing settings must preserve a backup.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = tmp_path / "settings.json"
     settings_file.write_text('{"existing": "value"}')
 
@@ -142,7 +191,11 @@ def test_load_hook_settings_backs_up_existing_file(tmp_path: Path) -> None:
 def test_load_hook_settings_returns_empty_settings_when_missing(
     tmp_path: Path,
 ) -> None:
-    """A missing settings file loads as empty settings."""
+    """A missing settings file loads as empty settings.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     assert installation.load_hook_settings(tmp_path / "settings.json", "Agent") == {}
 
 
@@ -160,7 +213,11 @@ def test_register_hook_handler_uses_catch_all_group() -> None:
 
 
 def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
-    """Hook environments must install an immutable published release."""
+    """Hook environments must install an immutable published release.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     venv_dir = tmp_path / "hooks-venv"
     if installation.os.name == "nt":
         venv_python = venv_dir / "Scripts" / "python.exe"
@@ -190,7 +247,12 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
 
 @INSTALLERS
 def test_install_registers_every_handler(installer: ModuleType, tmp_path: Path) -> None:
-    """Installation must register each handler in a catch-all group."""
+    """Installation must register each handler in a catch-all group.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+    """
     _install(installer, tmp_path)
 
     settings = json.loads(_settings_file(installer, tmp_path).read_text())
@@ -209,7 +271,13 @@ def test_install_registers_every_handler(installer: ModuleType, tmp_path: Path) 
 def test_install_preserves_and_rejects_invalid_existing_settings(
     installer: ModuleType, tmp_path: Path, existing_content: str
 ) -> None:
-    """Invalid existing settings must be backed up and left unchanged."""
+    """Invalid existing settings must be backed up and left unchanged.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+        existing_content: Raw content already in the file.
+    """
     settings_file = _settings_file(installer, tmp_path)
     settings_file.parent.mkdir()
     settings_file.write_text(existing_content)
@@ -242,7 +310,13 @@ def test_install_preserves_and_rejects_invalid_existing_settings(
 def test_install_rejects_invalid_nested_settings(
     installer: ModuleType, tmp_path: Path, existing_settings: dict
 ) -> None:
-    """Invalid nested structures must be rejected before environment setup."""
+    """Invalid nested structures must be rejected before environment setup.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+        existing_settings: Settings already in the file.
+    """
     settings_file = _settings_file(installer, tmp_path)
     settings_file.parent.mkdir()
     original = json.dumps(existing_settings)
@@ -263,7 +337,12 @@ def test_install_rejects_invalid_nested_settings(
 def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
     installer: ModuleType, tmp_path: Path
 ) -> None:
-    """Repeated installation must converge and keep user settings and hooks."""
+    """Repeated installation must converge and keep user settings and hooks.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = _settings_file(installer, tmp_path)
     settings_file.parent.mkdir()
     user_group = {
@@ -301,7 +380,12 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
 def test_windows_reinstall_replaces_only_vauxhall_handlers(
     installer: ModuleType, tmp_path: Path
 ) -> None:
-    """Repeated Windows installation must replace only generated handlers."""
+    """Repeated Windows installation must replace only generated handlers.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = _settings_file(installer, tmp_path)
     settings_file.parent.mkdir()
     custom_handler = {
@@ -332,7 +416,12 @@ def test_windows_reinstall_replaces_only_vauxhall_handlers(
 def test_failed_write_leaves_existing_settings_unchanged(
     installer: ModuleType, tmp_path: Path
 ) -> None:
-    """A failure while replacing settings must not truncate the original file."""
+    """A failure while replacing settings must not truncate the original file.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = _settings_file(installer, tmp_path)
     settings_file.parent.mkdir()
     original = json.dumps({"theme": "dark"})
@@ -397,7 +486,12 @@ def test_failed_write_leaves_existing_settings_unchanged(
 def test_hook_environment_installs_from_the_installer_source(
     direct_url: dict | None, requirement: str
 ) -> None:
-    """Hook environments must install Vauxhall from where it was installed."""
+    """Hook environments must install Vauxhall from where it was installed.
+
+    Args:
+        direct_url: The recorded PEP 610 source of the installation.
+        requirement: The pip requirement the case expects.
+    """
     distribution = MagicMock()
     distribution.read_text.return_value = (
         None if direct_url is None else json.dumps(direct_url)

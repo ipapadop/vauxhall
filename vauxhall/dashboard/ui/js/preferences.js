@@ -12,6 +12,11 @@
 const THEME_CACHE_KEY = 'vauxhall-theme';
 const SAVE_DELAY_MS = 500;
 
+/**
+ * Returns whether a value is one of the supported theme names.
+ * @param {unknown} value - The candidate theme.
+ * @returns {boolean} Whether the value is a theme.
+ */
 export const isTheme = (value) => value === 'dark' || value === 'light';
 
 /**

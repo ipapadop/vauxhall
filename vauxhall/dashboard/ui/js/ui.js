@@ -11,8 +11,24 @@
 const WAITING_STATES = new Set(['Waiting', 'Waiting for Input', 'Input Required']);
 const STATUS_ORDER = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
 
+/**
+ * Returns whether a value is a finite number above zero.
+ * @param {unknown} value - The candidate number.
+ * @returns {boolean} Whether the value is usable as a positive metric.
+ */
 const isPositiveNumber = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+/**
+ * Returns the text of a card's first matching element, or an empty string.
+ * @param {HTMLElement} card - The agent card.
+ * @param {string} selector - Selector for the element to read.
+ * @returns {string} The element's text.
+ */
 const textOf = (card, selector) => card.querySelector(selector)?.textContent || '';
+/**
+ * Returns a card's token count, or zero when it has no token badge.
+ * @param {HTMLElement} card - The agent card.
+ * @returns {number} The token count.
+ */
 const tokensOf = (card) => parseInt(card.querySelector('.metric-badge.tokens')?.dataset.value || '0');
 
 const CARD_COMPARATORS = {
@@ -22,6 +38,12 @@ const CARD_COMPARATORS = {
     tokens: (a, b) => tokensOf(b) - tokensOf(a),
 };
 
+/**
+ * Creates a span holding a value as text.
+ * @param {string} className - Class applied to the span.
+ * @param {unknown} value - Value rendered as the span's text.
+ * @returns {HTMLSpanElement} The created span.
+ */
 function textSpan(className, value) {
     const span = document.createElement('span');
     span.className = className;
@@ -141,10 +163,20 @@ function getDetailsSegments(data) {
     return [];
 }
 
+/**
+ * Renders a telemetry event's details as plain text for the history log.
+ * @param {object} data - The telemetry data.
+ * @returns {string} The joined details text.
+ */
 function getDetailsString(data) {
     return getDetailsSegments(data).map(segment => segment.text).join('');
 }
 
+/**
+ * Appends a telemetry event's details to a container, styling each segment.
+ * @param {HTMLElement} container - Element the details are appended to.
+ * @param {object} data - The telemetry data.
+ */
 function appendDetails(container, data) {
     getDetailsSegments(data).forEach(({ text, className }) => {
         container.appendChild(className ? textSpan(className, text) : document.createTextNode(text));

@@ -13,7 +13,11 @@ from vauxhall.core.telemetry import telemetry_validation_error
 
 @patch("scripts.simulate_agent.TelemetryClient")
 def test_simulate_agent_success(mock_client_class: MagicMock) -> None:
-    """Verify simulate_agent publishes expected payload."""
+    """Verify simulate_agent publishes expected payload.
+
+    Args:
+        mock_client_class: Mock replacing ``scripts.simulate_agent.TelemetryClient``.
+    """
     mock_client = MagicMock()
     mock_client.is_connected = True
     mock_client.__enter__.return_value = mock_client
@@ -35,7 +39,11 @@ def test_simulate_agent_success(mock_client_class: MagicMock) -> None:
 
 @patch("scripts.simulate_agent.TelemetryClient")
 def test_simulate_agent_connection_error(mock_client_class: MagicMock) -> None:
-    """Verify simulate_agent handles connection error gracefully."""
+    """Verify simulate_agent handles connection error gracefully.
+
+    Args:
+        mock_client_class: Mock replacing ``scripts.simulate_agent.TelemetryClient``.
+    """
     mock_client = MagicMock()
     mock_client.is_connected = False
     mock_client.__enter__.return_value = mock_client
@@ -50,7 +58,11 @@ def test_simulate_agent_connection_error(mock_client_class: MagicMock) -> None:
 def test_simulate_agent_publishes_valid_operations(
     operation: dict,
 ) -> None:
-    """Every simulated operation must be valid telemetry."""
+    """Every simulated operation must be valid telemetry.
+
+    Args:
+        operation: The case's operation.
+    """
     with (
         patch("scripts.simulate_agent.TelemetryClient") as mock_client_class,
         patch("scripts.simulate_agent.random.choice", side_effect=["local", operation]),

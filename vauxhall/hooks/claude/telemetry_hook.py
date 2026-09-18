@@ -45,7 +45,12 @@ _STOP_FAILURE_ERRORS = frozenset(
 
 
 def _add_duration(input_data: dict[str, Any], details: dict[str, Any]) -> None:
-    """Add a finished tool call's duration, preferring Claude Code's own timing."""
+    """Add a finished tool call's duration, preferring Claude Code's own timing.
+
+    Args:
+        input_data: The hook event, read for the agent's reported duration.
+        details: Telemetry details the duration is added to, in place.
+    """
     identity = common.tool_use_identity(input_data)
     measured = common.claim_tool_duration("claude", identity) if identity else None
     duration_ms = input_data.get("duration_ms")
@@ -56,7 +61,15 @@ def _add_duration(input_data: dict[str, Any], details: dict[str, Any]) -> None:
 
 
 def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Claude Code PreToolUse event."""
+    """Translate a Claude Code PreToolUse event.
+
+    Args:
+        input_data: The hook event naming the tool about to run.
+
+    Returns:
+        The waiting state for a question tool, otherwise the acting state and
+        the tool details.
+    """
     if input_data.get("tool_name") == "AskUserQuestion":
         prompt = common.question_prompt(input_data.get("tool_input"))
         return "Waiting for Input", {"prompt": prompt}
@@ -67,7 +80,15 @@ def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Claude Code PostToolUse event, which follows tool success."""
+    """Translate a Claude Code PostToolUse event, which follows tool success.
+
+    Args:
+        input_data: The hook event carrying the tool response.
+
+    Returns:
+        The idle state when the call was interrupted, otherwise the thinking
+        state, with the tool details and duration.
+    """
     response = input_data.get("tool_response")
     interrupted = isinstance(response, dict) and (
         response.get("interrupted") is True or common.is_cancelled(response)
@@ -79,7 +100,15 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Claude Code PostToolUseFailure event."""
+    """Translate a Claude Code PostToolUseFailure event.
+
+    Args:
+        input_data: The hook event describing the failed call.
+
+    Returns:
+        The idle state for an interrupt, otherwise the error state, with the
+        tool details and duration.
+    """
     details = common.tool_details(input_data, {})
     if input_data.get("is_interrupt") is True:
         state = "Idle"
@@ -93,7 +122,15 @@ def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
-    """Map waiting notifications to a waiting state; ignore others."""
+    """Map waiting notifications to a waiting state; ignore others.
+
+    Args:
+        input_data: The hook event naming the notification type.
+
+    Returns:
+        The waiting state and the prompt to show, or ``None`` for a notification
+        that does not await the user.
+    """
     notification_type = input_data.get("notification_type")
     if not isinstance(notification_type, str):
         return None
@@ -106,7 +143,14 @@ def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
 
 
 def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate StopFailure, publishing only the documented error type."""
+    """Translate StopFailure, publishing only the documented error type.
+
+    Args:
+        input_data: The hook event naming the error.
+
+    Returns:
+        The error state and a status naming a documented error, or "unknown".
+    """
     error = input_data.get("error")
     if not isinstance(error, str) or error not in _STOP_FAILURE_ERRORS:
         error = "unknown"
@@ -114,7 +158,16 @@ def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | None:
-    """Publish an assistant message when its displayed text is complete."""
+    """Publish an assistant message when its displayed text is complete.
+
+    Args:
+        input_data: The hook event carrying one displayed chunk.
+
+    Returns:
+        The thinking state and the assembled message, or ``None`` for a chunk
+        that does not end one, an event without a message identity, or an
+        event fired inside a subagent.
+    """
     if common._is_subagent_event(input_data):
         return None
     session_id = resolve_session_id(input_data)

@@ -14,6 +14,9 @@ import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
 import { cacheTheme, cachedTheme, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
 
+/**
+ * Builds the dashboard, restores preferences, and starts the telemetry feed.
+ */
 async function init() {
     console.log("Vauxhall Dashboard Initialized");
     const status = document.getElementById('js-status');

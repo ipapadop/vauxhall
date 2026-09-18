@@ -21,7 +21,11 @@ BASE = {"session_id": "session-123", "cwd": "/workspace"}
 
 
 def _run(*events: dict) -> MagicMock:
-    """Run the hook for each event and return the mocked telemetry client."""
+    """Run the hook for each event and return the mocked telemetry client.
+
+    Returns:
+        The mocked telemetry client.
+    """
     with (
         patch(f"{COMMON}.create_telemetry_client") as client_factory,
         patch("sys.stdout", new=StringIO()),
@@ -35,7 +39,11 @@ def _run(*events: dict) -> MagicMock:
 
 
 def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
-    """Display batches become one assistant message before the turn stops."""
+    """Display batches become one assistant message before the turn stops.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     first = {
         **BASE,
         "hook_event_name": "MessageDisplay",
@@ -103,7 +111,11 @@ def test_claude_messages_in_two_workspaces_do_not_share_one_file(
     ],
 )
 def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
-    """Every input must exit successfully with one JSON object on stdout."""
+    """Every input must exit successfully with one JSON object on stdout.
+
+    Args:
+        stdin: The case's stdin contents.
+    """
     completed = subprocess.run(
         [sys.executable, "-m", HOOK],
         input=stdin,
@@ -335,7 +347,13 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
 def test_claude_events_publish_dashboard_states(
     tmp_path: Path, hook_data: dict, expected: dict
 ) -> None:
-    """Each supported event must publish only its normalized dashboard state."""
+    """Each supported event must publish only its normalized dashboard state.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        hook_data: The case's hook event.
+        expected: The result the case expects.
+    """
     with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
         client = _run({**BASE, **hook_data})
 
@@ -364,14 +382,22 @@ def test_claude_events_publish_dashboard_states(
     ],
 )
 def test_claude_ignores_events_without_dashboard_state(hook_data: dict) -> None:
-    """Events that do not change the main session's state must not publish."""
+    """Events that do not change the main session's state must not publish.
+
+    Args:
+        hook_data: The case's hook event.
+    """
     client = _run({**BASE, **hook_data})
 
     client.send.assert_not_called()
 
 
 def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> None:
-    """Concurrent tool calls must retain their own start times."""
+    """Concurrent tool calls must retain their own start times.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
 
     def event(hook: str, tool_use_id: str) -> dict:
         """Build a Read tool event carrying the given tool-use ID.
@@ -413,7 +439,11 @@ def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> No
 
 
 def test_claude_failed_tool_reports_duration(tmp_path: Path) -> None:
-    """PostToolUseFailure must report the duration recorded for its tool call."""
+    """PostToolUseFailure must report the duration recorded for its tool call.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     before = {
         **BASE,
         "hook_event_name": "PreToolUse",
@@ -433,7 +463,11 @@ def test_claude_failed_tool_reports_duration(tmp_path: Path) -> None:
 
 
 def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
-    """Claude Code's duration_ms must win over the hook's own timing file."""
+    """Claude Code's duration_ms must win over the hook's own timing file.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     before = {
         **BASE,
         "hook_event_name": "PreToolUse",

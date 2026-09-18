@@ -125,7 +125,15 @@ def test_gemini_hook_reports_invalid_configuration_without_breaking_protocol(
     expected_source: str,
     expected_value: str,
 ) -> None:
-    """Invalid hook configuration remains actionable without corrupting stdout."""
+    """Invalid hook configuration remains actionable without corrupting stdout.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        environment_value: The case's environment variable value.
+        file_payload: The case's file contents.
+        expected_source: The source the case expects.
+        expected_value: The value the case expects.
+    """
     if file_payload is not None:
         (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
     environment = {
@@ -185,12 +193,23 @@ def test_gemini_hook_reports_invalid_configuration_without_breaking_protocol(
 def test_gemini_after_tool_outcomes(
     response: object, state: str, status: str, error: str | None
 ) -> None:
-    """AfterTool responses must map to truthful dashboard outcomes."""
+    """AfterTool responses must map to truthful dashboard outcomes.
+
+    Args:
+        response: The case's tool response.
+        state: The case's telemetry state.
+        status: The case's status.
+        error: The case's error.
+    """
     assert _classify_tool_response(response) == (state, status, error)
 
 
 def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> None:
-    """AfterTool publishes only normalized outcome fields, never result content."""
+    """AfterTool publishes only normalized outcome fields, never result content.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     workspace = tmp_path / "workspace"
     (workspace / ".gemini").mkdir(parents=True)
     hook_data = {
@@ -238,7 +257,12 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
 def test_gemini_session_end_maps_documented_reasons(
     reason: object, status: str
 ) -> None:
-    """SessionEnd must emit only normalized statuses for known CLI reasons."""
+    """SessionEnd must emit only normalized statuses for known CLI reasons.
+
+    Args:
+        reason: The case's reason.
+        status: The case's status.
+    """
     hook_data = {
         "hook_event_name": "SessionEnd",
         "session_id": "session-123",
@@ -365,7 +389,11 @@ def test_after_model_tokens() -> None:
 
 
 def test_tool_duration_calculation(tmp_path: Path) -> None:
-    """Verify that duration is calculated between BeforeTool and AfterTool."""
+    """Verify that duration is calculated between BeforeTool and AfterTool.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     workspace = tmp_path / "vauxhall-test-duration"
     (workspace / ".gemini").mkdir(parents=True, exist_ok=True)
 
@@ -420,7 +448,11 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
 
 
 def test_tool_durations_are_isolated_by_session_and_tool(tmp_path: Path) -> None:
-    """Concurrent Gemini tool calls must retain their own start times."""
+    """Concurrent Gemini tool calls must retain their own start times.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     workspace = tmp_path / "vauxhall-concurrent-tools"
     (workspace / ".gemini").mkdir(parents=True)
     events = [
@@ -531,7 +563,11 @@ def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
 def test_tool_durations_are_isolated_by_tool_input(
     tmp_path: Path,
 ) -> None:
-    """Concurrent calls without IDs must not share one per-workspace start time."""
+    """Concurrent calls without IDs must not share one per-workspace start time.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     workspace = tmp_path / "no-gemini-directory"
 
     def event(hook: str, command: str) -> dict:
@@ -599,7 +635,11 @@ def test_tool_durations_are_isolated_by_tool_input(
     ],
 )
 def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
-    """Malformed nested hook fields cannot break the Gemini stdout protocol."""
+    """Malformed nested hook fields cannot break the Gemini stdout protocol.
+
+    Args:
+        hook_data: The case's hook event.
+    """
     completed = subprocess.run(
         [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
         input=json.dumps(hook_data),
@@ -618,7 +658,11 @@ def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
 
 
 def _run(*events: dict) -> MagicMock:
-    """Run the hook for each event and return the mocked telemetry client."""
+    """Run the hook for each event and return the mocked telemetry client.
+
+    Returns:
+        The mocked telemetry client.
+    """
     with (
         patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
         patch("sys.stdout", new=io.StringIO()),
@@ -632,7 +676,11 @@ def _run(*events: dict) -> MagicMock:
 
 
 def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
-    """Streaming model chunks form one message at each model response end."""
+    """Streaming model chunks form one message at each model response end.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     base = {
         "hook_event_name": "AfterModel",
         "session_id": "session-123",
@@ -706,7 +754,12 @@ def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
 def test_gemini_lifecycle_events_publish_dashboard_states(
     hook_data: dict, expected: dict
 ) -> None:
-    """Lifecycle events and notifications must publish normalized states."""
+    """Lifecycle events and notifications must publish normalized states.
+
+    Args:
+        hook_data: The case's hook event.
+        expected: The result the case expects.
+    """
     client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
 
     client.send.assert_called_once_with(
@@ -740,14 +793,22 @@ def test_gemini_lifecycle_events_publish_dashboard_states(
     ],
 )
 def test_gemini_ignores_events_without_dashboard_state(hook_data: dict) -> None:
-    """Unnamed, unregistered, and non-final streaming events must not publish."""
+    """Unnamed, unregistered, and non-final streaming events must not publish.
+
+    Args:
+        hook_data: The case's hook event.
+    """
     client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
 
     client.send.assert_not_called()
 
 
 def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) -> None:
-    """Identical overlapping calls must not share or overwrite a start time."""
+    """Identical overlapping calls must not share or overwrite a start time.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     event = {
         "tool_name": "run_shell_command",
         "tool_input": {"command": "make test"},
@@ -780,7 +841,11 @@ def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) 
 
 
 def test_unfinished_tool_call_does_not_inflate_later_duration(tmp_path: Path) -> None:
-    """A start left by a call that never finished must not be claimed later."""
+    """A start left by a call that never finished must not be claimed later.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     before = {
         "hook_event_name": "BeforeTool",
         "tool_name": "run_shell_command",

@@ -12,7 +12,11 @@ from vauxhall.hooks.config import HookConfig
 
 
 def test_telemetry_client_uses_hook_settings(tmp_path: Path) -> None:
-    """Verify TelemetryClient picks up defaults from hook_settings."""
+    """Verify TelemetryClient picks up defaults from hook_settings.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "vauxhall_hooks.json"
     data = {"mqtt": {"host": "hook_host", "port": 9999, "keepalive": 120}}
     with config_file.open("w") as f:

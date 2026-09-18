@@ -10,7 +10,11 @@ from vauxhall.hooks.config import HookConfig
 
 
 def test_hook_config_loading(tmp_path: Path) -> None:
-    """Test loading hook configuration from a JSON file."""
+    """Test loading hook configuration from a JSON file.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "vauxhall_hooks.json"
     config_file.write_text(
         json.dumps({"mqtt": {"host": "remote-broker"}}), encoding="utf-8"

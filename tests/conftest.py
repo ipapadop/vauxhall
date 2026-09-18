@@ -17,6 +17,13 @@ def isolated_home(
     """Keep every test away from the real home directory and VAUXHALL_* variables.
 
     The dashboard reads and writes per-user files under ``~/.config/vauxhall``.
+
+    Args:
+        tmp_path_factory: Pytest temporary directory factory.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        The temporary home directory.
     """
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setattr(Path, "home", lambda: home)
@@ -50,7 +57,15 @@ def isolated_tempdir(
 
 @pytest.fixture
 def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Run a test in an empty working directory, so no configuration file is there."""
+    """Run a test in an empty working directory, so no configuration file is there.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        The empty working directory.
+    """
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)

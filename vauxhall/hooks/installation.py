@@ -26,7 +26,16 @@ WINDOWS_ENCODED_COMMAND_PREFIX = (
 
 
 def is_hook_handler(handler: object, module: str) -> bool:
-    """Return whether a handler is a generated command that runs a hook module."""
+    """Return whether a handler is a generated command that runs a hook module.
+
+    Args:
+        handler: The handler entry from an agent's settings file.
+        module: The hook module the command is expected to run.
+
+    Returns:
+        Whether the handler runs that module, including the Windows
+        base64-encoded command form.
+    """
     if not isinstance(handler, dict) or handler.get("type") != "command":
         return False
     command = handler.get("command")
@@ -45,7 +54,15 @@ def is_hook_handler(handler: object, module: str) -> bool:
 
 
 def _is_hook_invocation(command: str, module: str) -> bool:
-    """Return whether a shell command has a generated hook invocation shape."""
+    """Return whether a shell command has a generated hook invocation shape.
+
+    Args:
+        command: The shell command to inspect.
+        module: The hook module the command is expected to run.
+
+    Returns:
+        Whether the command is a Python interpreter running that module.
+    """
     try:
         arguments = shlex.split(command)
     except ValueError:
@@ -64,7 +81,17 @@ def _is_hook_invocation(command: str, module: str) -> bool:
 def _validate_hook_settings(
     settings: object, agent: str, option_keys: frozenset[str]
 ) -> None:
-    """Validate the nested settings structures modified by an installer."""
+    """Validate the nested settings structures modified by an installer.
+
+    Args:
+        settings: The parsed settings file.
+        agent: Agent name used in error messages.
+        option_keys: Keys under ``hooks`` that hold options rather than events.
+
+    Raises:
+        TypeError: If the settings, its ``hooks`` mapping, or any event's
+            matcher groups and handlers are not the expected shape.
+    """
     if not isinstance(settings, dict):
         msg = f"{agent} settings must be a JSON object"
         raise TypeError(msg)
@@ -103,6 +130,13 @@ def load_hook_settings(
 
     Returns:
         The existing valid settings, or an empty dictionary when absent.
+
+    Raises:
+        OSError: If the settings directory cannot be created, or the existing
+            file cannot be copied to its backup. The backup is made before the
+            file is read, so an unreadable file fails here.
+        ValueError: If the backed-up file cannot be read or parsed.
+        TypeError: If the existing settings have an unexpected shape.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -127,7 +161,13 @@ def purge_hook_handlers(
     is_owned: Callable[[object], bool],
     option_keys: frozenset[str] = frozenset(),
 ) -> None:
-    """Remove owned handlers and the groups and events they leave empty."""
+    """Remove owned handlers and the groups and events they leave empty.
+
+    Args:
+        settings: The settings to purge, modified in place.
+        is_owned: Predicate naming the handlers this installer wrote.
+        option_keys: Keys under ``hooks`` that hold options rather than events.
+    """
     hooks = settings.get("hooks")
     if not isinstance(hooks, dict):
         return
@@ -151,7 +191,13 @@ def purge_hook_handlers(
 def register_hook_handler(
     settings: dict[str, Any], event: str, handler: dict[str, Any]
 ) -> None:
-    """Append a handler to the event's catch-all matcher group."""
+    """Append a handler to the event's catch-all matcher group.
+
+    Args:
+        settings: The settings to register into, modified in place.
+        event: The hook event the handler runs on.
+        handler: The handler to append.
+    """
     groups = settings.setdefault("hooks", {}).setdefault(event, [])
     for group in groups:
         if group.get("matcher") == "*":
@@ -161,7 +207,12 @@ def register_hook_handler(
 
 
 def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
-    """Replace a JSON file so readers see either the old or the new content."""
+    """Replace a JSON file so readers see either the old or the new content.
+
+    Args:
+        path: The file to replace.
+        data: The data to serialize into it.
+    """
     temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         with temporary_path.open("x") as file:
@@ -178,7 +229,16 @@ def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
 
 
 def build_hook_command(venv_python: Path, module: str) -> str:
-    """Build a platform-appropriate command that runs a hook module."""
+    """Build a platform-appropriate command that runs a hook module.
+
+    Args:
+        venv_python: Python executable of the hooks environment.
+        module: The hook module to run.
+
+    Returns:
+        The command to store in the agent's settings file, base64-encoded for
+        PowerShell on Windows.
+    """
     if os.name == "nt":
         python_path = str(venv_python).replace("'", "''")
         script = f"& '{python_path}' -m {module}"
@@ -194,6 +254,9 @@ def _hooks_requirement() -> str:
     from a Git repository, a local directory, or an archive, so hook
     environments install from that same source. Other installations use the
     matching release from the package index.
+
+    Returns:
+        A pip requirement specifier for the hooks extra.
     """
     try:
         recorded = importlib.metadata.distribution("vauxhall").read_text(

@@ -41,7 +41,11 @@ def test_ipc_get_max_active_agents() -> None:
 
 @patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
-    """Verify that copy_to_clipboard calls pyperclip."""
+    """Verify that copy_to_clipboard calls pyperclip.
+
+    Args:
+        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
+    """
     ipc = DashboardIPC()
     assert ipc.copy_to_clipboard("test text") is True
     mock_copy.assert_called_once_with("test text")
@@ -49,7 +53,11 @@ def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
 
 @patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard_error(mock_copy: MagicMock) -> None:
-    """Verify that copy_to_clipboard handles errors gracefully."""
+    """Verify that copy_to_clipboard handles errors gracefully.
+
+    Args:
+        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
+    """
     mock_copy.side_effect = Exception("clipboard error")
     ipc = DashboardIPC()
     assert ipc.copy_to_clipboard("test text") is False

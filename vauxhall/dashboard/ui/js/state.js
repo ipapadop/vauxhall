@@ -10,6 +10,11 @@
 
 export const agents = {}; // JSON [agent, workspace, session_id] -> DOM element
 
+/**
+ * Builds the key that identifies one agent card.
+ * @param {object} data - Telemetry data naming the agent, workspace, and session.
+ * @returns {string} The card key.
+ */
 export function agentKey(data) {
     return JSON.stringify([
         String(data.agent ?? ''),

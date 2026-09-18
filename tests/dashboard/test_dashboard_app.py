@@ -30,7 +30,11 @@ from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
-    """Return a valid version-one dashboard telemetry event."""
+    """Return a valid version-one dashboard telemetry event.
+
+    Returns:
+        The event.
+    """
     event: dict[str, object] = {
         "schema_version": 1,
         "agent": "Codex",
@@ -47,7 +51,11 @@ class TestDashboardComponents(unittest.TestCase):
     """Tests for IPC and Subscriber components."""
 
     def valid_telemetry(self) -> dict[str, Any]:
-        """Return one valid schema-v1 dashboard update."""
+        """Return one valid schema-v1 dashboard update.
+
+        Returns:
+            The update.
+        """
         return {
             "schema_version": 1,
             "agent": "TestAgent",
@@ -85,7 +93,11 @@ class TestDashboardComponents(unittest.TestCase):
     def test_run_uses_configured_pyloid_window_settings(
         self, mock_serve: MagicMock
     ) -> None:
-        """Dashboard startup passes its supported settings to Pyloid."""
+        """Dashboard startup passes its supported settings to Pyloid.
+
+        Args:
+            mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
+        """
         with (
             patch("vauxhall.dashboard.app.DashboardSubscriber"),
             patch("vauxhall.dashboard.app.settings") as mock_settings,
@@ -253,7 +265,12 @@ class TestDashboardComponents(unittest.TestCase):
 def test_pending_updates_discards_oldest_when_not_ready(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Retain only the newest pre-ready telemetry events at the queue limit."""
+    """Retain only the newest pre-ready telemetry events at the queue limit.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        caplog: Pytest log capture fixture.
+    """
     monkeypatch.setattr(
         "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
     )
@@ -286,7 +303,12 @@ def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Keep a bounded newest tail during a large pre-ready telemetry burst."""
+    """Keep a bounded newest tail during a large pre-ready telemetry burst.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        caplog: Pytest log capture fixture.
+    """
     monkeypatch.setattr(
         "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
     )
@@ -318,11 +340,22 @@ def test_readiness_transition_cannot_strand_a_pending_update() -> None:
     original_ready_callback = dashboard.ipc.on_ready_callback
 
     class CoordinatedIPC:
+        """Stub IPC that blocks the first readiness read until the test releases it."""
+
         def __init__(self) -> None:
+            """Start out not ready."""
             self._is_ready = False
 
         @property
         def is_ready(self) -> bool:
+            """Report readiness, pausing the first read that observes not ready.
+
+            Returns:
+                Whether the frontend is ready.
+
+            Raises:
+                TimeoutError: If the test does not release the read in time.
+            """
             observed = self._is_ready
             if not observed:
                 readiness_read.set()
@@ -332,9 +365,19 @@ def test_readiness_transition_cannot_strand_a_pending_update() -> None:
 
         @is_ready.setter
         def is_ready(self, value: bool) -> None:
+            """Set readiness.
+
+            Args:
+                value: Whether the frontend is ready.
+            """
             self._is_ready = value
 
         def set_ready(self) -> bool:
+            """Become ready and run the real readiness callback.
+
+            Returns:
+                Always ``True``.
+            """
             self._is_ready = True
             readiness_started.set()
             assert original_ready_callback is not None
@@ -372,20 +415,38 @@ def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> No
     original_ready_callback = dashboard.ipc.on_ready_callback
 
     class ReadinessObservingIPC:
+        """Stub IPC that signals when a caller observes the ready state."""
+
         def __init__(self) -> None:
+            """Start out not ready."""
             self._is_ready = False
 
         @property
         def is_ready(self) -> bool:
+            """Report readiness, signalling when a caller observes it as ready.
+
+            Returns:
+                Whether the frontend is ready.
+            """
             if self._is_ready:
                 live_saw_ready.set()
             return self._is_ready
 
         @is_ready.setter
         def is_ready(self, value: bool) -> None:
+            """Set readiness.
+
+            Args:
+                value: Whether the frontend is ready.
+            """
             self._is_ready = value
 
         def set_ready(self) -> bool:
+            """Run the real readiness callback, then become ready.
+
+            Returns:
+                Always ``True``.
+            """
             assert original_ready_callback is not None
             original_ready_callback()
             if not self._is_ready:
@@ -393,6 +454,14 @@ def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> No
             return True
 
     def invoke(_channel: str, event: dict[str, object]) -> None:
+        """Record each delivery, holding the queued one until the test releases it.
+
+        Args:
+            event: The telemetry event being delivered.
+
+        Raises:
+            TimeoutError: If the test does not release the queued delivery in time.
+        """
         if event["state"] == "Thinking":
             queued_dispatch_started.set()
             if not continue_queued_dispatch.wait(timeout=2):
@@ -420,7 +489,11 @@ def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> No
 
 @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
 def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None:
-    """MQTT cleanup runs even when the UI event loop exits exceptionally."""
+    """MQTT cleanup runs even when the UI event loop exits exceptionally.
+
+    Args:
+        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
+    """
     app = MagicMock()
     app.run.side_effect = RuntimeError("UI failed")
 
@@ -437,11 +510,20 @@ def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None
 
 @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
 def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> None:
-    """Status reported while stopping MQTT must not reach the destroyed window."""
+    """Status reported while stopping MQTT must not reach the destroyed window.
+
+    Args:
+        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
+    """
     app = MagicMock()
     dashboard = DashboardApp(app)
 
     def close_ready_window() -> None:
+        """Mark the window ready, then end the UI loop as a close would.
+
+        Raises:
+            SystemExit: Always, standing in for the UI loop exiting.
+        """
         dashboard.ipc.is_ready = True
         raise SystemExit(0)
 

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
+"""Manual check that log levels render in their intended colors."""
+
 from vauxhall.core.logging import get_logger, setup_logging
 
 

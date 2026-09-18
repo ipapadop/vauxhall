@@ -31,5 +31,11 @@ from vauxhall.hooks.identity import resolve_session_id
 def test_resolve_session_id_uses_stable_fallback_order(
     event: dict, environment: dict[str, str], expected: str | None
 ) -> None:
-    """Use native, transcript, and environment identities in stable order."""
+    """Use native, transcript, and environment identities in stable order.
+
+    Args:
+        event: The case's event name.
+        environment: The case's environment mapping.
+        expected: The result the case expects.
+    """
     assert resolve_session_id(event, environment) == expected

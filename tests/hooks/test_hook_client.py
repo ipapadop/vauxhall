@@ -16,16 +16,28 @@ class FakePublishResult:
     """Controllable MQTT publication result."""
 
     def __init__(self, *, published: bool = True) -> None:
-        """Initialize the result with its final publication state."""
+        """Initialize the result with its final publication state.
+
+        Args:
+            published: Whether the message is reported as delivered.
+        """
         self.published = published
         self.wait_timeout: float | None = None
 
     def wait_for_publish(self, timeout: float) -> None:
-        """Record the bounded delivery wait."""
+        """Record the bounded delivery wait.
+
+        Args:
+            timeout: The bounded delivery wait, recorded.
+        """
         self.wait_timeout = timeout
 
     def is_published(self) -> bool:
-        """Report whether the message was delivered."""
+        """Report whether the message was delivered.
+
+        Returns:
+            Whether the message was delivered.
+        """
         return self.published
 
 
@@ -38,14 +50,28 @@ class FakeMQTTClient:
         *,
         fail_connect: bool = False,
     ) -> None:
-        """Initialize the client with controllable publish and connect results."""
+        """Initialize the client with controllable publish and connect results.
+
+        Args:
+            publish_result: Result returned by ``publish``.
+            fail_connect: Whether ``connect`` raises ``OSError``.
+        """
         self.events: list[str] = []
         self.publish_result = publish_result or FakePublishResult()
         self.fail_connect = fail_connect
         self.publish_qos: int | None = None
 
     def connect(self, host: str, port: int, *, keepalive: int) -> None:
-        """Record a connection attempt and optionally fail it."""
+        """Record a connection attempt and optionally fail it.
+
+        Args:
+            host: Broker hostname.
+            port: Broker port.
+            keepalive: Keepalive interval.
+
+        Raises:
+            OSError: If the client was built to fail connecting.
+        """
         self.events.append("connect")
         if self.fail_connect:
             raise OSError
@@ -55,7 +81,16 @@ class FakeMQTTClient:
         self.events.append("loop_start")
 
     def publish(self, topic: str, payload: str, *, qos: int = 0) -> FakePublishResult:
-        """Record publication and return its delivery result."""
+        """Record publication and return its delivery result.
+
+        Args:
+            topic: Topic the message is published to.
+            payload: The message payload.
+            qos: Requested quality of service, recorded.
+
+        Returns:
+            The delivery result.
+        """
         self.events.append("publish")
         self.publish_qos = qos
         return self.publish_result

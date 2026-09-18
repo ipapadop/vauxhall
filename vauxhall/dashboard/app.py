@@ -73,7 +73,12 @@ class DashboardApp:
         self._drain_pending_updates(mark_ready=True)
 
     def _drain_pending_updates(self, *, mark_ready: bool) -> None:
-        """Snapshot pending state under lock, then forward it to the frontend."""
+        """Snapshot pending state under lock, then forward it to the frontend.
+
+        Args:
+            mark_ready: Whether to mark the frontend ready while holding the
+                lock, so an update cannot be stranded by the transition.
+        """
         with self._dispatch_lock:
             with self._updates_lock:
                 if mark_ready:
@@ -90,7 +95,11 @@ class DashboardApp:
                 self.window.invoke("agent-update", pending_update)
 
     def on_telemetry(self, data: object) -> None:
-        """Forward valid telemetry, or queue it until the frontend is ready."""
+        """Forward valid telemetry, or queue it until the frontend is ready.
+
+        Args:
+            data: The telemetry payload received from MQTT.
+        """
         try:
             error = telemetry_validation_error(data)
             if error is not None:
@@ -121,7 +130,11 @@ class DashboardApp:
             logger.exception("Error in on_telemetry")
 
     def on_status(self, message: str) -> None:
-        """Record an MQTT status and forward it when the frontend is ready."""
+        """Record an MQTT status and forward it when the frontend is ready.
+
+        Args:
+            message: The status to show.
+        """
         try:
             with self._updates_lock:
                 self.last_status = message
@@ -195,6 +208,10 @@ class DashboardApp:
     def _apply_settings(self, new_config: DashboardConfig, changed: list[str]) -> bool:
         """Replace the running settings and apply changes that take effect now.
 
+        Args:
+            new_config: The saved configuration to run with.
+            changed: The "section.key" fields that differ from the running ones.
+
         Returns:
             bool: Whether the MQTT subscriber was restarted.
         """
@@ -262,7 +279,12 @@ class DashboardApp:
         return saved_window
 
     def _save_window_state(self, previous: dict[str, Any]) -> None:
-        """Remember the window's size, position, and maximized state."""
+        """Remember the window's size, position, and maximized state.
+
+        Args:
+            previous: The last saved window state, kept for values the window
+                cannot report.
+        """
         try:
             update_ui_state({"window": window_geometry(self.window, previous)})
         except Exception:

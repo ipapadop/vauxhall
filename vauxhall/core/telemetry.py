@@ -27,7 +27,14 @@ _NUMERIC_DETAIL_FIELDS = frozenset({"tokens", "duration"})
 
 
 def _is_valid_details(details: object) -> bool:
-    """Return whether details matches the bounded scalar-value schema."""
+    """Return whether details matches the bounded scalar-value schema.
+
+    Args:
+        details: The candidate details mapping.
+
+    Returns:
+        Whether the details are a mapping of bounded keys to scalar values.
+    """
     if not isinstance(details, dict) or len(details) > _MAX_DETAIL_COUNT:
         return False
     for key, value in details.items():
@@ -46,7 +53,15 @@ def _is_valid_details(details: object) -> bool:
 
 
 def _identity_validation_error(payload: dict[str, Any]) -> str | None:
-    """Validate bounded identity fields without exposing their values."""
+    """Validate bounded identity fields without exposing their values.
+
+    Args:
+        payload: The telemetry payload to check.
+
+    Returns:
+        A reason naming only the offending field, or ``None`` when the identity
+        fields are valid.
+    """
     for field in REQUIRED_STRING_FIELDS:
         value = payload.get(field)
         if not isinstance(value, str) or not value.strip():
@@ -65,7 +80,15 @@ def _identity_validation_error(payload: dict[str, Any]) -> str | None:
 
 
 def telemetry_validation_error(payload: object) -> str | None:  # noqa: PLR0911
-    """Return a safe rejection reason, or None for valid schema-v1 telemetry."""
+    """Return a safe rejection reason, or None for valid schema-v1 telemetry.
+
+    Args:
+        payload: The candidate telemetry payload.
+
+    Returns:
+        A reason that never repeats the payload's values, or ``None`` when the
+        payload is valid.
+    """
     if not isinstance(payload, dict):
         return "telemetry payload must be a JSON object"
     if "schema_version" not in payload:
@@ -89,7 +112,14 @@ def telemetry_validation_error(payload: object) -> str | None:  # noqa: PLR0911
 
 
 def validate_telemetry(data: object) -> dict[str, Any] | None:
-    """Return a shallow copy of valid schema-v1 telemetry, or None."""
+    """Return a shallow copy of valid schema-v1 telemetry, or None.
+
+    Args:
+        data: The candidate telemetry payload.
+
+    Returns:
+        A shallow copy of the payload, or ``None`` when it is invalid.
+    """
     if telemetry_validation_error(data) is not None:
         return None
     assert isinstance(data, dict)

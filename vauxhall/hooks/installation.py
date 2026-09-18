@@ -11,8 +11,8 @@ import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Mapping
-from functools import partial
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -23,6 +23,46 @@ from vauxhall import __version__
 WINDOWS_ENCODED_COMMAND_PREFIX = (
     "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
 )
+
+
+@dataclass(frozen=True)
+class HookInstaller:
+    """How one agent's Vauxhall hook handlers are written into a workspace.
+
+    Attributes:
+        agent: Agent name shown in messages.
+        module: Hook module the generated commands run.
+        settings_path: Settings file holding the agent's hooks, relative to the
+            workspace.
+        handlers: Handler fields, other than type and command, for each event.
+        next_step: Message printed after a successful installation.
+        is_owned: Predicate for previously installed handlers to replace;
+            defaults to generated commands that run ``module``.
+        option_keys: Keys under ``hooks`` that hold options rather than events.
+        defaults: Top-level settings to add when absent.
+    """
+
+    agent: str
+    module: str
+    settings_path: Path
+    handlers: Mapping[str, Mapping[str, Any]]
+    next_step: str
+    is_owned: Callable[[object], bool] | None = None
+    option_keys: frozenset[str] = frozenset()
+    defaults: Mapping[str, Any] | None = None
+
+    def owns(self, handler: object) -> bool:
+        """Return whether a handler is one this installer should replace.
+
+        Args:
+            handler: The handler entry from the agent's settings file.
+
+        Returns:
+            Whether a previous run of this installer wrote the handler.
+        """
+        if self.is_owned is not None:
+            return self.is_owned(handler)
+        return is_hook_handler(handler, self.module)
 
 
 def is_hook_handler(handler: object, module: str) -> bool:
@@ -315,63 +355,67 @@ def setup_venv(venv_dir: Path) -> Path:
     return venv_python
 
 
-def install_hooks(  # noqa: PLR0913
-    *,
-    agent: str,
-    module: str,
-    settings_path: Path,
-    handlers: Mapping[str, Mapping[str, Any]],
-    next_step: str,
-    is_owned: Callable[[object], bool] | None = None,
-    option_keys: frozenset[str] = frozenset(),
-    defaults: Mapping[str, Any] | None = None,
+def _register_hooks(
+    installer: HookInstaller, settings: dict[str, Any], venv_python: Path
 ) -> None:
-    """Install an agent's Vauxhall hook handlers from the current directory.
-
-    Invalid existing settings are left unchanged before any environment setup,
-    and the settings file is replaced atomically.
+    """Replace an installer's handlers in already-loaded settings.
 
     Args:
-        agent: Agent name shown in messages.
-        module: Hook module the generated commands run.
-        settings_path: Settings file that holds the agent's hooks.
-        handlers: Handler fields, other than type and command, for each event.
-        next_step: Message printed after a successful installation.
-        is_owned: Predicate for previously installed handlers to replace;
-            defaults to generated commands that run ``module``.
-        option_keys: Keys under ``hooks`` that hold options rather than events.
-        defaults: Top-level settings to add when absent.
+        installer: The agent installer whose handlers are registered.
+        settings: The agent's settings, modified in place.
+        venv_python: Python executable of the hooks environment.
     """
-    title = f"Vauxhall {agent} Hook Installer"
+    for key, value in (installer.defaults or {}).items():
+        settings.setdefault(key, value)
+    purge_hook_handlers(settings, installer.owns, installer.option_keys)
+
+    command = build_hook_command(venv_python.absolute(), installer.module)
+    for event, fields in installer.handlers.items():
+        handler = {"type": "command", "command": command, **fields}
+        register_hook_handler(settings, event, handler)
+        print(f"Registered {installer.agent} hook for: {event}")
+
+
+def install_hooks(installers: Sequence[HookInstaller]) -> None:
+    """Install one or more agents' Vauxhall hook handlers from this directory.
+
+    Every agent shares one hooks environment, so it is built once no matter how
+    many agents are installed. Existing settings are loaded and validated for
+    all of them before any environment setup, so an invalid file leaves every
+    settings file unchanged. Each settings file is then replaced atomically.
+
+    Args:
+        installers: The agents to install, in the order they are written.
+    """
+    agents = ", ".join(installer.agent for installer in installers)
+    title = f"Vauxhall Hook Installer: {agents}"
     print(title)
     print("-" * len(title))
 
-    venv_dir = Path.cwd() / ".vauxhall-venv"
-    try:
-        settings = load_hook_settings(settings_path, agent, option_keys)
-    except (TypeError, ValueError) as error:
-        print(f"Error: {error}")
-        sys.exit(1)
+    workspace = Path.cwd()
+    venv_dir = workspace / ".vauxhall-venv"
+    loaded = []
+    for installer in installers:
+        settings_path = workspace / installer.settings_path
+        try:
+            settings = load_hook_settings(
+                settings_path, installer.agent, installer.option_keys
+            )
+        except (TypeError, ValueError) as error:
+            print(f"Error: {error}")
+            sys.exit(1)
+        loaded.append((installer, settings_path, settings))
 
     venv_python = setup_venv(venv_dir)
-    for key, value in (defaults or {}).items():
-        settings.setdefault(key, value)
-    purge_hook_handlers(
-        settings, is_owned or partial(is_hook_handler, module=module), option_keys
-    )
+    for installer, settings_path, settings in loaded:
+        _register_hooks(installer, settings, venv_python)
+        try:
+            write_json_atomically(settings_path, settings)
+        except Exception as error:
+            print(f"Error saving {installer.agent} settings: {error}")
+            sys.exit(1)
+        print(f"Success! {installer.agent} hooks installed in {settings_path}")
 
-    command = build_hook_command(venv_python.absolute(), module)
-    for event, fields in handlers.items():
-        handler = {"type": "command", "command": command, **fields}
-        register_hook_handler(settings, event, handler)
-        print(f"Registered hook for: {event}")
-
-    try:
-        write_json_atomically(settings_path, settings)
-    except Exception as error:
-        print(f"Error saving settings: {error}")
-        sys.exit(1)
-
-    print(f"\nSuccess! Hooks installed successfully in {settings_path}")
-    print(f"Venv created at {venv_dir}")
-    print(next_step)
+    print(f"\nVenv created at {venv_dir}")
+    for installer in installers:
+        print(installer.next_step)

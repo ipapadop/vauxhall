@@ -263,7 +263,7 @@ sends logs and configuration errors to stderr.
 After installing `vauxhall[hooks]`, run from the Claude Code project:
 
 ```bash
-vauxhall-install-claude
+vauxhall-hook-install claude
 ```
 
 The installer:
@@ -273,7 +273,8 @@ The installer:
   error and leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
-  or wheel file, or otherwise the matching PyPI release.
+  or wheel file, or otherwise the matching PyPI release. Agents named in one
+  command share that environment, so it is built once.
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
@@ -387,7 +388,7 @@ exits normally. Logs and configuration errors go to stderr.
 After installing `vauxhall[hooks]`, run from the Codex workspace:
 
 ```bash
-vauxhall-install-codex
+vauxhall-hook-install codex
 ```
 
 The installer:
@@ -397,7 +398,8 @@ The installer:
   the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
-  or wheel file, or otherwise the matching PyPI release.
+  or wheel file, or otherwise the matching PyPI release. Agents named in one
+  command share that environment, so it is built once.
 - Replaces existing Vauxhall handlers, keeps all other configuration, and
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
@@ -505,7 +507,7 @@ sends logs and configuration errors to stderr.
 After installing `vauxhall[hooks]`, run from the Gemini CLI workspace:
 
 ```bash
-vauxhall-install-gemini
+vauxhall-hook-install gemini
 ```
 
 The installer:
@@ -515,7 +517,8 @@ The installer:
   leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
-  or wheel file, or otherwise the matching PyPI release.
+  or wheel file, or otherwise the matching PyPI release. Agents named in one
+  command share that environment, so it is built once.
 - Removes only handlers that Vauxhall generated: commands with the installed
   hook module invocation, or the named handlers from earlier installers that
   ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including

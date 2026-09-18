@@ -239,9 +239,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
     } <= set(metadata.get_all("Classifier"))
     assert entry_points["console_scripts"] == {
         "vauxhall": "vauxhall.dashboard.app:main",
-        "vauxhall-install-claude": "vauxhall.hooks.claude.install:install",
-        "vauxhall-install-codex": "vauxhall.hooks.codex.install:install",
-        "vauxhall-install-gemini": "vauxhall.hooks.gemini.install:install",
+        "vauxhall-hook-install": "vauxhall.hooks.cli:main",
     }
     assert 'pyloid>=0.27.2; extra == "dashboard"' in metadata.get_all("Requires-Dist")
 
@@ -252,20 +250,20 @@ def test_package_version_matches_installed_distribution() -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "config_path", "hook_module"),
+    ("agent", "config_path", "hook_module"),
     [
         (
-            "vauxhall-install-claude",
+            "claude",
             Path(".claude/settings.local.json"),
             "vauxhall.hooks.claude.telemetry_hook",
         ),
         (
-            "vauxhall-install-codex",
+            "codex",
             Path(".codex/hooks.json"),
             "vauxhall.hooks.codex.telemetry_hook",
         ),
         (
-            "vauxhall-install-gemini",
+            "gemini",
             Path(".gemini/settings.json"),
             "vauxhall.hooks.gemini.telemetry_hook",
         ),
@@ -273,15 +271,15 @@ def test_package_version_matches_installed_distribution() -> None:
 )
 def test_wheel_installer_is_independent_of_source_checkout(
     tmp_path: Path,
-    command: str,
+    agent: str,
     config_path: Path,
     hook_module: str,
 ) -> None:
-    """Public installers must install and register only wheel-contained code.
+    """The public installer must install and register only wheel-contained code.
 
     Args:
         tmp_path: Pytest temporary directory.
-        command: The case's command.
+        agent: The case's agent.
         config_path: Path of the configuration file.
         hook_module: The hook module the case installs.
     """
@@ -330,7 +328,7 @@ def test_wheel_installer_is_independent_of_source_checkout(
         }
     )
     subprocess.run(
-        [str(_venv_script(installer_venv, command))],
+        [str(_venv_script(installer_venv, "vauxhall-hook-install")), agent],
         check=True,
         capture_output=True,
         cwd=workspace,

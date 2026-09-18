@@ -25,7 +25,7 @@ def _install(workspace: Path) -> dict:
         patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
         patch.object(installation.os, "name", "posix"),
     ):
-        installer.install()
+        installation.install_hooks([installer.INSTALLER])
     return json.loads((workspace / installer.SETTINGS_PATH).read_text())
 
 

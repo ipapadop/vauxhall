@@ -103,7 +103,7 @@ def _install(
         patch.object(installation, "setup_venv", return_value=Path(venv_python)),
         patch.object(installation.os, "name", os_name),
     ):
-        installer.install()
+        installation.install_hooks([installer.INSTALLER])
 
 
 def test_hook_command_quotes_posix_metacharacters() -> None:
@@ -287,7 +287,7 @@ def test_install_preserves_and_rejects_invalid_existing_settings(
         patch.object(installation, "setup_venv") as setup_venv,
         pytest.raises(SystemExit) as exit_info,
     ):
-        installer.install()
+        installation.install_hooks([installer.INSTALLER])
 
     assert exit_info.value.code == 1
     assert settings_file.read_text() == existing_content
@@ -327,7 +327,7 @@ def test_install_rejects_invalid_nested_settings(
         patch.object(installation, "setup_venv") as setup_venv,
         pytest.raises(SystemExit),
     ):
-        installer.install()
+        installation.install_hooks([installer.INSTALLER])
 
     assert settings_file.read_text() == original
     setup_venv.assert_not_called()

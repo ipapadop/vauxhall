@@ -29,7 +29,14 @@ class ColoredFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format a log record with a colored level name."""
+        """Format a log record with a colored level name.
+
+        Args:
+            record: The log record to render.
+
+        Returns:
+            The formatted line, with the level name wrapped in color codes.
+        """
         log_color = self.COLORS.get(record.levelno, self.GREY)
         format_str = (
             f"%(asctime)s [{log_color}%(levelname)s{self.RESET}] %(name)s: %(message)s"

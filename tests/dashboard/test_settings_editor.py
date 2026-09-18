@@ -28,7 +28,14 @@ pytestmark = pytest.mark.usefixtures("isolated_cwd")
 
 @pytest.fixture(autouse=True)
 def default_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Run each test with default running settings and restore the root log level."""
+    """Run each test with default running settings and restore the root log level.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Yields:
+        Nothing; the previous root log level is restored afterwards.
+    """
     monkeypatch.setattr(dashboard_settings, "mqtt", MQTTConfig())
     monkeypatch.setattr(dashboard_settings, "logging", LoggingConfig())
     monkeypatch.setattr(dashboard_settings, "dashboard", UIConfig())
@@ -40,7 +47,11 @@ def default_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture
 def dashboard() -> DashboardApp:
-    """Return a dashboard whose frontend is ready and MQTT is not started."""
+    """Return a dashboard whose frontend is ready and MQTT is not started.
+
+    Returns:
+        The dashboard.
+    """
     app = DashboardApp(MagicMock())
     app.window = MagicMock()
     app.ipc.is_ready = True
@@ -48,7 +59,15 @@ def dashboard() -> DashboardApp:
 
 
 def write_user_file(filename: str, content: str) -> Path:
-    """Write raw content to a per-user configuration file."""
+    """Write raw content to a per-user configuration file.
+
+    Args:
+        filename: Name of the per-user configuration file.
+        content: Raw text to write to the file.
+
+    Returns:
+        The path written.
+    """
     path = user_config_path(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -123,7 +142,11 @@ def test_describe_settings_reports_hooks_file_error() -> None:
 def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
     isolated_cwd: Path,
 ) -> None:
-    """A hooks file in the current directory makes saving to the user file pointless."""
+    """A hooks file in the current directory makes saving to the user file pointless.
+
+    Args:
+        isolated_cwd: Empty working directory holding no configuration file.
+    """
     (isolated_cwd / HOOKS_FILE).write_text('{"mqtt": {"host": "local"}}')
 
     described = describe_settings(dashboard_settings)
@@ -148,12 +171,21 @@ def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
     ],
 )
 def test_error_field(message: str, expected: str | None) -> None:
-    """The field named in an error message is found, ignoring file names."""
+    """The field named in an error message is found, ignoring file names.
+
+    Args:
+        message: The case's message.
+        expected: The result the case expects.
+    """
     assert error_field(message) == expected
 
 
 def test_save_applies_live_settings(dashboard: DashboardApp) -> None:
-    """Live settings are saved, applied, and sent to the frontend."""
+    """Live settings are saved, applied, and sent to the frontend.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     result = dashboard.save_settings({"dashboard": {"stale_threshold": 300}})
 
     assert result == {
@@ -173,14 +205,22 @@ def test_save_applies_live_settings(dashboard: DashboardApp) -> None:
 
 
 def test_save_applies_logging_level(dashboard: DashboardApp) -> None:
-    """A new logging level is applied to the root logger immediately."""
+    """A new logging level is applied to the root logger immediately.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     dashboard.save_settings({"logging": {"level": "DEBUG"}})
 
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_save_reports_restart_required(dashboard: DashboardApp) -> None:
-    """Changes that need a restart are reported."""
+    """Changes that need a restart are reported.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     result = dashboard.save_settings(
         {"dashboard": {"window_title": "Fleet", "stale_threshold": 60}}
     )
@@ -189,7 +229,11 @@ def test_save_reports_restart_required(dashboard: DashboardApp) -> None:
 
 
 def test_frontend_not_notified_before_ready(dashboard: DashboardApp) -> None:
-    """Settings changes are not sent to a frontend that is not ready."""
+    """Settings changes are not sent to a frontend that is not ready.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     dashboard.ipc.is_ready = False
 
     dashboard.save_settings({"dashboard": {"stale_threshold": 60}})
@@ -198,7 +242,11 @@ def test_frontend_not_notified_before_ready(dashboard: DashboardApp) -> None:
 
 
 def test_invalid_save_changes_nothing(dashboard: DashboardApp) -> None:
-    """An invalid value is reported for its field and nothing is saved or applied."""
+    """An invalid value is reported for its field and nothing is saved or applied.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     result = dashboard.save_settings({"mqtt": {"port": 0}})
 
     assert result["ok"] is False
@@ -212,7 +260,12 @@ def test_invalid_save_changes_nothing(dashboard: DashboardApp) -> None:
 def test_environment_field_is_rejected(
     dashboard: DashboardApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A field set by an environment variable is reported as not saved."""
+    """A field set by an environment variable is reported as not saved.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
     monkeypatch.setenv("VAUXHALL_MQTT_HOST", "env-broker")
 
     result = dashboard.save_settings({"mqtt": {"host": "b"}})
@@ -222,7 +275,11 @@ def test_environment_field_is_rejected(
 
 
 def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
-    """Broker changes stop the subscriber and start one with the new settings."""
+    """Broker changes stop the subscriber and start one with the new settings.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     old_subscriber = MagicMock()
     dashboard.mqtt = old_subscriber
 
@@ -243,7 +300,11 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
 def test_second_mqtt_change_replaces_reconnected_subscriber(
     dashboard: DashboardApp,
 ) -> None:
-    """A later broker change stops the subscriber started by the previous one."""
+    """A later broker change stops the subscriber started by the previous one.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     dashboard.mqtt = MagicMock()
     first, second = MagicMock(), MagicMock()
 
@@ -259,7 +320,11 @@ def test_second_mqtt_change_replaces_reconnected_subscriber(
 
 
 def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None:
-    """A subscriber that fails to start does not undo the saved settings."""
+    """A subscriber that fails to start does not undo the saved settings.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     dashboard.mqtt = MagicMock()
 
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
@@ -271,7 +336,11 @@ def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None
 
 
 def test_mqtt_change_before_start_does_not_reconnect(dashboard: DashboardApp) -> None:
-    """Without a running subscriber, broker changes are only saved."""
+    """Without a running subscriber, broker changes are only saved.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
         result = dashboard.save_settings({"mqtt": {"port": 1884}})
 
@@ -280,7 +349,11 @@ def test_mqtt_change_before_start_does_not_reconnect(dashboard: DashboardApp) ->
 
 
 def test_update_hooks_writes_differing_mqtt_values(dashboard: DashboardApp) -> None:
-    """Hook updates save only the MQTT values that differ from the hooks' values."""
+    """Hook updates save only the MQTT values that differ from the hooks' values.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     result = dashboard.save_settings(
         {"mqtt": {"host": "broker"}, "dashboard": {"stale_threshold": 300}},
         update_hooks=True,
@@ -293,7 +366,11 @@ def test_update_hooks_writes_differing_mqtt_values(dashboard: DashboardApp) -> N
 
 
 def test_update_hooks_without_dashboard_changes(dashboard: DashboardApp) -> None:
-    """The hooks file can be brought in line with unchanged dashboard values."""
+    """The hooks file can be brought in line with unchanged dashboard values.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     hooks_path = write_user_file(HOOKS_FILE, '{"mqtt": {"port": 1884}}')
 
     result = dashboard.save_settings({}, update_hooks=True)
@@ -308,7 +385,11 @@ def test_update_hooks_without_dashboard_changes(dashboard: DashboardApp) -> None
 def test_update_hooks_when_hooks_match_writes_nothing(
     dashboard: DashboardApp,
 ) -> None:
-    """When the hooks already use the dashboard's MQTT values, nothing is written."""
+    """When the hooks already use the dashboard's MQTT values, nothing is written.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     result = dashboard.save_settings(
         {"dashboard": {"stale_threshold": 300}}, update_hooks=True
     )
@@ -319,7 +400,11 @@ def test_update_hooks_when_hooks_match_writes_nothing(
 
 
 def test_invalid_hooks_file_blocks_both_saves(dashboard: DashboardApp) -> None:
-    """If the hooks file cannot be read, the dashboard file is not written either."""
+    """If the hooks file cannot be read, the dashboard file is not written either.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     write_user_file(HOOKS_FILE, "{")
 
     result = dashboard.save_settings({"mqtt": {"host": "broker"}}, update_hooks=True)
@@ -331,7 +416,11 @@ def test_invalid_hooks_file_blocks_both_saves(dashboard: DashboardApp) -> None:
 
 
 def test_hooks_file_is_ignored_without_update_hooks(dashboard: DashboardApp) -> None:
-    """Without a hooks update, a malformed hooks file does not block saving."""
+    """Without a hooks update, a malformed hooks file does not block saving.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     write_user_file(HOOKS_FILE, "{")
 
     result = dashboard.save_settings({"dashboard": {"stale_threshold": 300}})
@@ -341,7 +430,11 @@ def test_hooks_file_is_ignored_without_update_hooks(dashboard: DashboardApp) -> 
 
 
 def test_hooks_write_failure_is_reported(dashboard: DashboardApp) -> None:
-    """A hooks file that cannot be written is reported after the dashboard saves."""
+    """A hooks file that cannot be written is reported after the dashboard saves.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
     with patch(
         "vauxhall.dashboard.app.save_user_config",
         side_effect=[user_config_path(DASHBOARD_FILE), OSError("read-only")],
@@ -395,7 +488,11 @@ def test_ipc_save_settings_forwards_request() -> None:
     ],
 )
 def test_ipc_save_settings_rejects_invalid_requests(payload: str) -> None:
-    """Malformed requests are rejected without calling the save callback."""
+    """Malformed requests are rejected without calling the save callback.
+
+    Args:
+        payload: The case's payload.
+    """
     callback = MagicMock()
     ipc = DashboardIPC(on_save_settings=callback)
 

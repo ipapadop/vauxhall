@@ -10,7 +10,14 @@ from typing import Any
 
 
 def _non_empty_string(value: object) -> str | None:
-    """Return a stripped non-empty string."""
+    """Return a stripped non-empty string.
+
+    Args:
+        value: The candidate value.
+
+    Returns:
+        The stripped string, or ``None`` when it is not a non-empty string.
+    """
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip()
@@ -20,7 +27,17 @@ def resolve_session_id(
     input_data: dict[str, Any],
     environment: Mapping[str, str] | None = None,
 ) -> str | None:
-    """Resolve one stable opaque session identifier from hook context."""
+    """Resolve one stable opaque session identifier from hook context.
+
+    Args:
+        input_data: The hook event, checked for a native or transcript identity.
+        environment: Environment to read ``VAUXHALL_SESSION_ID`` from, defaulting
+            to the process environment.
+
+    Returns:
+        A prefixed identifier naming the source it came from, or ``None`` when
+        no source identifies the session.
+    """
     native_id = _non_empty_string(input_data.get("session_id"))
     if native_id is not None:
         return f"native:{native_id}"

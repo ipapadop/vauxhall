@@ -25,7 +25,14 @@ logger = get_logger(__name__)
 
 
 def _is_section_map(value: object) -> bool:
-    """Return whether a value maps section names to objects of field values."""
+    """Return whether a value maps section names to objects of field values.
+
+    Args:
+        value: The candidate settings changes received from the frontend.
+
+    Returns:
+        Whether the value has the shape the settings bridge expects.
+    """
     return isinstance(value, dict) and all(
         isinstance(values, dict) for values in value.values()
     )
@@ -91,7 +98,11 @@ class DashboardIPC(PyloidIPC):
 
     @Bridge(result=int)
     def get_max_active_agents(self) -> int:
-        """Retrieve the maximum number of active dashboard cards."""
+        """Retrieve the maximum number of active dashboard cards.
+
+        Returns:
+            The configured maximum number of cards.
+        """
         logger.debug(
             "Frontend requested maximum active agents: %d",
             settings.dashboard.max_active_agents,

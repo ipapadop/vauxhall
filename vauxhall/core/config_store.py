@@ -32,7 +32,14 @@ class FieldSource:
 
 
 def user_config_path(filename: str) -> Path:
-    """Return the per-user path that configuration is saved to."""
+    """Return the per-user path that configuration is saved to.
+
+    Args:
+        filename: The configuration file name, such as "vauxhall_dashboard.json".
+
+    Returns:
+        The path under the user's configuration directory.
+    """
     return Path.home() / ".config" / "vauxhall" / filename
 
 
@@ -135,7 +142,23 @@ def _prepare(
     config_type: type[Any],
     changes: Mapping[str, Mapping[str, object]],
 ) -> tuple[Path, dict[str, Any]]:
-    """Merge and validate changes, returning the target path and its new data."""
+    """Merge and validate changes, returning the target path and its new data.
+
+    Values equal to their default are dropped, and sections left empty are
+    removed, so the saved file records only real overrides.
+
+    Args:
+        filename: The configuration file name.
+        config_type: The configuration dataclass loaded from that file.
+        changes: New values, grouped by section.
+
+    Returns:
+        The path to write and the merged data to write to it.
+
+    Raises:
+        ConfigurationError: If a field cannot be saved or the merged data is
+            invalid.
+    """
     path = user_config_path(filename)
     _check_editable(field_sources(filename, config_type), changes, path)
 
@@ -164,7 +187,17 @@ def _check_editable(
     changes: Mapping[str, Mapping[str, object]],
     path: Path,
 ) -> None:
-    """Reject fields that are unknown or whose saved value would be ignored."""
+    """Reject fields that are unknown or whose saved value would be ignored.
+
+    Args:
+        sources: Where each field of the configuration currently comes from.
+        changes: New values, grouped by section.
+        path: The file the changes would be saved to, named in errors.
+
+    Raises:
+        ConfigurationError: If a field is unknown, or is set by the environment
+            or a file that takes precedence over ``path``.
+    """
     for section, values in changes.items():
         for key in values:
             source = sources.get(f"{section}.{key}")
@@ -183,7 +216,17 @@ def _check_editable(
 
 
 def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
-    """Load candidate data with the unchanged loader, reporting the real path."""
+    """Load candidate data with the unchanged loader, reporting the real path.
+
+    Args:
+        config_type: The configuration dataclass to load the data with.
+        data: The candidate data.
+        path: The real destination, substituted into error messages in place of
+            the temporary file the data is loaded from.
+
+    Raises:
+        ConfigurationError: If the candidate data is not valid configuration.
+    """
     with tempfile.TemporaryDirectory() as directory:
         candidate = Path(directory) / path.name
         candidate.write_text(json.dumps(data), encoding="utf-8")
@@ -195,7 +238,12 @@ def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
 
 
 def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
-    """Replace a JSON file so readers see either the old or the new content."""
+    """Replace a JSON file so readers see either the old or the new content.
+
+    Args:
+        path: The file to replace.
+        data: The data to serialize into it.
+    """
     temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         with temporary_path.open("x", encoding="utf-8") as file:

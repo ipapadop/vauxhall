@@ -29,7 +29,14 @@ _FIELD_PATTERN = re.compile(r"\b(mqtt|logging|dashboard)\.([a-z_]+)\b")
 
 
 def apply_mode(key: str) -> str:
-    """Return when a change to the "section.key" field takes effect."""
+    """Return when a change to the "section.key" field takes effect.
+
+    Args:
+        key: The "section.key" name of the field.
+
+    Returns:
+        One of "live", "reconnect", or "restart".
+    """
     return APPLY_MODES.get(key, "restart")
 
 
@@ -39,6 +46,9 @@ def hook_config_type() -> type[Any]:
     Importing ``vauxhall.hooks.config`` loads the hooks configuration and raises
     ``ConfigurationError`` if that file is malformed. Importing it lazily keeps
     a broken hooks file from stopping the dashboard.
+
+    Returns:
+        The ``HookConfig`` dataclass.
     """
     from vauxhall.hooks.config import HookConfig  # noqa: PLC0415
 
@@ -46,7 +56,14 @@ def hook_config_type() -> type[Any]:
 
 
 def _field_type(default: object) -> str:
-    """Return the settings editor input type for a field's default value."""
+    """Return the settings editor input type for a field's default value.
+
+    Args:
+        default: The field's default value.
+
+    Returns:
+        One of "boolean", "integer", or "string".
+    """
     if isinstance(default, bool):
         return "boolean"
     if isinstance(default, int):
@@ -138,7 +155,15 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
 
 
 def changed_fields(old: DashboardConfig, new: DashboardConfig) -> list[str]:
-    """Return the "section.key" names of fields whose values differ."""
+    """Return the "section.key" names of fields whose values differ.
+
+    Args:
+        old: The configuration to compare against.
+        new: The configuration holding the new values.
+
+    Returns:
+        The "section.key" names of the fields that differ.
+    """
     old_values = asdict(old)
     return [
         f"{section}.{key}"
@@ -175,7 +200,14 @@ def hook_changes_for(
 
 
 def error_field(message: str) -> str | None:
-    """Return the dashboard field a configuration error message names, if any."""
+    """Return the dashboard field a configuration error message names, if any.
+
+    Args:
+        message: The configuration error message to scan.
+
+    Returns:
+        The "section.key" name of the field the message blames, or ``None``.
+    """
     known = {
         f"{section}.{key}"
         for section, values in asdict(DashboardConfig()).items()

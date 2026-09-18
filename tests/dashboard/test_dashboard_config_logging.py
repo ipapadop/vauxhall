@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
+"""Tests that importing dashboard config leaves host logging untouched."""
+
 import os
 import subprocess
 import sys

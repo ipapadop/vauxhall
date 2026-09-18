@@ -39,19 +39,41 @@ _update_lock = Lock()
 
 
 def _is_int(value: object) -> bool:
-    """Return whether a value is an integer but not a boolean."""
+    """Return whether a value is an integer but not a boolean.
+
+    Args:
+        value: The candidate value.
+
+    Returns:
+        Whether the value is an integer.
+    """
     return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _is_valid_preference(key: str, value: object) -> bool:
-    """Return whether a frontend preference value has an acceptable form."""
+    """Return whether a frontend preference value has an acceptable form.
+
+    Args:
+        key: The preference name.
+        value: The candidate value.
+
+    Returns:
+        Whether the value is a bounded string, and a known theme for "theme".
+    """
     if not isinstance(value, str) or not 0 < len(value) <= MAX_PREFERENCE_LENGTH:
         return False
     return key != "theme" or value in THEMES
 
 
 def _clean_window(window: object) -> dict[str, Any]:
-    """Keep only valid window size, position, and maximized values."""
+    """Keep only valid window size, position, and maximized values.
+
+    Args:
+        window: The candidate window geometry.
+
+    Returns:
+        The values that are in range, dropping the rest.
+    """
     if not isinstance(window, dict):
         return {}
     cleaned: dict[str, Any] = {}
@@ -90,7 +112,14 @@ def clean_ui_state(data: object) -> dict[str, Any]:
 
 
 def frontend_preferences(state: Mapping[str, Any]) -> dict[str, Any]:
-    """Return only the preferences the frontend may read or save."""
+    """Return only the preferences the frontend may read or save.
+
+    Args:
+        state: The saved UI state.
+
+    Returns:
+        The subset of the state the frontend is allowed to see.
+    """
     return {key: state[key] for key in FRONTEND_KEYS if key in state}
 
 

@@ -47,7 +47,14 @@ _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def is_cancelled(response: dict[str, Any]) -> bool:
-    """Return whether a tool response contains a cancellation marker."""
+    """Return whether a tool response contains a cancellation marker.
+
+    Args:
+        response: The tool response to inspect.
+
+    Returns:
+        Whether the response reports the call as cancelled or aborted.
+    """
     if response.get("cancelled") is True or response.get("canceled") is True:
         return True
     candidates = [response.get(key) for key in ("code", "status", "name")]
@@ -61,7 +68,15 @@ def is_cancelled(response: dict[str, Any]) -> bool:
 
 
 def question_prompt(tool_input: object) -> str:
-    """Extract user-facing question text from a question tool's input."""
+    """Extract user-facing question text from a question tool's input.
+
+    Args:
+        tool_input: The question tool's input.
+
+    Returns:
+        The questions joined by newlines, or a generic prompt when the input
+        carries none.
+    """
     questions = tool_input.get("questions") if isinstance(tool_input, dict) else None
     if isinstance(questions, list):
         prompt = "\n".join(
@@ -77,7 +92,15 @@ def question_prompt(tool_input: object) -> str:
 def tool_details(
     input_data: dict[str, Any], command_fields: Mapping[str, str]
 ) -> dict[str, Any]:
-    """Return the tool name and, for listed tools, the input field shown as cmd."""
+    """Return the tool name and, for listed tools, the input field shown as cmd.
+
+    Args:
+        input_data: The hook event naming the tool and its input.
+        command_fields: Input field to show as ``cmd``, keyed by tool name.
+
+    Returns:
+        The details to publish, empty when the event names no tool.
+    """
     tool_name = input_data.get("tool_name")
     if not isinstance(tool_name, str) or not tool_name:
         return {}
@@ -92,12 +115,27 @@ def tool_details(
 
 
 def prompt_submit_telemetry(input_data: dict[str, Any]) -> Telemetry:
-    """Translate a submitted user prompt into a thinking state."""
+    """Translate a submitted user prompt into a thinking state.
+
+    Args:
+        input_data: The hook event carrying the submitted prompt.
+
+    Returns:
+        The thinking state and the prompt to show.
+    """
     return "Thinking", {"prompt": input_data.get("prompt", "Processing...")}
 
 
 def message_text(value: object) -> str | None:
-    """Return nonempty assistant text within the telemetry detail limit."""
+    """Return nonempty assistant text within the telemetry detail limit.
+
+    Args:
+        value: The candidate assistant text.
+
+    Returns:
+        The text, truncated with an ellipsis when it exceeds the limit, or
+        ``None`` when it is not a non-blank string.
+    """
     if not isinstance(value, str) or not value.strip():
         return None
     if len(value) > _MAX_MESSAGE_LENGTH:
@@ -132,7 +170,18 @@ def private_directory(name: str) -> Path:
 
 
 def _message_path(agent: str, identity: object) -> Path:
-    """Return a private path for one in-progress assistant message."""
+    """Return a private path for one in-progress assistant message.
+
+    Args:
+        agent: The agent whose message directory is used.
+        identity: Value identifying the message, hashed into the file name.
+
+    Returns:
+        The path holding that message's text so far.
+
+    Raises:
+        OSError: If the message directory is not a private one this user owns.
+    """
     key = hashlib.sha256(
         json.dumps(identity, sort_keys=True, default=str).encode()
     ).hexdigest()
@@ -156,7 +205,12 @@ def _sweep_stale_messages(directory: Path) -> None:
 
 
 def discard_message_chunks(agent: str, identity: object) -> None:
-    """Discard text left by an unfinished model response."""
+    """Discard text left by an unfinished model response.
+
+    Args:
+        agent: The agent whose message directory is used.
+        identity: Value identifying the message.
+    """
     with suppress(OSError):
         _message_path(agent, identity).unlink(missing_ok=True)
 
@@ -164,7 +218,18 @@ def discard_message_chunks(agent: str, identity: object) -> None:
 def collect_message_chunk(
     agent: str, identity: object, delta: object, *, final: bool
 ) -> str | None:
-    """Collect streamed assistant text and return it when the message ends."""
+    """Collect streamed assistant text and return it when the message ends.
+
+    Args:
+        agent: The agent whose message directory is used.
+        identity: Value identifying the message across its chunks.
+        delta: The chunk's new text; a non-string chunk is ignored.
+        final: Whether this chunk ends the message.
+
+    Returns:
+        The assembled message when ``final`` is set and text was collected,
+        otherwise ``None``.
+    """
     if not isinstance(delta, str):
         return None
     try:
@@ -191,12 +256,23 @@ def collect_message_chunk(
 
 
 def ready_telemetry(_input_data: dict[str, Any]) -> Telemetry:
-    """Translate the end of an agent turn into an idle state."""
+    """Translate the end of an agent turn into an idle state.
+
+    Returns:
+        The idle state and a ready status.
+    """
     return "Idle", {"status": "Ready"}
 
 
 def permission_request_telemetry(input_data: dict[str, Any]) -> Telemetry:
-    """Translate a tool permission request into a waiting state."""
+    """Translate a tool permission request into a waiting state.
+
+    Args:
+        input_data: The hook event describing the tool awaiting permission.
+
+    Returns:
+        The waiting state, the tool details, and the prompt to show.
+    """
     tool_input = input_data.get("tool_input")
     description = (
         tool_input.get("description") if isinstance(tool_input, dict) else None
@@ -213,6 +289,12 @@ def session_start_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
 
     A restart after compaction can happen in the middle of a turn, so it must not
     mark the session idle.
+
+    Args:
+        input_data: The hook event naming how the session started.
+
+    Returns:
+        The idle state and a status for the source, or ``None`` after compaction.
     """
     source = input_data.get("source")
     if source == "compact":
@@ -228,7 +310,15 @@ def session_start_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
 def session_end_telemetry(
     input_data: dict[str, Any], statuses: Mapping[str, str]
 ) -> Telemetry:
-    """Translate SessionEnd using an agent's reason statuses, never raw reasons."""
+    """Translate SessionEnd using an agent's reason statuses, never raw reasons.
+
+    Args:
+        input_data: The hook event naming why the session ended.
+        statuses: Status to publish, keyed by the agent's documented reasons.
+
+    Returns:
+        The idle state and a status for the reason.
+    """
     reason = input_data.get("reason")
     status = (
         statuses.get(reason, "session ended")
@@ -239,7 +329,14 @@ def session_end_telemetry(
 
 
 def subagent_start_telemetry(input_data: dict[str, Any]) -> Telemetry:
-    """Report a starting subagent as the Agent tool running its agent type."""
+    """Report a starting subagent as the Agent tool running its agent type.
+
+    Args:
+        input_data: The hook event naming the subagent's type.
+
+    Returns:
+        The acting state and the Agent tool details.
+    """
     details: dict[str, Any] = {"tool": "Agent"}
     agent_type = input_data.get("agent_type")
     if isinstance(agent_type, str) and agent_type:
@@ -248,12 +345,26 @@ def subagent_start_telemetry(input_data: dict[str, Any]) -> Telemetry:
 
 
 def _is_subagent_event(input_data: dict[str, Any]) -> bool:
-    """Return whether an event fired inside a subagent, not the main thread."""
+    """Return whether an event fired inside a subagent, not the main thread.
+
+    Args:
+        input_data: The hook event to inspect.
+
+    Returns:
+        Whether the event carries a subagent's identifier.
+    """
     return isinstance(input_data.get("agent_id"), str)
 
 
 def pre_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
-    """Translate main-thread PreCompact, naming a documented trigger."""
+    """Translate main-thread PreCompact, naming a documented trigger.
+
+    Args:
+        input_data: The hook event naming what triggered compaction.
+
+    Returns:
+        The thinking state and a compaction status, or ``None`` for a subagent.
+    """
     if _is_subagent_event(input_data):
         return None
     trigger = input_data.get("trigger")
@@ -267,6 +378,12 @@ def post_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
     """Translate main-thread PostCompact.
 
     Manual compaction returns to the prompt; automatic compaction resumes work.
+
+    Args:
+        input_data: The hook event naming what triggered compaction.
+
+    Returns:
+        The state to resume in and a compacted status, or ``None`` for a subagent.
     """
     if _is_subagent_event(input_data):
         return None
@@ -275,7 +392,14 @@ def post_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
 
 
 def tool_use_identity(input_data: dict[str, Any]) -> tuple[str, str] | None:
-    """Return the session and tool-use IDs that identify one tool call, if any."""
+    """Return the session and tool-use IDs that identify one tool call, if any.
+
+    Args:
+        input_data: The hook event to read the identity from.
+
+    Returns:
+        The session and tool-use IDs, or ``None`` when the event lacks either.
+    """
     session_id = input_data.get("session_id")
     tool_use_id = input_data.get("tool_use_id")
     if isinstance(session_id, str) and isinstance(tool_use_id, str):
@@ -284,7 +408,15 @@ def tool_use_identity(input_data: dict[str, Any]) -> tuple[str, str] | None:
 
 
 def _tool_start_location(agent: str, identity: object) -> tuple[Path, str]:
-    """Return an agent's timing directory and the file prefix for one tool call."""
+    """Return an agent's timing directory and the file prefix for one tool call.
+
+    Args:
+        agent: The agent whose timing directory is used.
+        identity: Value identifying the tool call, hashed into the prefix.
+
+    Returns:
+        The per-user timing directory and the call's file name prefix.
+    """
     key = json.dumps(identity, sort_keys=True, default=str)
     digest = hashlib.sha256(key.encode()).hexdigest()
     directory = Path(tempfile.gettempdir()) / f"vauxhall-{agent}{_USER_SUFFIX}"
@@ -296,6 +428,10 @@ def record_tool_start(agent: str, identity: object) -> None:
 
     Calls that share an identity each get a file; the nanosecond timestamp in the
     name orders them for claim_tool_duration.
+
+    Args:
+        agent: The agent whose timing directory is used.
+        identity: Value identifying the tool call.
     """
     directory, prefix = _tool_start_location(agent, identity)
     with suppress(OSError):
@@ -314,6 +450,13 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
     start left by a call that never finished from inflating a later call's
     duration. Identical overlapping calls cannot be told apart, so they may
     report each other's durations.
+
+    Args:
+        agent: The agent whose timing directory is used.
+        identity: Value identifying the tool call.
+
+    Returns:
+        The call's duration in seconds, or ``None`` when no start can be claimed.
     """
     directory, prefix = _tool_start_location(agent, identity)
     try:
@@ -337,7 +480,11 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
 
 
 def create_telemetry_client() -> "TelemetryClient":
-    """Create a telemetry client whose connection attempt fits the hook timeout."""
+    """Create a telemetry client whose connection attempt fits the hook timeout.
+
+    Returns:
+        A client with a connect timeout short enough for a hook to finish.
+    """
     from vauxhall.hooks.client import TelemetryClient  # noqa: PLC0415
 
     client = TelemetryClient()
@@ -355,6 +502,14 @@ def publish_telemetry(
     """Translate one hook event with its handler and publish the telemetry.
 
     Events without a handler, or whose handler returns None, publish nothing.
+
+    Args:
+        input_data: The hook event to translate.
+        agent: The agent name published with the telemetry.
+        handlers: Event handler, keyed by hook event name.
+        create_client: Factory for the telemetry client, defaulting to
+            ``create_telemetry_client``.
+        messages: Interim assistant messages to publish before the event.
     """
     hook_type = input_data.get("hook_event_name")
     handler = handlers.get(hook_type) if isinstance(hook_type, str) else None
@@ -384,7 +539,14 @@ def publish_telemetry(
 
 
 def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:
-    """Process one hook event from stdin without disrupting the hook protocol."""
+    """Process one hook event from stdin without disrupting the hook protocol.
+
+    Errors never reach stdout, which always receives the empty JSON object the
+    hook protocol expects.
+
+    Args:
+        send_telemetry: Callable that publishes telemetry for one hook event.
+    """
     try:
         with redirect_stdout(sys.stderr):
             from vauxhall.core.logging import setup_logging  # noqa: PLC0415

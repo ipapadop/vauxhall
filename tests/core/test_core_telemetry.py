@@ -76,12 +76,21 @@ def test_schema_version_one_accepts_required_identity_fields() -> None:
 def test_invalid_telemetry_returns_reason_only_error(
     payload: object, expected_error: str
 ) -> None:
-    """Invalid protocol payloads return safe reason-only errors."""
+    """Invalid protocol payloads return safe reason-only errors.
+
+    Args:
+        payload: The case's payload.
+        expected_error: The error message the case expects.
+    """
     assert telemetry_validation_error(payload) == expected_error
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
-    """Return a valid version-one dashboard telemetry event."""
+    """Return a valid version-one dashboard telemetry event.
+
+    Returns:
+        The event.
+    """
     event: dict[str, object] = {
         "schema_version": 1,
         "agent": "Codex",
@@ -96,7 +105,11 @@ def valid_event(**overrides: object) -> dict[str, object]:
 
 @pytest.mark.parametrize("payload", [None, [], "telemetry", 1])
 def test_telemetry_rejects_non_object_payloads(payload: object) -> None:
-    """Reject JSON values that cannot represent telemetry objects."""
+    """Reject JSON values that cannot represent telemetry objects.
+
+    Args:
+        payload: The case's payload.
+    """
     assert validate_telemetry(payload) is None
 
 
@@ -104,7 +117,11 @@ def test_telemetry_rejects_non_object_payloads(payload: object) -> None:
     "field", ["schema_version", "agent", "workspace", "session_id", "state"]
 )
 def test_telemetry_rejects_missing_required_fields(field: str) -> None:
-    """Reject events missing any required schema field."""
+    """Reject events missing any required schema field.
+
+    Args:
+        field: The configuration field under test.
+    """
     event = valid_event()
     del event[field]
 
@@ -142,7 +159,12 @@ def test_telemetry_rejects_unknown_top_level_fields() -> None:
     ],
 )
 def test_telemetry_rejects_wrong_field_types(field: str, value: object) -> None:
-    """Reject events whose declared fields have the wrong types."""
+    """Reject events whose declared fields have the wrong types.
+
+    Args:
+        field: The configuration field under test.
+        value: The case's value.
+    """
     assert validate_telemetry(valid_event(**{field: value})) is None
 
 
@@ -157,19 +179,32 @@ def test_telemetry_rejects_wrong_field_types(field: str, value: object) -> None:
     ],
 )
 def test_telemetry_rejects_oversized_identity_fields(field: str, value: str) -> None:
-    """Reject identity fields that exceed their locked limits."""
+    """Reject identity fields that exceed their locked limits.
+
+    Args:
+        field: The configuration field under test.
+        value: The case's value.
+    """
     assert validate_telemetry(valid_event(**{field: value})) is None
 
 
 @pytest.mark.parametrize("state", ["Running", "Unknown", "thinking", ""])
 def test_telemetry_rejects_unsupported_or_empty_states(state: str) -> None:
-    """Reject states outside the dashboard's fixed state vocabulary."""
+    """Reject states outside the dashboard's fixed state vocabulary.
+
+    Args:
+        state: The case's telemetry state.
+    """
     assert validate_telemetry(valid_event(state=state)) is None
 
 
 @pytest.mark.parametrize("env", ["LOCAL", "staging", ""])
 def test_telemetry_rejects_unsupported_environments(env: str) -> None:
-    """Reject environments outside the local and remote values."""
+    """Reject environments outside the local and remote values.
+
+    Args:
+        env: The case's environment name.
+    """
     assert validate_telemetry(valid_event(env=env)) is None
 
 

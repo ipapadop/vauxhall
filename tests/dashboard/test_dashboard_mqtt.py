@@ -15,7 +15,11 @@ from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
-    """Return a valid version-one dashboard telemetry event."""
+    """Return a valid version-one dashboard telemetry event.
+
+    Returns:
+        The event.
+    """
     event: dict[str, object] = {
         "schema_version": 1,
         "agent": "Codex",
@@ -61,7 +65,12 @@ def test_dashboard_subscriber_on_message_invalid_json() -> None:
 def test_dashboard_subscriber_rejects_oversized_payload_before_json_decoding(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Drop oversized MQTT bytes without decoding or forwarding telemetry."""
+    """Drop oversized MQTT bytes without decoding or forwarding telemetry.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        caplog: Pytest log capture fixture.
+    """
     monkeypatch.setattr(settings.dashboard, "max_payload_bytes", 4)
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback, MagicMock())
@@ -80,7 +89,12 @@ def test_dashboard_subscriber_rejects_oversized_payload_before_json_decoding(
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
 def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
-    """Test the subscriber lifecycle (start and stop)."""
+    """Test the subscriber lifecycle (start and stop).
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     mock_client = mock_client_class.return_value
     callback = MagicMock()
     subscriber = DashboardSubscriber(callback, MagicMock(), host="test_host", port=1234)
@@ -122,7 +136,12 @@ def test_dashboard_subscriber_on_disconnect_status() -> None:
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
 def test_subscriber_start_reports_connecting(mock_client_class: MagicMock) -> None:
-    """Starting the subscriber reports that an asynchronous connection began."""
+    """Starting the subscriber reports that an asynchronous connection began.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     status_callback = MagicMock()
     subscriber = DashboardSubscriber(MagicMock(), status_callback)
 
@@ -226,7 +245,12 @@ def test_unexpected_disconnect_after_connection_reports_retry() -> None:
 
 @patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
 def test_stop_reports_disconnected_once(mock_client_class: MagicMock) -> None:
-    """Stopping an active subscriber is idempotent and reports once."""
+    """Stopping an active subscriber is idempotent and reports once.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     status_callback = MagicMock()
     subscriber = DashboardSubscriber(MagicMock(), status_callback)
     subscriber._loop_started = True
@@ -243,7 +267,12 @@ def test_stop_reports_disconnected_once(mock_client_class: MagicMock) -> None:
 def test_stop_cleans_up_loop_when_disconnect_raises(
     mock_client_class: MagicMock,
 ) -> None:
-    """A disconnect failure cannot leave the MQTT network loop running."""
+    """A disconnect failure cannot leave the MQTT network loop running.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     status_callback = MagicMock()
     subscriber = DashboardSubscriber(MagicMock(), status_callback)
     subscriber._loop_started = True
@@ -262,15 +291,30 @@ def test_stop_cleans_up_loop_when_disconnect_raises(
 def test_stop_publishes_terminal_status_after_in_progress_connect_callback(
     mock_client_class: MagicMock,
 ) -> None:
-    """A callback that began before stopping cannot overwrite Disconnected."""
+    """A callback that began before stopping cannot overwrite Disconnected.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     callback_entered = Event()
     release_callback = Event()
     statuses: list[str] = []
 
     class BlockingSuccessCode:
+        """Success reason code that holds the connect callback open while compared."""
+
         __hash__ = object.__hash__
 
         def __eq__(self, value: object) -> bool:
+            """Hold the connect callback open, then compare as success.
+
+            Args:
+                value: The reason code being compared against.
+
+            Returns:
+                Whether the value is the success code zero.
+            """
             callback_entered.set()
             assert release_callback.wait(timeout=1)
             return value == 0
@@ -286,6 +330,7 @@ def test_stop_publishes_terminal_status_after_in_progress_connect_callback(
     assert callback_entered.wait(timeout=1)
 
     def join_paho_loop() -> None:
+        """Release the in-flight callback and wait for it, as loop_stop() does."""
         release_callback.set()
         callback.join(timeout=1)
         assert not callback.is_alive()
@@ -300,7 +345,12 @@ def test_stop_publishes_terminal_status_after_in_progress_connect_callback(
 def test_start_failure_before_loop_ownership_is_cleaned_up(
     mock_client_class: MagicMock,
 ) -> None:
-    """A connection setup failure does not leave a loop to clean up."""
+    """A connection setup failure does not leave a loop to clean up.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
     mock_client = mock_client_class.return_value
     mock_client.connect_async.side_effect = RuntimeError("broker unavailable")
     status_callback = MagicMock()

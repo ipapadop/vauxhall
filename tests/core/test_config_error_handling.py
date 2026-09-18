@@ -12,7 +12,11 @@ from vauxhall.core.config import ConfigurationError, load_config_data
 
 
 def test_load_config_data_malformed_json(tmp_path: Path) -> None:
-    """Malformed JSON raises a configuration error instead of using defaults."""
+    """Malformed JSON raises a configuration error instead of using defaults.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "malformed.json"
     with config_file.open("w") as f:
         f.write("{ invalid json }")
@@ -22,7 +26,11 @@ def test_load_config_data_malformed_json(tmp_path: Path) -> None:
 
 
 def test_load_config_data_os_error(tmp_path: Path) -> None:
-    """Unreadable explicit files raise a source-aware configuration error."""
+    """Unreadable explicit files raise a source-aware configuration error.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     config_file = tmp_path / "unreadable.json"
     config_file.touch()
 

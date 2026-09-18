@@ -15,14 +15,30 @@ _MAX_READ_BYTES = 1_048_576
 
 
 def _cursor_path(session_id: str, transcript_path: str) -> Path:
-    """Return a private cursor path for one Codex session record."""
+    """Return a private cursor path for one Codex session record.
+
+    Args:
+        session_id: The Codex session the cursor belongs to.
+        transcript_path: Path of the session record being read.
+
+    Returns:
+        The path holding the offset read so far.
+
+    Raises:
+        OSError: If the cursor directory is not a private one this user owns.
+    """
     directory = private_directory("vauxhall-codex-cursors")
     key = hashlib.sha256(f"{session_id}\0{transcript_path}".encode()).hexdigest()
     return directory / key
 
 
 def _write_cursor(path: Path, offset: int) -> None:
-    """Save the last complete record offset for a later hook invocation."""
+    """Save the last complete record offset for a later hook invocation.
+
+    Args:
+        path: The cursor file to write.
+        offset: Byte offset of the first record not yet reported.
+    """
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as output:
@@ -30,7 +46,16 @@ def _write_cursor(path: Path, offset: int) -> None:
 
 
 def _commentary_text(line: bytes, turn_id: str) -> str | None:
-    """Extract a displayed Codex commentary message from one session record."""
+    """Extract a displayed Codex commentary message from one session record.
+
+    Args:
+        line: One JSON record from the session file.
+        turn_id: The turn whose commentary is wanted.
+
+    Returns:
+        The commentary text, or ``None`` when the record is not completed
+        commentary from that turn.
+    """
     try:
         record = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -52,7 +77,17 @@ def _commentary_text(line: bytes, turn_id: str) -> str | None:
 
 
 def new_messages(input_data: dict[str, Any]) -> list[str]:
-    """Read new completed commentary from the current Codex turn, if possible."""
+    """Read new completed commentary from the current Codex turn, if possible.
+
+    Reading is best effort: the record format can change, and Codex may write
+    it after the hook runs, so a failure yields no messages rather than raising.
+
+    Args:
+        input_data: The hook event naming the session record and turn.
+
+    Returns:
+        The commentary completed since the last invocation, oldest first.
+    """
     transcript_path = input_data.get("transcript_path")
     session_id = input_data.get("session_id")
     turn_id = input_data.get("turn_id")

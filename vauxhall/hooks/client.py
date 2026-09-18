@@ -39,6 +39,9 @@ def format_message(
 
     Returns:
         str: A JSON-formatted string containing the telemetry data.
+
+    Raises:
+        ValueError: If the assembled payload is not valid telemetry.
     """
     payload_dict = {
         "schema_version": SCHEMA_VERSION,
@@ -78,7 +81,11 @@ class TelemetryClient:
         self._loop_running = False
 
     def __enter__(self: _TelemetryClientT) -> _TelemetryClientT:  # noqa: PYI019
-        """Enter the context manager, establishing a persistent connection."""
+        """Enter the context manager, establishing a persistent connection.
+
+        Returns:
+            The client, connected unless connecting failed.
+        """
         self._managed = True
         try:
             self._connect()
@@ -88,7 +95,13 @@ class TelemetryClient:
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        """Exit the context manager, closing the connection."""
+        """Exit the context manager, closing the connection.
+
+        Args:
+            exc_type: Type of the exception leaving the block, if any.
+            exc_val: The exception leaving the block, if any.
+            exc_tb: Traceback of the exception leaving the block, if any.
+        """
         self._close_connection()
         self._managed = False
 

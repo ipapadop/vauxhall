@@ -21,7 +21,14 @@ import vauxhall
 
 
 def _build_wheel(wheel_dir: Path) -> Path:
-    """Build and return the project's wheel."""
+    """Build and return the project's wheel.
+
+    Args:
+        wheel_dir: Directory the wheel is built into.
+
+    Returns:
+        The path of the built wheel.
+    """
     project_root = Path(__file__).parents[1]
     subprocess.run(
         [
@@ -42,21 +49,40 @@ def _build_wheel(wheel_dir: Path) -> Path:
 
 
 def _venv_python(venv_dir: Path) -> Path:
-    """Return the Python executable for a virtual environment."""
+    """Return the Python executable for a virtual environment.
+
+    Args:
+        venv_dir: Root of the virtual environment.
+
+    Returns:
+        The path of the Python executable.
+    """
     if os.name == "nt":
         return venv_dir / "Scripts" / "python.exe"
     return venv_dir / "bin" / "python"
 
 
 def _venv_script(venv_dir: Path, name: str) -> Path:
-    """Return a console-script path for a virtual environment."""
+    """Return a console-script path for a virtual environment.
+
+    Args:
+        venv_dir: Root of the virtual environment.
+        name: Name of the console script.
+
+    Returns:
+        The path of the console script.
+    """
     if os.name == "nt":
         return venv_dir / "Scripts" / f"{name}.exe"
     return venv_dir / "bin" / name
 
 
 def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
-    """Ensure installations include dashboard assets and agent hooks."""
+    """Ensure installations include dashboard assets and agent hooks.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     wheel_dir = tmp_path / "wheel"
     wheel_path = _build_wheel(wheel_dir)
     with zipfile.ZipFile(wheel_path) as wheel:
@@ -83,7 +109,11 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
 
 
 def test_wheel_hook_client_imports_without_typing_self(tmp_path: Path) -> None:
-    """The packaged hooks must import on runtimes where typing lacks Self."""
+    """The packaged hooks must import on runtimes where typing lacks Self.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     wheel_path = _build_wheel(tmp_path / "wheel")
     runtime_check = """
 import builtins
@@ -120,7 +150,11 @@ print(client.__file__)
 
 
 def test_wheel_and_sdist_pass_strict_twine_check(tmp_path: Path) -> None:
-    """Both publication artifacts must pass Twine without warnings."""
+    """Both publication artifacts must pass Twine without warnings.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     project_root = Path(__file__).parents[1]
     dist_dir = tmp_path / "dist"
     subprocess.run(
@@ -154,7 +188,11 @@ def test_wheel_and_sdist_pass_strict_twine_check(tmp_path: Path) -> None:
 
 
 def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
-    """Built distributions must expose publishable metadata and commands."""
+    """Built distributions must expose publishable metadata and commands.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     wheel_path = _build_wheel(tmp_path / "wheel")
 
     with zipfile.ZipFile(wheel_path) as wheel:
@@ -238,7 +276,14 @@ def test_wheel_installer_is_independent_of_source_checkout(
     config_path: Path,
     hook_module: str,
 ) -> None:
-    """Public installers must install and register only wheel-contained code."""
+    """Public installers must install and register only wheel-contained code.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        command: The case's command.
+        config_path: Path of the configuration file.
+        hook_module: The hook module the case installs.
+    """
     project_root = Path(__file__).parents[1]
     wheel_dir = tmp_path / "wheelhouse"
     wheel_path = _build_wheel(wheel_dir)

@@ -31,17 +31,32 @@ SCREEN = {"x": 0, "y": 0, "width": 1920, "height": 1080}
 
 @pytest.fixture(autouse=True)
 def default_dashboard_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run each test with the default dashboard settings."""
+    """Run each test with the default dashboard settings.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
     monkeypatch.setattr(dashboard_settings, "dashboard", UIConfig())
 
 
 def state_path() -> Path:
-    """Return the per-user dashboard state file."""
+    """Return the per-user dashboard state file.
+
+    Returns:
+        The path of the state file.
+    """
     return user_config_path(STATE_FILE)
 
 
 def write_state(content: str | bytes) -> Path:
-    """Write raw content to the dashboard state file."""
+    """Write raw content to the dashboard state file.
+
+    Args:
+        content: The case's raw file content.
+
+    Returns:
+        The path written.
+    """
     path = state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(content, bytes):
@@ -60,7 +75,12 @@ def test_load_without_file_returns_empty_state() -> None:
 def test_load_ignores_corrupt_file(
     content: str | bytes, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A corrupt or non-object state file falls back to defaults with a warning."""
+    """A corrupt or non-object state file falls back to defaults with a warning.
+
+    Args:
+        content: The case's raw file content.
+        caplog: Pytest log capture fixture.
+    """
     write_state(content)
 
     with caplog.at_level(logging.WARNING):
@@ -93,7 +113,11 @@ def test_clean_drops_unknown_and_invalid_values() -> None:
 
 @pytest.mark.parametrize("value", [["Error"], "", 5])
 def test_clean_rejects_non_string_or_empty_preferences(value: object) -> None:
-    """Sort and filter preferences must be short, non-empty strings."""
+    """Sort and filter preferences must be short, non-empty strings.
+
+    Args:
+        value: The case's value.
+    """
     assert clean_ui_state({"history_filter": value}) == {}
 
 
@@ -130,6 +154,12 @@ def test_concurrent_updates_do_not_discard_each_other() -> None:
     release_first = Event()
 
     def blocking_write(path: Path, data: dict[str, object]) -> None:
+        """Hold the first write open so the second update overlaps it.
+
+        Args:
+            path: File the state is written to.
+            data: The state being written.
+        """
         if data.get("theme") == "light":
             first_writing.set()
             assert release_first.wait(5)
@@ -178,7 +208,13 @@ def test_visible_position(
     screens: list[dict[str, int]],
     expected: tuple[int, int] | None,
 ) -> None:
-    """A position is restored only if the window's top edge is on a screen."""
+    """A position is restored only if the window's top edge is on a screen.
+
+    Args:
+        window: The case's window geometry.
+        screens: The case's screen geometries.
+        expected: The result the case expects.
+    """
     assert visible_position(window, screens) == expected
 
 
@@ -231,7 +267,11 @@ def test_ipc_save_ui_state_ignores_window_and_unknown_keys() -> None:
 
 @pytest.mark.parametrize("payload", ["not json", "[]"])
 def test_ipc_save_ui_state_rejects_invalid_payload(payload: str) -> None:
-    """Malformed requests are rejected without writing."""
+    """Malformed requests are rejected without writing.
+
+    Args:
+        payload: The case's payload.
+    """
     assert DashboardIPC().save_ui_state(payload) is False
     assert not state_path().exists()
 
@@ -245,7 +285,14 @@ def test_ipc_save_ui_state_reports_write_failure() -> None:
 
 
 def run_dashboard(app: MagicMock) -> MagicMock:
-    """Run the dashboard until its UI loop exits and return the subscriber type."""
+    """Run the dashboard until its UI loop exits and return the subscriber type.
+
+    Args:
+        app: Mocked Pyloid application the dashboard runs on.
+
+    Returns:
+        The patched ``DashboardSubscriber`` type.
+    """
     app.run.side_effect = SystemExit(0)
     with (
         patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost"),
@@ -257,7 +304,11 @@ def run_dashboard(app: MagicMock) -> MagicMock:
 
 
 def screen_app() -> MagicMock:
-    """Return a Pyloid app mock with one connected screen."""
+    """Return a Pyloid app mock with one connected screen.
+
+    Returns:
+        The application mock.
+    """
     app = MagicMock()
     monitor = MagicMock()
     monitor.available_geometry.return_value = SCREEN

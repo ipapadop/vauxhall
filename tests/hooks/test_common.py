@@ -15,7 +15,11 @@ IDENTITY = ["session-123", "call-123"]
 
 
 def test_claim_skips_start_claimed_by_another_hook(tmp_path: Path) -> None:
-    """A start renamed away by a concurrent hook must not be claimed twice."""
+    """A start renamed away by a concurrent hook must not be claimed twice.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     real_rename = Path.rename
     lost_races: list[Path] = []
 
@@ -54,7 +58,11 @@ def test_claim_skips_start_claimed_by_another_hook(tmp_path: Path) -> None:
 
 
 def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
-    """A start file that cannot be parsed is removed and the next one is used."""
+    """A start file that cannot be parsed is removed and the next one is used.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     with (
         patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
         patch.object(common.time, "time", side_effect=[1000.0, 1004.0, 1010.0]),
@@ -71,7 +79,11 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
 
 
 def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> None:
-    """Streaming text is kept private and published once per completed message."""
+    """Streaming text is kept private and published once per completed message.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         assert (
             common.collect_message_chunk(
@@ -96,7 +108,11 @@ def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> N
 
 
 def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
-    """A long reply fits the telemetry detail string limit."""
+    """A long reply fits the telemetry detail string limit.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         message = common.collect_message_chunk(
             "gemini", ["session"], "x" * 5000, final=True
@@ -108,7 +124,11 @@ def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
 def test_discard_message_chunks_prevents_next_turn_contamination(
     tmp_path: Path,
 ) -> None:
-    """An unfinished response is cleared before a new turn begins."""
+    """An unfinished response is cleared before a new turn begins.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         common.collect_message_chunk("gemini", ["session"], "old", final=False)
         common.discard_message_chunks("gemini", ["session"])

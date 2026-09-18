@@ -13,7 +13,14 @@ _COMMAND_FIELDS = {"Bash": "command"}
 
 
 def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
-    """Map a Codex tool response to a truthful telemetry outcome."""
+    """Map a Codex tool response to a truthful telemetry outcome.
+
+    Args:
+        response: The tool response to classify.
+
+    Returns:
+        The state, the status to show, and an error message when one applies.
+    """
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
     if common.is_cancelled(response):
@@ -30,7 +37,15 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
 
 
 def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Codex PreToolUse event."""
+    """Translate a Codex PreToolUse event.
+
+    Args:
+        input_data: The hook event naming the tool about to run.
+
+    Returns:
+        The waiting state for a question tool, otherwise the acting state and
+        the tool details.
+    """
     if input_data.get("tool_name") == "request_user_input":
         prompt = common.question_prompt(input_data.get("tool_input"))
         return "Waiting for Input", {"prompt": prompt}
@@ -41,7 +56,14 @@ def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Codex PostToolUse event."""
+    """Translate a Codex PostToolUse event.
+
+    Args:
+        input_data: The hook event carrying the tool response.
+
+    Returns:
+        The state for the response, with the tool details and duration.
+    """
     state, status, error = _classify_tool_response(input_data.get("tool_response"))
     details = {**common.tool_details(input_data, {}), "status": status}
     if error is not None:
@@ -55,7 +77,14 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
 
 
 def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
-    """Publish the final assistant message with the idle state."""
+    """Publish the final assistant message with the idle state.
+
+    Args:
+        input_data: The hook event carrying the last assistant message.
+
+    Returns:
+        The idle state, with the final message when the event reports one.
+    """
     state, details = common.ready_telemetry(input_data)
     message = common.message_text(input_data.get("last_assistant_message"))
     if message is not None:

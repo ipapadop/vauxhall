@@ -23,7 +23,13 @@ from vauxhall.hooks.codex import install as installer
 def test_install_describes_hooks_file_without_replacing_description(
     tmp_path: Path, existing_config: dict | None, description: str
 ) -> None:
-    """Codex hooks files get a description unless they already have one."""
+    """Codex hooks files get a description unless they already have one.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        existing_config: Configuration already in the file.
+        description: The case's description.
+    """
     hooks_file = tmp_path / installer.SETTINGS_PATH
     if existing_config is not None:
         hooks_file.parent.mkdir()

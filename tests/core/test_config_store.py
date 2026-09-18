@@ -28,7 +28,14 @@ pytestmark = pytest.mark.usefixtures("isolated_cwd")
 
 
 def write_user_file(content: str) -> Path:
-    """Write raw content to the per-user dashboard configuration file."""
+    """Write raw content to the per-user dashboard configuration file.
+
+    Args:
+        content: Raw text to write to the file.
+
+    Returns:
+        The path written.
+    """
     path = user_config_path(DASHBOARD_FILE)
     path.parent.mkdir(parents=True)
     path.write_text(content, encoding="utf-8")
@@ -49,7 +56,13 @@ def write_user_file(content: str) -> Path:
 def test_saved_values_load_back(
     filename: str, config_type: type[Any], changes: dict[str, dict[str, object]]
 ) -> None:
-    """Saved values are written to the user file and load unchanged."""
+    """Saved values are written to the user file and load unchanged.
+
+    Args:
+        filename: The configuration file name.
+        config_type: The configuration dataclass for that file.
+        changes: The changes being saved.
+    """
     path = save_user_config(filename, config_type, changes)
 
     assert path == user_config_path(filename)
@@ -117,7 +130,12 @@ def test_invalid_value_leaves_file_unchanged() -> None:
     [("{", "not valid JSON"), ('{"mqtt": 5}', "mqtt must be an object")],
 )
 def test_malformed_user_file_is_refused(content: str, match: str) -> None:
-    """A malformed user file is never overwritten."""
+    """A malformed user file is never overwritten.
+
+    Args:
+        content: The case's raw file content.
+        match: Text the raised error must contain.
+    """
     path = write_user_file(content)
 
     with pytest.raises(ConfigurationError, match=match):
@@ -129,7 +147,11 @@ def test_malformed_user_file_is_refused(content: str, match: str) -> None:
 def test_environment_overridden_field_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Fields set by an environment variable cannot be saved."""
+    """Fields set by an environment variable cannot be saved.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
     monkeypatch.setenv("VAUXHALL_MQTT_HOST", "env-broker")
 
     with pytest.raises(ConfigurationError, match="VAUXHALL_MQTT_HOST"):
@@ -159,7 +181,13 @@ def test_save_is_refused_when_current_directory_file_takes_precedence() -> None:
 def test_unknown_field_is_refused(
     filename: str, config_type: type[Any], changes: dict[str, dict[str, object]]
 ) -> None:
-    """Fields that the configuration type does not define are rejected."""
+    """Fields that the configuration type does not define are rejected.
+
+    Args:
+        filename: The configuration file name.
+        config_type: The configuration dataclass for that file.
+        changes: The changes being saved.
+    """
     with pytest.raises(ConfigurationError, match="Unknown configuration field"):
         save_user_config(filename, config_type, changes)
 
@@ -174,7 +202,11 @@ def test_sources_default_without_files() -> None:
 
 
 def test_sources_user_file_and_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """User-file values are editable; environment values are not."""
+    """User-file values are editable; environment values are not.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
     path = write_user_file('{"mqtt": {"host": "broker"}}')
     monkeypatch.setenv("VAUXHALL_MQTT_PORT", "1884")
 
@@ -191,7 +223,11 @@ def test_sources_user_file_and_environment(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.parametrize("in_current_directory", [False, True])
 def test_sources_refuse_non_object_section(*, in_current_directory: bool) -> None:
-    """A known section that is not an object is rejected, as the loader does."""
+    """A known section that is not an object is rejected, as the loader does.
+
+    Args:
+        in_current_directory: Whether the file sits in the working directory.
+    """
     path = (
         Path.cwd() / DASHBOARD_FILE
         if in_current_directory

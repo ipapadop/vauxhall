@@ -20,7 +20,18 @@ class ConfigurationError(ValueError):
     def invalid_value(
         cls, source: str, section: str, key: str, value: object, expected: str
     ) -> "ConfigurationError":
-        """Create a source-aware invalid-value error."""
+        """Create a source-aware invalid-value error.
+
+        Args:
+            source: Environment variable or file location the value came from.
+            section: Configuration section holding the key.
+            key: Key within the section.
+            value: The rejected value.
+            expected: Description of what the field accepts.
+
+        Returns:
+            The error, ready to raise.
+        """
         return cls(
             f"Invalid configuration value from {source} for {section}.{key}: "
             f"{value!r}; expected {expected}"
@@ -86,7 +97,14 @@ def load_config_data(config_path: Path) -> dict[str, Any]:
 
 
 def find_config_file(filename: str) -> Path | None:
-    """Search for config file in CWD and then ~/.config/vauxhall/."""
+    """Search for config file in CWD and then ~/.config/vauxhall/.
+
+    Args:
+        filename: Name of the configuration file to look for.
+
+    Returns:
+        The first path that exists, or ``None`` when neither directory has it.
+    """
     for directory in (Path.cwd(), Path.home() / ".config" / "vauxhall"):
         config_path = directory / filename
         if config_path.exists():
@@ -125,7 +143,20 @@ class ConfigResolver:
     def _value_source(
         self, env_var: str, section: str, key: str
     ) -> tuple[object, str] | None:
-        """Return the explicit value and its environment variable or file source."""
+        """Return the explicit value and its environment variable or file source.
+
+        Args:
+            env_var: Environment variable that overrides the file.
+            section: Section in the JSON config.
+            key: Key within the section.
+
+        Returns:
+            The value and the source describing it, or ``None`` when neither
+            the environment nor the file sets the key.
+
+        Raises:
+            ConfigurationError: If the section is present but is not an object.
+        """
         if env_var in os.environ:
             return os.environ[env_var], env_var
 
@@ -187,7 +218,22 @@ class ConfigResolver:
         default: T,
         metadata: Mapping[str, object],
     ) -> T:
-        """Resolve one setting, then coerce and validate it against its field."""
+        """Resolve one setting, then coerce and validate it against its field.
+
+        Args:
+            env_var: Environment variable that overrides the file.
+            section: Section in the JSON config.
+            key: Key within the section.
+            default: Value used when neither source sets the key.
+            metadata: Field metadata constraining the value.
+
+        Returns:
+            The resolved value, normalized and validated.
+
+        Raises:
+            ConfigurationError: If an explicit value has the wrong type or
+                falls outside the field's metadata constraints.
+        """
         source_value = self._value_source(env_var, section, key)
         if source_value is None:
             return default
@@ -227,7 +273,21 @@ class ConfigResolver:
     def _cast_environment_value(
         self, value: object, source: str, section: str, key: str, default: T
     ) -> T:
-        """Strictly cast an environment string to a field's default type."""
+        """Strictly cast an environment string to a field's default type.
+
+        Args:
+            value: The environment variable's string value.
+            source: Environment variable the value came from.
+            section: Section in the JSON config.
+            key: Key within the section.
+            default: Field default whose type the value is cast to.
+
+        Returns:
+            The value cast to the default's type.
+
+        Raises:
+            ConfigurationError: If the string is not a valid boolean or integer.
+        """
         assert isinstance(value, str)
         if isinstance(default, bool):
             normalized = value.lower()
@@ -248,7 +308,15 @@ class ConfigResolver:
         return value  # type: ignore[return-value]
 
     def _expected(self, metadata: Mapping[str, object], default: object) -> str:
-        """Describe the type and field metadata accepted by a configuration value."""
+        """Describe the type and field metadata accepted by a configuration value.
+
+        Args:
+            metadata: Field metadata constraining the value.
+            default: Field default whose type is described.
+
+        Returns:
+            A human-readable description for error messages.
+        """
         expected = (
             "a boolean"
             if isinstance(default, bool)

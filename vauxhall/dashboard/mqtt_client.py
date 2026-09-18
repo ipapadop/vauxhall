@@ -55,7 +55,15 @@ class DashboardSubscriber:
         reason_code: mqtt.ReasonCode,
         properties: mqtt.Properties | None,
     ) -> None:
-        """Internal callback for MQTT connection."""
+        """Internal callback for MQTT connection.
+
+        Args:
+            client: The connected client, used to subscribe on success.
+            userdata: Unused paho user data.
+            flags: Connection flags reported by the broker.
+            reason_code: The broker's result code; zero means connected.
+            properties: MQTT v5 properties, if any.
+        """
         if self._stopping:
             return
         if reason_code == 0:
@@ -70,7 +78,12 @@ class DashboardSubscriber:
             self.status_callback(f"Connection failed: {reason_code}. Retrying...")
 
     def _on_connect_fail(self, client: mqtt.Client, userdata: object) -> None:
-        """Report asynchronous connection failures while retrying."""
+        """Report asynchronous connection failures while retrying.
+
+        Args:
+            client: The client that failed to connect.
+            userdata: Unused paho user data.
+        """
         if not self._stopping:
             self.status_callback("Connection failed. Retrying...")
 
@@ -82,7 +95,15 @@ class DashboardSubscriber:
         reason_code: mqtt.ReasonCode,
         properties: mqtt.Properties | None,
     ) -> None:
-        """Internal callback for MQTT disconnection."""
+        """Internal callback for MQTT disconnection.
+
+        Args:
+            client: The disconnected client.
+            userdata: Unused paho user data.
+            disconnect_flags: Disconnection flags reported by paho.
+            reason_code: The reason the connection ended.
+            properties: MQTT v5 properties, if any.
+        """
         if self._stopping:
             return
         logger.warning("Disconnected from MQTT broker; retrying")
@@ -91,7 +112,13 @@ class DashboardSubscriber:
     def _on_message(
         self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
-        """Validate one MQTT telemetry message and forward it to the callback."""
+        """Validate one MQTT telemetry message and forward it to the callback.
+
+        Args:
+            client: The client that received the message.
+            userdata: Unused paho user data.
+            msg: The received message, dropped when oversized or invalid.
+        """
         payload = msg.payload
         if len(payload) > settings.dashboard.max_payload_bytes:
             logger.warning(

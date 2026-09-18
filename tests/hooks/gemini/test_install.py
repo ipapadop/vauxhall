@@ -12,7 +12,14 @@ from vauxhall.hooks.gemini import install as installer
 
 
 def _install(workspace: Path) -> dict:
-    """Install into a workspace with a stubbed environment and return settings."""
+    """Install into a workspace with a stubbed environment and return settings.
+
+    Args:
+        workspace: Workspace the installer writes into.
+
+    Returns:
+        The settings the installer wrote.
+    """
     with (
         patch.object(Path, "cwd", return_value=workspace),
         patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
@@ -75,7 +82,11 @@ def test_purge_removes_only_generated_vauxhall_handlers() -> None:
 
 
 def test_reinstall_keeps_hook_options(tmp_path: Path) -> None:
-    """Hook-system options stored beside events must be preserved."""
+    """Hook-system options stored beside events must be preserved.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = tmp_path / installer.SETTINGS_PATH
     settings_file.parent.mkdir()
     options = {"enabled": True, "disabled": ["other-hook"], "notifications": False}
@@ -87,7 +98,11 @@ def test_reinstall_keeps_hook_options(tmp_path: Path) -> None:
 
 
 def test_reinstall_replaces_legacy_source_checkout_handlers(tmp_path: Path) -> None:
-    """Handlers that ran the hook from a source checkout must be replaced."""
+    """Handlers that ran the hook from a source checkout must be replaced.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
     settings_file = tmp_path / installer.SETTINGS_PATH
     settings_file.parent.mkdir()
     legacy_handler = {

@@ -18,9 +18,26 @@ const APPLY_NOTES = {
     restart: 'Applies after a restart.',
 };
 
+/**
+ * Returns the DOM id of a field's input.
+ * @param {object} field - A settings field descriptor from the bridge.
+ * @returns {string} The input id.
+ */
 const inputId = (field) => `setting-${field.section}-${field.name}`;
+/**
+ * Returns a field's name as a human-readable label.
+ * @param {object} field - A settings field descriptor from the bridge.
+ * @returns {string} The label text.
+ */
 const labelOf = (field) => field.name.replaceAll('_', ' ');
 
+/**
+ * Creates an element, optionally with a class and text content.
+ * @param {string} tag - The tag name.
+ * @param {string} [className] - Class applied to the element.
+ * @param {unknown} [text] - Text content, when the element needs one.
+ * @returns {HTMLElement} The created element.
+ */
 function element(tag, className = '', text = undefined) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -28,16 +45,32 @@ function element(tag, className = '', text = undefined) {
     return node;
 }
 
+/**
+ * Shows or hides an element through the hidden attribute.
+ * @param {HTMLElement} node - The element to toggle.
+ * @param {boolean} hidden - Whether the element should be hidden.
+ */
 function setHidden(node, hidden) {
     if (hidden) node.setAttribute('hidden', '');
     else node.removeAttribute('hidden');
 }
 
+/**
+ * Enables or disables a control through the disabled attribute.
+ * @param {HTMLElement} node - The control to toggle.
+ * @param {boolean} disabled - Whether the control should be disabled.
+ */
 function setDisabled(node, disabled) {
     if (disabled) node.setAttribute('disabled', '');
     else node.removeAttribute('disabled');
 }
 
+/**
+ * Writes a value into an input, using the form its field type calls for.
+ * @param {HTMLElement} input - The field's input.
+ * @param {object} field - The settings field descriptor.
+ * @param {unknown} value - The value to display.
+ */
 function setValue(input, field, value) {
     if (field.type === 'boolean') {
         input.checked = Boolean(value);
@@ -48,6 +81,12 @@ function setValue(input, field, value) {
     }
 }
 
+/**
+ * Reads an input back as its field's type; a blank integer reads as NaN.
+ * @param {HTMLElement} input - The field's input.
+ * @param {object} field - The settings field descriptor.
+ * @returns {string | number | boolean} The entered value.
+ */
 function readValue(input, field) {
     if (field.type === 'boolean') return input.checked;
     if (field.type === 'integer') {
@@ -57,6 +96,12 @@ function readValue(input, field) {
     return input.value;
 }
 
+/**
+ * Checks a value against its field's type, range, and choices.
+ * @param {object} field - The settings field descriptor.
+ * @param {string | number | boolean} value - The entered value.
+ * @returns {string} The error to show, or an empty string when valid.
+ */
 function validate(field, value) {
     if (field.type === 'integer') {
         if (!Number.isInteger(value)) return 'Enter a whole number.';
@@ -69,12 +114,22 @@ function validate(field, value) {
     return '';
 }
 
+/**
+ * Returns the note explaining when a field applies, or why it is read-only.
+ * @param {object} field - The settings field descriptor.
+ * @returns {string} The note text.
+ */
 function noteFor(field) {
     if (field.editable) return APPLY_NOTES[field.apply] ?? '';
     if (field.source === 'environment') return `Set by ${field.location}.`;
     return 'Read-only: a configuration file in the current directory takes precedence.';
 }
 
+/**
+ * Creates the input for a field, populated and disabled to match it.
+ * @param {object} field - The settings field descriptor.
+ * @returns {HTMLElement} The created input.
+ */
 function createInput(field) {
     let input;
     if (field.type === 'boolean') {
@@ -101,6 +156,11 @@ function createInput(field) {
     return input;
 }
 
+/**
+ * Creates a field's settings row: label, input, source badge, reset, and note.
+ * @param {object} field - The settings field descriptor.
+ * @returns {HTMLElement} The created row.
+ */
 function createRow(field) {
     const row = element('div', 'settings-row');
     row.dataset.key = field.key;
@@ -213,6 +273,10 @@ export function savedNotes(result) {
     return notes.length ? `Saved. ${notes.join(' ')}` : '';
 }
 
+/**
+ * Opens a dialog, falling back to the open attribute without showModal().
+ * @param {HTMLDialogElement} dialog - The dialog to open.
+ */
 function openDialog(dialog) {
     if (typeof dialog.showModal === 'function') {
         if (!dialog.open) dialog.showModal();
@@ -221,6 +285,10 @@ function openDialog(dialog) {
     }
 }
 
+/**
+ * Closes a dialog, falling back to the open attribute without close().
+ * @param {HTMLDialogElement} dialog - The dialog to close.
+ */
 function closeDialog(dialog) {
     if (typeof dialog.close === 'function') dialog.close();
     else dialog.removeAttribute('open');

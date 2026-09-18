@@ -123,7 +123,7 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
         return None
     message = common.collect_message_chunk(
         "claude",
-        [session_id, message_id],
+        [input_data.get("cwd"), session_id, message_id],
         input_data.get("delta"),
         final=input_data.get("final") is True,
     )

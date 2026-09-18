@@ -3,8 +3,11 @@
 
 """Tests for the runtime helpers shared by the built-in hooks."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from vauxhall.hooks import common
 
@@ -112,3 +115,43 @@ def test_discard_message_chunks_prevents_next_turn_contamination(
         message = common.collect_message_chunk("gemini", ["session"], "new", final=True)
 
     assert message == "new"
+
+
+def test_private_directory_rejects_a_directory_another_account_could_reach(
+    tmp_path: Path,
+) -> None:
+    """A pre-created world-writable directory is refused, not reused.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+    planted = tmp_path / f"vauxhall-messages-claude{suffix}"
+    planted.mkdir()
+    planted.chmod(0o777)
+
+    with (
+        patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
+        pytest.raises(OSError, match="not a private directory"),
+    ):
+        common.private_directory("vauxhall-messages-claude")
+
+
+def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
+    tmp_path: Path,
+) -> None:
+    """Assistant text never reaches a directory another account redirected.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+    elsewhere = tmp_path / "attacker"
+    elsewhere.mkdir()
+    (tmp_path / f"vauxhall-messages-claude{suffix}").symlink_to(elsewhere)
+
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        message = common.collect_message_chunk("claude", ["s"], "secret", final=True)
+
+    assert message is None
+    assert not list(elsewhere.iterdir())

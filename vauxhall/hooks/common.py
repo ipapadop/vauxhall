@@ -6,6 +6,7 @@
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -40,6 +41,9 @@ _MAX_MESSAGE_LENGTH = 4096
 _MESSAGE_MAX_AGE_SECONDS = 86400
 # Timing directories are per user because the system temporary directory is shared.
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+# The system temporary directory is shared, so a name another account could
+# pre-create is opened without following a symlink into somewhere it owns.
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def is_cancelled(response: dict[str, Any]) -> bool:
@@ -101,13 +105,38 @@ def message_text(value: object) -> str | None:
     return value
 
 
+def private_directory(name: str) -> Path:
+    """Return a per-user directory in the system temporary directory.
+
+    The system temporary directory is shared, so another account can pre-create
+    the name. A directory that is a symlink, is owned by somebody else, or is
+    reachable by anybody else is rejected rather than used.
+
+    Args:
+        name: Directory name, to which the user suffix is added.
+
+    Returns:
+        The private directory.
+
+    Raises:
+        OSError: If the directory is not a private one this user owns.
+    """
+    directory = Path(tempfile.gettempdir()) / f"{name}{_USER_SUFFIX}"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    info = directory.lstat()
+    owned = not hasattr(os, "getuid") or info.st_uid == os.getuid()
+    if not stat.S_ISDIR(info.st_mode) or not owned or info.st_mode & 0o077:
+        message = f"{directory} is not a private directory"
+        raise OSError(message)
+    return directory
+
+
 def _message_path(agent: str, identity: object) -> Path:
     """Return a private path for one in-progress assistant message."""
     key = hashlib.sha256(
         json.dumps(identity, sort_keys=True, default=str).encode()
     ).hexdigest()
-    directory = Path(tempfile.gettempdir()) / f"vauxhall-messages-{agent}{_USER_SUFFIX}"
-    directory.mkdir(mode=0o700, exist_ok=True)
+    directory = private_directory(f"vauxhall-messages-{agent}")
     _sweep_stale_messages(directory)
     return directory / f"{key}.message"
 
@@ -140,10 +169,16 @@ def collect_message_chunk(
         return None
     try:
         path = _message_path(agent, identity)
-        previous = path.read_text(encoding="utf-8") if path.exists() else ""
+        try:
+            source = os.open(path, os.O_RDONLY | _NOFOLLOW)
+        except FileNotFoundError:
+            previous = ""
+        else:
+            with os.fdopen(source, encoding="utf-8") as existing:
+                previous = existing.read()
         combined = previous + delta
         bounded = message_text(combined) or ""
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _NOFOLLOW, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             output.write(bounded)
         if final:

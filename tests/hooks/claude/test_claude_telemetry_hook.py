@@ -58,6 +58,39 @@ def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
     )
 
 
+def test_claude_messages_in_two_workspaces_do_not_share_one_file(
+    tmp_path: Path,
+) -> None:
+    """A session ID is unique only within a workspace, so the key includes it.
+
+    Two workspaces can legitimately share a session ID and a message ID, and
+    their interleaved chunks must not be assembled into one message.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    display = {
+        **BASE,
+        "hook_event_name": "MessageDisplay",
+        "message_id": "msg-1",
+        "final": False,
+    }
+    here = {**display, "cwd": "/workspace/a", "delta": "from a"}
+    there = {**display, "cwd": "/workspace/b", "delta": "from b"}
+    here_ends = {**here, "delta": "", "final": True}
+
+    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+        client = _run(here, there, here_ends)
+
+    client.send.assert_called_once_with(
+        agent="Claude Code",
+        workspace="/workspace/a",
+        session_id="native:session-123",
+        state="Thinking",
+        message="from a",
+    )
+
+
 @pytest.mark.parametrize(
     "stdin",
     [

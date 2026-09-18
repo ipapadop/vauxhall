@@ -6,27 +6,25 @@
 import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-from vauxhall.hooks.common import message_text
+from vauxhall.hooks.common import message_text, private_directory
 
 _MAX_READ_BYTES = 1_048_576
 
 
 def _cursor_path(session_id: str, transcript_path: str) -> Path:
     """Return a private cursor path for one Codex session record."""
-    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
-    directory = Path(tempfile.gettempdir()) / f"vauxhall-codex-cursors{suffix}"
-    directory.mkdir(mode=0o700, exist_ok=True)
+    directory = private_directory("vauxhall-codex-cursors")
     key = hashlib.sha256(f"{session_id}\0{transcript_path}".encode()).hexdigest()
     return directory / key
 
 
 def _write_cursor(path: Path, offset: int) -> None:
     """Save the last complete record offset for a later hook invocation."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as output:
         output.write(str(offset))
 
@@ -78,7 +76,9 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         }:
             return []
         try:
-            offset = int(cursor.read_text())
+            saved = os.open(cursor, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(saved, encoding="ascii") as source:
+                offset = int(source.read())
         except (OSError, ValueError):
             offset = 0
         if offset > size:

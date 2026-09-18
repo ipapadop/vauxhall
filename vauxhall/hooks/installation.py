@@ -132,7 +132,10 @@ def load_hook_settings(
         The existing valid settings, or an empty dictionary when absent.
 
     Raises:
-        ValueError: If the existing file cannot be read or parsed.
+        OSError: If the settings directory cannot be created, or the existing
+            file cannot be copied to its backup. The backup is made before the
+            file is read, so an unreadable file fails here.
+        ValueError: If the backed-up file cannot be read or parsed.
         TypeError: If the existing settings have an unexpected shape.
     """
     path.parent.mkdir(parents=True, exist_ok=True)

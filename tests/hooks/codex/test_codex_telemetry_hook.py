@@ -61,6 +61,99 @@ def test_codex_telemetry_connect_timeout_fits_hook_budget() -> None:
     assert client.client.connect_timeout == 1.0
 
 
+def test_codex_stop_publishes_final_message() -> None:
+    """The final assistant reply is sent when Codex completes a turn."""
+    client = _run(
+        {
+            "hook_event_name": "Stop",
+            "session_id": "session-123",
+            "cwd": "/workspace",
+            "last_assistant_message": "Done.",
+        }
+    )
+
+    client.send.assert_called_once_with(
+        agent="Codex",
+        workspace="/workspace",
+        session_id="native:session-123",
+        state="Idle",
+        status="Ready",
+        message="Done.",
+    )
+
+
+def test_codex_publishes_new_interim_messages_from_transcript(tmp_path: Path) -> None:
+    """A tool hook forwards completed commentary from the current Codex turn."""
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    base = {
+        "session_id": "session-123",
+        "cwd": "/workspace",
+        "turn_id": "turn-1",
+        "transcript_path": str(transcript),
+    }
+    records = [
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "item_completed",
+                "turn_id": "turn-1",
+                "item": {
+                    "type": "AgentMessage",
+                    "id": "message-1",
+                    "phase": "commentary",
+                    "content": "First update",
+                },
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "item_completed",
+                "turn_id": "turn-1",
+                "item": {
+                    "type": "AgentMessage",
+                    "id": "message-2",
+                    "phase": "commentary",
+                    "content": "Second update",
+                },
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "item_completed",
+                "turn_id": "other",
+                "item": {
+                    "type": "AgentMessage",
+                    "phase": "commentary",
+                    "content": "Wrong turn",
+                },
+            },
+        },
+    ]
+
+    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+        _run({**base, "hook_event_name": "UserPromptSubmit", "prompt": "Go"})
+        with transcript.open("a", encoding="utf-8") as output:
+            output.writelines(json.dumps(record) + "\n" for record in records)
+        event = {
+            **base,
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pwd"},
+        }
+        client = _run(event)
+        repeated = _run(event)
+
+    assert [call.kwargs.get("message") for call in client.send.call_args_list] == [
+        "First update",
+        "Second update",
+        None,
+    ]
+    repeated.send.assert_called_once()
+
+
 def test_codex_hook_keeps_debug_logs_off_stdout() -> None:
     """Debug logging must not contaminate the command hook JSON response."""
     hook_data = {

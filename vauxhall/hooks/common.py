@@ -34,6 +34,10 @@ _SESSION_START_STATUSES = {
     "fork": "Session forked",
 }
 _COMPACTION_TRIGGERS = ("manual", "auto")
+_MAX_MESSAGE_LENGTH = 4096
+# Text from a response that never finished is swept once it cannot belong to a
+# live turn, because only a final chunk removes its own file.
+_MESSAGE_MAX_AGE_SECONDS = 86400
 # Timing directories are per user because the system temporary directory is shared.
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
 
@@ -86,6 +90,69 @@ def tool_details(
 def prompt_submit_telemetry(input_data: dict[str, Any]) -> Telemetry:
     """Translate a submitted user prompt into a thinking state."""
     return "Thinking", {"prompt": input_data.get("prompt", "Processing...")}
+
+
+def message_text(value: object) -> str | None:
+    """Return nonempty assistant text within the telemetry detail limit."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    if len(value) > _MAX_MESSAGE_LENGTH:
+        return value[: _MAX_MESSAGE_LENGTH - 1] + "…"
+    return value
+
+
+def _message_path(agent: str, identity: object) -> Path:
+    """Return a private path for one in-progress assistant message."""
+    key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    directory = Path(tempfile.gettempdir()) / f"vauxhall-messages-{agent}{_USER_SUFFIX}"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    _sweep_stale_messages(directory)
+    return directory / f"{key}.message"
+
+
+def _sweep_stale_messages(directory: Path) -> None:
+    """Remove message text left behind by responses that never finished.
+
+    Args:
+        directory: The agent's message directory to sweep.
+    """
+    cutoff = time.time() - _MESSAGE_MAX_AGE_SECONDS
+    with suppress(OSError):
+        for stale in directory.glob("*.message"):
+            with suppress(OSError):
+                if stale.stat().st_mtime < cutoff:
+                    stale.unlink(missing_ok=True)
+
+
+def discard_message_chunks(agent: str, identity: object) -> None:
+    """Discard text left by an unfinished model response."""
+    with suppress(OSError):
+        _message_path(agent, identity).unlink(missing_ok=True)
+
+
+def collect_message_chunk(
+    agent: str, identity: object, delta: object, *, final: bool
+) -> str | None:
+    """Collect streamed assistant text and return it when the message ends."""
+    if not isinstance(delta, str):
+        return None
+    try:
+        path = _message_path(agent, identity)
+        previous = path.read_text(encoding="utf-8") if path.exists() else ""
+        combined = previous + delta
+        bounded = message_text(combined) or ""
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(bounded)
+        if final:
+            path.unlink()
+            return bounded or None
+    except (OSError, UnicodeDecodeError):
+        # A partially written chunk must not suppress the event's own telemetry.
+        return None
+    return None
 
 
 def ready_telemetry(_input_data: dict[str, Any]) -> Telemetry:
@@ -248,6 +315,7 @@ def publish_telemetry(
     agent: str,
     handlers: Mapping[str, EventHandler],
     create_client: Callable[[], "TelemetryClient"] | None = None,
+    messages: list[str] | None = None,
 ) -> None:
     """Translate one hook event with its handler and publish the telemetry.
 
@@ -256,7 +324,7 @@ def publish_telemetry(
     hook_type = input_data.get("hook_event_name")
     handler = handlers.get(hook_type) if isinstance(hook_type, str) else None
     telemetry = handler(input_data) if handler is not None else None
-    if telemetry is None:
+    if telemetry is None and not messages:
         return
 
     session_id = resolve_session_id(input_data)
@@ -264,15 +332,20 @@ def publish_telemetry(
         logger.warning("Skipping telemetry: no stable session identity is available")
         return
 
-    state, details = telemetry
+    events: list[Telemetry] = [
+        ("Thinking", {"message": message}) for message in messages or []
+    ]
+    if telemetry is not None:
+        events.append(telemetry)
     with (create_client or create_telemetry_client)() as client:
-        client.send(
-            agent=agent,
-            workspace=input_data.get("cwd", str(Path.cwd())),
-            session_id=session_id,
-            state=state,
-            **details,
-        )
+        for state, details in events:
+            client.send(
+                agent=agent,
+                workspace=input_data.get("cwd", str(Path.cwd())),
+                session_id=session_id,
+                state=state,
+                **details,
+            )
 
 
 def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:

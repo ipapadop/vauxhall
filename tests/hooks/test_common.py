@@ -17,6 +17,18 @@ def test_claim_skips_start_claimed_by_another_hook(tmp_path: Path) -> None:
     lost_races: list[Path] = []
 
     def rename_after_losing_first_race(path: Path, target: Path) -> Path:
+        """Fail the first rename as a competing hook would, then behave normally.
+
+        Args:
+            path: The start file being claimed.
+            target: Name the claimed file is given.
+
+        Returns:
+            The renamed path.
+
+        Raises:
+            FileNotFoundError: On the first call, as a lost race would.
+        """
         if not lost_races:
             lost_races.append(path)
             path.unlink()
@@ -53,3 +65,50 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert duration == 10.0
     assert not list(tmp_path.rglob("*.time"))
     assert not list(tmp_path.rglob("*.claimed"))
+
+
+def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> None:
+    """Streaming text is kept private and published once per completed message."""
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        assert (
+            common.collect_message_chunk(
+                "claude", ["session", "message"], "Hello ", final=False
+            )
+            is None
+        )
+        assert (
+            common.collect_message_chunk(
+                "claude", ["session", "other"], "Other", final=True
+            )
+            == "Other"
+        )
+        assert (
+            common.collect_message_chunk(
+                "claude", ["session", "message"], "world", final=True
+            )
+            == "Hello world"
+        )
+
+    assert not list(tmp_path.rglob("*.message"))
+
+
+def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
+    """A long reply fits the telemetry detail string limit."""
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        message = common.collect_message_chunk(
+            "gemini", ["session"], "x" * 5000, final=True
+        )
+
+    assert message == "x" * 4095 + "…"
+
+
+def test_discard_message_chunks_prevents_next_turn_contamination(
+    tmp_path: Path,
+) -> None:
+    """An unfinished response is cleared before a new turn begins."""
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.collect_message_chunk("gemini", ["session"], "old", final=False)
+        common.discard_message_chunks("gemini", ["session"])
+        message = common.collect_message_chunk("gemini", ["session"], "new", final=True)
+
+    assert message == "new"

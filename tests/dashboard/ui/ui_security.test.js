@@ -69,6 +69,16 @@ test('activity details and metrics are rendered without creating markup', () => 
     assert.equal(Boolean(card.querySelector('.metric-badge')), false);
 });
 
+test('assistant messages appear as inert text in the activity log', () => {
+    const card = createCard({ agent: 'Codex', workspace: '/workspace', session_id: 'session' }, null, () => {});
+
+    updateCard(card, { state: 'Thinking', details: { message: ATTACK } });
+
+    assert.equal(Boolean(card.querySelector('.injected')), false);
+    assert.match(card.querySelector('.log-area').textContent, /Agent:/);
+    assert.match(card.querySelector('.log-area').textContent, new RegExp(ATTACK));
+});
+
 test('history details are rendered without creating markup', () => {
     const card = createCard(
         { agent: 'Agent', workspace: '/workspace', env: 'local' },

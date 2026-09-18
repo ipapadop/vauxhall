@@ -7,6 +7,7 @@ from functools import partial
 from typing import Any
 
 from vauxhall.hooks import common
+from vauxhall.hooks.codex.messages import new_messages
 
 _COMMAND_FIELDS = {"Bash": "command"}
 
@@ -53,6 +54,15 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     return state, details
 
 
+def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
+    """Publish the final assistant message with the idle state."""
+    state, details = common.ready_telemetry(input_data)
+    message = common.message_text(input_data.get("last_assistant_message"))
+    if message is not None:
+        details["message"] = message
+    return state, details
+
+
 _HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
@@ -62,7 +72,7 @@ _HANDLERS: dict[str, common.EventHandler] = {
     "SubagentStart": common.subagent_start_telemetry,
     "PreCompact": common.pre_compact_telemetry,
     "PostCompact": common.post_compact_telemetry,
-    "Stop": common.ready_telemetry,
+    "Stop": _handle_stop,
     "Interrupt": lambda _: ("Idle", {"status": "interrupted"}),
     # Codex currently reports only the "other" reason.
     "SessionEnd": partial(common.session_end_telemetry, statuses={}),
@@ -72,7 +82,9 @@ _HANDLERS: dict[str, common.EventHandler] = {
 def main() -> None:
     """Process one Codex hook event without disrupting its protocol."""
     common.run_hook(
-        partial(common.publish_telemetry, agent="Codex", handlers=_HANDLERS)
+        lambda input_data: common.publish_telemetry(
+            input_data, "Codex", _HANDLERS, messages=new_messages(input_data)
+        )
     )
 
 

@@ -20,6 +20,7 @@ HANDLERS = {
         "PostToolUse",
         "PostToolUseFailure",
         "Notification",
+        "MessageDisplay",
         "SubagentStart",
         "PreCompact",
         "PostCompact",

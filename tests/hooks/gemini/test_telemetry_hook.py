@@ -535,6 +535,15 @@ def test_tool_durations_are_isolated_by_tool_input(
     workspace = tmp_path / "no-gemini-directory"
 
     def event(hook: str, command: str) -> dict:
+        """Build an ID-less shell tool event for the given command.
+
+        Args:
+            hook: Name of the hook event to build.
+            command: Shell command carried in the tool input.
+
+        Returns:
+            The event.
+        """
         return {
             "hook_event_name": hook,
             "tool_name": "run_shell_command",
@@ -620,6 +629,39 @@ def _run(*events: dict) -> MagicMock:
             with patch("sys.stdin", io.StringIO(json.dumps(event))):
                 main()
     return client
+
+
+def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
+    """Streaming model chunks form one message at each model response end."""
+    base = {
+        "hook_event_name": "AfterModel",
+        "session_id": "session-123",
+        "cwd": "/workspace",
+    }
+    first = {
+        **base,
+        "llm_response": {"candidates": [{"content": {"parts": ["Working "]}}]},
+    }
+    last = {
+        **base,
+        "llm_response": {
+            "candidates": [
+                {"content": {"parts": ["through it."]}, "finishReason": "STOP"}
+            ]
+        },
+    }
+
+    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+        client = _run(first, last)
+
+    client.send.assert_called_once_with(
+        agent="Gemini",
+        workspace="/workspace",
+        session_id="native:session-123",
+        state="Thinking",
+        status="Model replied",
+        message="Working through it.",
+    )
 
 
 @pytest.mark.parametrize(

@@ -6,7 +6,7 @@
 
 # Vauxhall Agent Dashboard
 
-Vauxhall is a real-time dashboard for AI coding agents such as Claude Code,
+Vauxhall is a real-time dashboard for agents such as Claude Code,
 Codex, and Gemini CLI. Agents publish telemetry over MQTT, and the dashboard
 shows each agent session as a card in a grid.
 
@@ -17,7 +17,8 @@ shows each agent session as a card in a grid.
 - **Session-aware cards**: Cards are keyed by agent, workspace, and session ID,
   so concurrent sessions in one workspace stay separate. Up to 100 cards are
   kept by default; a new session evicts the least recently seen card.
-- **Activity log**: Each card shows its last 5 events with `[HH:mm:ss]`
+- **Activity log**: Each card shows its last 5 events, including agent messages,
+  with `[HH:mm:ss]`
   timestamps, token and duration badges for the latest operation, and a LOCAL
   or REMOTE badge.
 - **History**: The 🕒 icon opens a resizable modal with the card's last 20
@@ -35,9 +36,10 @@ shows each agent session as a card in a grid.
   size, position, and maximized state are restored the next time the dashboard
   starts.
 - **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
-  report prompts,
-  tool activity, permission waits, tool outcomes (completed, failed, cancelled,
-  or result unavailable), and idle state. Tool results are never published.
+  report prompts, assistant messages, tool activity, permission waits, tool
+  outcomes (completed, failed, cancelled, or result unavailable), and idle
+  state. Tool results are never published. Messages are limited to 4,096
+  characters per event; longer messages end with an ellipsis.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
   and never turned into shell commands. Hooks always return valid protocol JSON,
   even when telemetry fails.
@@ -127,6 +129,12 @@ atomically, preserving unrelated settings and hooks. The Claude Code installer
 writes `.claude/settings.local.json`; restart Claude Code or open `/hooks` to
 apply the hooks. For Codex, open `/hooks` after installing to review and trust
 the new project hooks.
+
+Run the installers again to enable assistant messages in existing workspaces.
+Claude Code and Gemini CLI report completed messages during a turn. Codex
+reports its final reply from the `Stop` hook and reads interim commentary from
+its local session record when a later hook runs. Codex interim messages are
+best effort because the record format can change and writes may lag hook events.
 
 See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and
 integrating other agents.

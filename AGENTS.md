@@ -61,8 +61,8 @@ Publish JSON to `vauxhall/agents/<agent_name>/activity`:
 }
 ```
 
-Operation values such as `tool`, `cmd`, `prompt`, `status`, `error`, `tokens`,
-and `duration` go in `details`. The optional `env` field is top-level.
+Operation values such as `tool`, `cmd`, `prompt`, `message`, `status`, `error`,
+`tokens`, and `duration` go in `details`. The optional `env` field is top-level.
 
 ## Telemetry Schema
 
@@ -122,8 +122,9 @@ telemetry. Rejection logs never include payload values. The dashboard and
 - **Activity log**: Each card shows its last 5 events, newest first, with
   `[HH:mm:ss]` timestamps. An event whose message matches the previous one is
   not repeated. The message is, in order of precedence: the prompt for waiting
-  states, `Error: <error>`, `Running: <tool> <cmd>` (or `Completed: <tool>` for
-  a completed `Thinking` event), `Prompt: <prompt>`, or the status.
+  states, `Error: <error>`, `Agent: <message>`, `Running: <tool> <cmd>` (or
+  `Completed: <tool>` for a completed `Thinking` event), `Prompt: <prompt>`,
+  or the status.
 - **History**: The 🕒 icon opens a resizable modal with the card's last 20
   events, filterable by text and state. It updates live and follows new events
   only when scrolled to the bottom and not hovered.
@@ -207,6 +208,7 @@ telemetry. Rejection logs never include payload values. The dashboard and
 | `PostToolUse` | `Thinking` (`completed`); `Idle` (`cancelled`) when interrupted |
 | `PostToolUseFailure` | `Error` (`failed`); `Idle` (`cancelled`) for `is_interrupt` |
 | `Notification` | `Waiting for Input` for `permission_prompt`, `idle_prompt`, `elicitation_dialog`, and `elicitation_url_dialog`; others are ignored |
+| `MessageDisplay` | `Thinking` with the completed assistant message |
 | `SubagentStart` | `Acting` (`tool` is `Agent`, `cmd` is the agent type) |
 | `PreCompact` | `Thinking` (`Compacting context`, with the trigger) |
 | `PostCompact` | `Context compacted`: `Idle` after `manual`, `Thinking` after `auto` |
@@ -243,6 +245,10 @@ Some signals are intentionally absent:
   when present.
 - `tool_response` and `error` contents are never published. For `StopFailure`,
   only the error type is published, not `error_details` or the error message.
+- `MessageDisplay` batches are assembled in a private temporary file and
+  published when the message ends, including messages shown during a turn.
+  The file is then removed. Messages longer than 4,096 characters end with
+  an ellipsis.
 - Tool durations use Claude Code's `duration_ms` when reported. Otherwise they
   use a timing file per session and `tool_use_id` in the system temporary
   directory, so concurrent tool calls do not overwrite each other.
@@ -302,6 +308,7 @@ Add the command handler to each event in `.claude/settings.local.json`:
     "PostToolUse": [...],
     "PostToolUseFailure": [...],
     "Notification": [...],
+    "MessageDisplay": [...],
     "SubagentStart": [...],
     "PreCompact": [...],
     "PostCompact": [...],
@@ -326,7 +333,7 @@ Add the command handler to each event in `.claude/settings.local.json`:
 | `SubagentStart` | `Acting` (`tool` is `Agent`, `cmd` is the agent type) |
 | `PreCompact` | `Thinking` (`Compacting context`, with the trigger) |
 | `PostCompact` | `Context compacted`: `Idle` after `manual`, `Thinking` after `auto` |
-| `Stop` | `Idle` (`Ready`) |
+| `Stop` | `Idle` (`Ready`, with `last_assistant_message` when available) |
 | `Interrupt` | `Idle` (`interrupted`) |
 | `SessionEnd` | `Idle` (`session ended`) |
 
@@ -358,6 +365,13 @@ not registered, for the same reasons as for Claude Code.
 - Only `Bash` tool calls publish their command text. Patch contents and other
   tool inputs are not published.
 - `tool_response` content is never published.
+- `Stop` publishes the final assistant message. On later tool or stop hooks,
+  Vauxhall also reads completed commentary from the current turn in Codex's
+  local session record and publishes each once. This is best effort: Codex
+  does not provide an interim message hook, the record format can change,
+  and its writes may lag. The reader keeps only a private byte cursor in the
+  system temporary directory and limits each read to 1 MiB. Messages over
+  4,096 characters end with an ellipsis.
 - Tool durations use a timing file per session and `tool_use_id` in the system
   temporary directory, so concurrent tool calls do not overwrite each other.
 
@@ -433,7 +447,7 @@ generates the encoded PowerShell command needed for safe path handling.
 | Gemini event | Vauxhall state |
 | :--- | :--- |
 | `BeforeAgent` | `Thinking` (with `prompt`) |
-| `AfterModel` | `Thinking` (`Model replied`, with `tokens` when reported), for the final response chunk only |
+| `AfterModel` | `Thinking` (`Model replied`, with `tokens` and assistant text when reported), after the response's final chunk |
 | `BeforeTool` | `Acting`; `Waiting for Input` for `ask_user` |
 | `AfterTool` | `Thinking`, `Error`, or `Idle`, based on the tool result |
 | `Notification` | `Waiting for Input` for `ToolPermission`; others are ignored |
@@ -466,6 +480,10 @@ reason values are not published.
   `write_file`, and `replace`. Events whose `args` exceed 4,096
   characters fail validation and are not published.
 - `tool_response` content is never published.
+- `AfterModel` text chunks are assembled in a private temporary file and
+  published when that model response ends, including responses before tool
+  calls. `BeforeAgent` discards text left by an unfinished prior response.
+  Messages over 4,096 characters end with an ellipsis.
 - Each `BeforeTool` records its start time in its own file in the system
   temporary directory, named by workspace, session ID, tool name, and tool
   input. Gemini CLI sends no tool call ID, so `AfterTool` claims the most recent

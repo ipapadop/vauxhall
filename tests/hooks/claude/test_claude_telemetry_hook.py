@@ -34,6 +34,63 @@ def _run(*events: dict) -> MagicMock:
     return client
 
 
+def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
+    """Display batches become one assistant message before the turn stops."""
+    first = {
+        **BASE,
+        "hook_event_name": "MessageDisplay",
+        "message_id": "msg-1",
+        "index": 0,
+        "delta": "Working ",
+        "final": False,
+    }
+    last = {**first, "index": 1, "delta": "through it.", "final": True}
+
+    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+        client = _run(first, last)
+
+    client.send.assert_called_once_with(
+        agent="Claude Code",
+        workspace="/workspace",
+        session_id="native:session-123",
+        state="Thinking",
+        message="Working through it.",
+    )
+
+
+def test_claude_messages_in_two_workspaces_do_not_share_one_file(
+    tmp_path: Path,
+) -> None:
+    """A session ID is unique only within a workspace, so the key includes it.
+
+    Two workspaces can legitimately share a session ID and a message ID, and
+    their interleaved chunks must not be assembled into one message.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    display = {
+        **BASE,
+        "hook_event_name": "MessageDisplay",
+        "message_id": "msg-1",
+        "final": False,
+    }
+    here = {**display, "cwd": "/workspace/a", "delta": "from a"}
+    there = {**display, "cwd": "/workspace/b", "delta": "from b"}
+    here_ends = {**here, "delta": "", "final": True}
+
+    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+        client = _run(here, there, here_ends)
+
+    client.send.assert_called_once_with(
+        agent="Claude Code",
+        workspace="/workspace/a",
+        session_id="native:session-123",
+        state="Thinking",
+        message="from a",
+    )
+
+
 @pytest.mark.parametrize(
     "stdin",
     [
@@ -317,6 +374,15 @@ def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> No
     """Concurrent tool calls must retain their own start times."""
 
     def event(hook: str, tool_use_id: str) -> dict:
+        """Build a Read tool event carrying the given tool-use ID.
+
+        Args:
+            hook: Name of the hook event to build.
+            tool_use_id: Identifier distinguishing one tool call.
+
+        Returns:
+            The event.
+        """
         return {
             **BASE,
             "hook_event_name": hook,

@@ -118,6 +118,22 @@ def _handle_pre_compress(input_data: dict[str, Any]) -> common.Telemetry:
     return state, {"status": "Compacting context"}
 
 
+def _part_text(part: object) -> str:
+    """Return the text of one response part, which may be a string or an object.
+
+    Args:
+        part: One entry of a response's ``parts`` list.
+
+    Returns:
+        The part's text, or an empty string when it carries none.
+    """
+    if isinstance(part, str):
+        return part
+    if isinstance(part, dict) and isinstance(part.get("text"), str):
+        return part["text"]
+    return ""
+
+
 def _is_final_model_response(llm_response: object) -> bool:
     """Return whether a model response chunk carries a finish reason."""
     if not isinstance(llm_response, dict):
@@ -140,18 +156,46 @@ def _handle_after_model(input_data: dict[str, Any]) -> common.Telemetry | None:
     finishes the response is published.
     """
     llm_response = input_data.get("llm_response")
-    if not _is_final_model_response(llm_response):
+    if not isinstance(llm_response, dict):
+        return None
+    candidates = llm_response.get("candidates")
+    first = candidates[0] if isinstance(candidates, list) and candidates else None
+    content = first.get("content") if isinstance(first, dict) else None
+    parts = content.get("parts") if isinstance(content, dict) else None
+    delta = (
+        "".join(_part_text(part) for part in parts) if isinstance(parts, list) else ""
+    )
+    final = _is_final_model_response(llm_response)
+    session_id = resolve_session_id(input_data)
+    message = (
+        common.collect_message_chunk(
+            "gemini", [input_data.get("cwd"), session_id], delta, final=final
+        )
+        if session_id is not None and (delta or final)
+        else None
+    )
+    if not final:
         return None
     details: dict[str, Any] = {"status": "Model replied"}
+    if message is not None:
+        details["message"] = message
     usage = llm_response.get("usageMetadata")
     if isinstance(usage, dict) and usage.get("totalTokenCount") is not None:
         details["tokens"] = usage["totalTokenCount"]
     return "Thinking", details
 
 
+def _handle_before_agent(input_data: dict[str, Any]) -> common.Telemetry:
+    """Discard unfinished model text before reporting a new user prompt."""
+    session_id = resolve_session_id(input_data)
+    if session_id is not None:
+        common.discard_message_chunks("gemini", [input_data.get("cwd"), session_id])
+    return common.prompt_submit_telemetry(input_data)
+
+
 _HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
-    "BeforeAgent": common.prompt_submit_telemetry,
+    "BeforeAgent": _handle_before_agent,
     "AfterAgent": common.ready_telemetry,
     "AfterModel": _handle_after_model,
     "BeforeTool": _handle_before_tool,

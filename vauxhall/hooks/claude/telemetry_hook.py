@@ -7,6 +7,7 @@ from functools import partial
 from typing import Any
 
 from vauxhall.hooks import common
+from vauxhall.hooks.identity import resolve_session_id
 
 _COMMAND_FIELDS = {"Bash": "command", "PowerShell": "command"}
 _SESSION_END_STATUSES = {
@@ -112,6 +113,23 @@ def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
     return "Error", {"status": "failed", "error": f"API error: {error}"}
 
 
+def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | None:
+    """Publish an assistant message when its displayed text is complete."""
+    if common._is_subagent_event(input_data):
+        return None
+    session_id = resolve_session_id(input_data)
+    message_id = input_data.get("message_id")
+    if session_id is None or not isinstance(message_id, str) or not message_id:
+        return None
+    message = common.collect_message_chunk(
+        "claude",
+        [input_data.get("cwd"), session_id, message_id],
+        input_data.get("delta"),
+        final=input_data.get("final") is True,
+    )
+    return ("Thinking", {"message": message}) if message else None
+
+
 _HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
@@ -120,6 +138,7 @@ _HANDLERS: dict[str, common.EventHandler] = {
     "PostToolUse": _handle_post_tool,
     "PostToolUseFailure": _handle_post_tool_failure,
     "Notification": _handle_notification,
+    "MessageDisplay": _handle_message_display,
     "SubagentStart": common.subagent_start_telemetry,
     "PreCompact": common.pre_compact_telemetry,
     "PostCompact": common.post_compact_telemetry,

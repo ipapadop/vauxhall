@@ -4,6 +4,7 @@
 """Shared test fixtures."""
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,28 @@ def isolated_home(
         if name.startswith("VAUXHALL_"):
             monkeypatch.delenv(name)
     return home
+
+
+@pytest.fixture(autouse=True)
+def isolated_tempdir(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Keep hook state files out of the shared system temporary directory.
+
+    The hooks record tool timings, assistant message chunks, and transcript
+    cursors under ``tempfile.gettempdir()``, keyed by workspace and session, so
+    one test's leftovers would otherwise reach another test using the same key.
+
+    Args:
+        tmp_path_factory: Pytest temporary directory factory.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        The temporary directory standing in for the system one.
+    """
+    directory = tmp_path_factory.mktemp("systmp")
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(directory))
+    return directory
 
 
 @pytest.fixture

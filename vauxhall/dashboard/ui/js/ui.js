@@ -115,6 +115,10 @@ function getDetailsSegments(data) {
         return [segment('Error:', 'log-error'), segment(` ${details.error}`)];
     }
 
+    if (details.message) {
+        return [segment('Agent:', 'log-completed'), segment(` ${details.message}`)];
+    }
+
     if (details.tool) {
         // If it's a known placeholder, and we have something better, use it
         if (details.tool === 'unknown' || details.tool === 'unknown_tool') {

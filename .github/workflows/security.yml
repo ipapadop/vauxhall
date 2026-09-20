@@ -16,6 +16,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A history-aware scan, so a secret is caught even when a later commit
+  # removes it from the tree. See docs/repository-history.md for the audit
+  # this job keeps current.
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Scans the pushed commits on a push or pull request, and the whole
+      # history on the weekly schedule. Free for personal and public
+      # repositories; an organization would need GITLEAKS_LICENSE.
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_SUMMARY: true
+
   # Dependency review and CodeQL need GitHub Advanced Security on private
   # repositories, so they run only once the repository is public.
   dependency-review:

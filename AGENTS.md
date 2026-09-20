@@ -618,3 +618,7 @@ All contributors, including AI agents, must:
 4. **Documentation**: After every change, update `README.md` (features,
    architecture, usage) and `AGENTS.md` (integration, states, dashboard
    behavior) to match the code.
+5. **History**: The commit history is a record, not a scratch space. Do not
+   squash or rewrite it as cleanup. See
+   [docs/repository-history.md](docs/repository-history.md) for the one
+   deliberate rewrite and the contact address every file must use.

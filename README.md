@@ -200,33 +200,34 @@ From a source checkout, run `uv run vauxhall`.
 
 ### 3. Install agent hooks
 
-Run the installer from the agent's workspace:
+Run the installer from the agent's workspace, naming each agent to install:
 
 ```bash
-# Claude Code
-vauxhall-install-claude
+# One agent
+vauxhall-hook-install claude
 
-# Codex
-vauxhall-install-codex
-
-# Gemini CLI
-vauxhall-install-gemini
+# Several agents at once, sharing one hooks environment
+vauxhall-hook-install claude codex gemini
 ```
 
-Each installer recreates `.vauxhall-venv` in the workspace and installs
+The agents are `claude`, `codex`, and `gemini`; at least one is required.
+
+The installer recreates `.vauxhall-venv` in the workspace and installs
 Vauxhall into it from the same source as the running copy: the same Git
 commit, local directory, or wheel file, or otherwise the matching PyPI
-release. It then registers hooks that run the installed hook module, so the
-hooks don't run code from a source checkout. Before changing an
-existing hook or settings file, the installer backs it up and validates it. If
-the file is invalid, the installer leaves it unchanged and exits with an error.
-Reinstalling replaces only Vauxhall's own handlers and writes the file
-atomically, preserving unrelated settings and hooks. The Claude Code installer
-writes `.claude/settings.local.json`; restart Claude Code or open `/hooks` to
-apply the hooks. For Codex, open `/hooks` after installing to review and trust
-the new project hooks.
+release. Agents named in one command share that environment, so it is built
+once however many you install. It then registers hooks that run the installed
+hook module, so the hooks don't run code from a source checkout. Before
+changing an existing hook or settings file, the installer backs it up and
+validates it. Every named agent's settings are validated before the
+environment is built, so an invalid file leaves them all unchanged and exits
+with an error. Reinstalling replaces only Vauxhall's own handlers and writes
+each file atomically, preserving unrelated settings and hooks. For Claude Code
+the installer writes `.claude/settings.local.json`; restart Claude Code or open
+`/hooks` to apply the hooks. For Codex, open `/hooks` after installing to
+review and trust the new project hooks.
 
-Run the installers again to enable assistant messages in existing workspaces.
+Run the installer again to enable assistant messages in existing workspaces.
 Claude Code and Gemini CLI report completed messages during a turn. Codex
 reports its final reply from the `Stop` hook and reads interim commentary from
 its local session record when a later hook runs. Codex interim messages are

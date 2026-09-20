@@ -39,6 +39,6 @@ def test_install_describes_hooks_file_without_replacing_description(
         patch.object(Path, "cwd", return_value=tmp_path),
         patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
     ):
-        installer.install()
+        installation.install_hooks([installer.INSTALLER])
 
     assert json.loads(hooks_file.read_text())["description"] == description

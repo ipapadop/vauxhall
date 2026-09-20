@@ -26,18 +26,11 @@ HANDLERS = {
     )
 }
 
-
-def install() -> None:
-    """Install Vauxhall telemetry hooks into the current Codex project."""
-    installation.install_hooks(
-        agent="Codex",
-        module=HOOK_MODULE,
-        settings_path=Path.cwd() / SETTINGS_PATH,
-        handlers=HANDLERS,
-        defaults={"description": "Vauxhall telemetry hooks for Codex."},
-        next_step="Review and trust the hooks with /hooks in Codex.",
-    )
-
-
-if __name__ == "__main__":
-    install()
+INSTALLER = installation.HookInstaller(
+    agent="Codex",
+    module=HOOK_MODULE,
+    settings_path=SETTINGS_PATH,
+    handlers=HANDLERS,
+    defaults={"description": "Vauxhall telemetry hooks for Codex."},
+    next_step="Review and trust the hooks with /hooks in Codex.",
+)

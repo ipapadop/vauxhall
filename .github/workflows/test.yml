@@ -30,6 +30,12 @@ jobs:
         run: |
           npm ci
           npm test
+      # The gate covers vauxhall/dashboard/ui/js only. app.js is exercised by
+      # the dashboard boot tests, but each test imports it under a fresh URL to
+      # re-run its top-level setup, and V8 reports those instances separately,
+      # so its measured coverage is not a number worth gating on.
+      - name: Check frontend coverage
+        run: npm run test:coverage
 
   test:
     # Every supported Python on Linux, and the newest supported one on the
@@ -68,6 +74,26 @@ jobs:
           sudo apt-get install -y libegl1
       - name: Test with pytest
         run: uv run --locked pytest
+
+  coverage:
+    # The coverage floor is checked once, on one interpreter, because the
+    # matrix above already proves the suite passes everywhere.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: '3.13'
+      - name: Install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1
+      - name: Check Python coverage
+        run: uv run --locked pytest --cov
 
   package:
     runs-on: ubuntu-latest

@@ -78,6 +78,27 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("*.claimed"))
 
 
+def test_private_directory_allows_a_platform_without_posix_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A platform that reports no owner and no mode bits must still be usable.
+
+    Windows ignores the mode a directory is created with, reports every
+    directory as world accessible, and has no ``os.getuid``.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setattr(common.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.delattr(common.os, "getuid", raising=False)
+    directory = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
+    directory.mkdir()
+    directory.chmod(0o777)
+
+    assert common.private_directory("vauxhall-messages-claude") == directory
+
+
 def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> None:
     """Streaming text is kept private and published once per completed message.
 

@@ -4,11 +4,16 @@
 """Tests for the Gemini-specific behavior of the Vauxhall hook installer."""
 
 import json
+import shlex
 from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.hooks import installation
 from vauxhall.hooks.gemini import install as installer
+
+# Installation makes the interpreter path absolute, so a stubbed one is already
+# absolute in the host's own flavour and the expected command stays exact.
+VENV_PYTHON = str(Path("/venv/bin/python").absolute())
 
 
 def _install(workspace: Path) -> dict:
@@ -22,7 +27,7 @@ def _install(workspace: Path) -> dict:
     """
     with (
         patch.object(Path, "cwd", return_value=workspace),
-        patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
+        patch.object(installation, "setup_venv", return_value=Path(VENV_PYTHON)),
         patch.object(installation.os, "name", "posix"),
     ):
         installation.install_hooks([installer.INSTALLER])
@@ -125,8 +130,8 @@ def test_reinstall_replaces_legacy_source_checkout_handlers(tmp_path: Path) -> N
             "hooks": [
                 {
                     "type": "command",
-                    "command": (
-                        "/venv/bin/python -m vauxhall.hooks.gemini.telemetry_hook"
+                    "command": shlex.join(
+                        [VENV_PYTHON, "-m", "vauxhall.hooks.gemini.telemetry_hook"]
                     ),
                     "name": "vauxhall-acting",
                     "description": "Vauxhall telemetry for Gemini tool execution",

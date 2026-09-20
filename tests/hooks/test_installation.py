@@ -7,7 +7,7 @@ import base64
 import json
 import shlex
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import ModuleType
 from unittest.mock import MagicMock, call, patch
 
@@ -20,6 +20,9 @@ from vauxhall.hooks.gemini import install as gemini_install
 
 PREFIX = installation.WINDOWS_ENCODED_COMMAND_PREFIX
 MODULE = "vauxhall.hooks.codex.telemetry_hook"
+# Installation makes the interpreter path absolute, so a stubbed one is already
+# absolute in the host's own flavour and the expected command stays exact.
+VENV_PYTHON = str(Path("/venv/bin/python").absolute())
 INSTALLERS = pytest.mark.parametrize(
     "installer",
     [
@@ -87,7 +90,7 @@ def _settings_file(installer: ModuleType, workspace: Path) -> Path:
 def _install(
     installer: ModuleType,
     workspace: Path,
-    venv_python: str = "/venv/bin/python",
+    venv_python: str = VENV_PYTHON,
     os_name: str = "posix",
 ) -> None:
     """Run an installer in a workspace with a stubbed hook environment.
@@ -108,7 +111,7 @@ def _install(
 
 def test_hook_command_quotes_posix_metacharacters() -> None:
     """POSIX hook commands must quote metacharacters in the Python path."""
-    python = Path("/opt/Vauxhall $(touch marker)/bin/python")
+    python = PurePosixPath("/opt/Vauxhall $(touch marker)/bin/python")
 
     with patch.object(installation.os, "name", "posix"):
         command = installation.build_hook_command(python, MODULE)
@@ -118,14 +121,14 @@ def test_hook_command_quotes_posix_metacharacters() -> None:
 
 def test_hook_command_encodes_windows_metacharacters() -> None:
     """Windows hook commands must encode shell metacharacters in Python paths."""
-    python = Path("/Program Files/Vauxhall & %TEMP%/(owner's)/python.exe")
+    python = PureWindowsPath("C:/Program Files/Vauxhall & %TEMP%/(owner's)/python.exe")
 
     with patch.object(installation.os, "name", "nt"):
         command = installation.build_hook_command(python, MODULE)
 
     assert command.startswith(PREFIX)
     assert _decode(command) == (
-        f"& '/Program Files/Vauxhall & %TEMP%/(owner''s)/python.exe' -m {MODULE}"
+        rf"& 'C:\Program Files\Vauxhall & %TEMP%\(owner''s)\python.exe' -m {MODULE}"
     )
 
 
@@ -260,7 +263,7 @@ def test_install_registers_every_handler(installer: ModuleType, tmp_path: Path) 
     for event, fields in installer.HANDLERS.items():
         handler = {
             "type": "command",
-            "command": f"/venv/bin/python -m {installer.HOOK_MODULE}",
+            "command": shlex.join([VENV_PYTHON, "-m", installer.HOOK_MODULE]),
             **fields,
         }
         assert settings["hooks"][event] == [{"matcher": "*", "hooks": [handler]}]
@@ -355,7 +358,7 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
     settings_file.write_text(
         json.dumps({"theme": "dark", "hooks": {"CustomEvent": [user_group]}})
     )
-    venv_python = "/opt/Vauxhall $(touch marker)/bin/python"
+    venv_python = str(Path("/opt/Vauxhall $(touch marker)/bin/python").absolute())
 
     _install(installer, tmp_path, venv_python)
     first = settings_file.read_text()

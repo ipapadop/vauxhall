@@ -4,6 +4,7 @@
 """Tests for the command-line installer that installs several agents at once."""
 
 import json
+import shlex
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,9 @@ import pytest
 from vauxhall.hooks import cli, installation
 
 AGENTS = ("claude", "codex", "gemini")
+# Installation makes the interpreter path absolute, so a stubbed one is already
+# absolute in the host's own flavour and the expected command stays exact.
+VENV_PYTHON = str(Path("/venv/bin/python").absolute())
 
 
 def _run(workspace: Path, argv: list[str]) -> int:
@@ -27,7 +31,7 @@ def _run(workspace: Path, argv: list[str]) -> int:
     with (
         patch.object(Path, "cwd", return_value=workspace),
         patch.object(
-            installation, "setup_venv", return_value=Path("/venv/bin/python")
+            installation, "setup_venv", return_value=Path(VENV_PYTHON)
         ) as setup_venv,
         patch.object(installation.os, "name", "posix"),
     ):
@@ -64,7 +68,7 @@ def test_repeated_agent_is_installed_once(tmp_path: Path) -> None:
         assert [handler for group in groups for handler in group["hooks"]] == [
             {
                 "type": "command",
-                "command": f"/venv/bin/python -m {installer.module}",
+                "command": shlex.join([VENV_PYTHON, "-m", installer.module]),
                 "timeout": 3,
             }
         ]

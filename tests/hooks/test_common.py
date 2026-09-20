@@ -158,6 +158,11 @@ def test_discard_message_chunks_prevents_next_turn_contamination(
     assert message == "new"
 
 
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"),
+    reason="Windows has no mode bits to plant, and its temporary directory is "
+    "per account",
+)
 def test_private_directory_rejects_a_directory_another_account_could_reach(
     tmp_path: Path,
 ) -> None:
@@ -166,8 +171,7 @@ def test_private_directory_rejects_a_directory_another_account_could_reach(
     Args:
         tmp_path: Pytest temporary directory.
     """
-    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
-    planted = tmp_path / f"vauxhall-messages-claude{suffix}"
+    planted = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
     planted.mkdir()
     planted.chmod(0o777)
 

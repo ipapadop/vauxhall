@@ -52,6 +52,102 @@ shows each agent session as a card in a grid.
 3. **Dashboard (consumer)**: A Pyloid desktop app with a Python MQTT backend and
    a vanilla JavaScript frontend.
 
+```mermaid
+flowchart LR
+    subgraph agents["Agent machine"]
+        cc["Claude Code"]
+        cx["Codex"]
+        gm["Gemini CLI"]
+        hook["Hook process<br>(.vauxhall-venv)"]
+        client["TelemetryClient"]
+        cc --> hook
+        cx --> hook
+        gm --> hook
+        hook --> client
+    end
+
+    broker["Mosquitto broker"]
+
+    subgraph dashboard["Dashboard (Pyloid desktop app)"]
+        sub["DashboardSubscriber"]
+        app["DashboardApp"]
+        ipc["DashboardIPC"]
+        ui["JavaScript UI<br>(card grid, history)"]
+        sub -- "valid telemetry" --> app
+        app -- "agent-update" --> ui
+        ui -- "settings, view state" --> ipc
+        ipc --> app
+    end
+
+    core["vauxhall.core<br>(schema validation, config, logging)"]
+
+    client -- "publish QoS 1<br>vauxhall/agents/{agent}/activity" --> broker
+    broker -- "subscribe<br>vauxhall/agents/+/activity" --> sub
+
+    core -.-> client
+    core -.-> sub
+```
+
+Both sides share `vauxhall.core`, so hooks and the dashboard validate the same
+schema and read configuration the same way.
+
+## Information Flow
+
+```mermaid
+sequenceDiagram
+    participant A as Agent
+    participant H as Hook process
+    participant B as Mosquitto
+    participant S as DashboardSubscriber
+    participant D as DashboardApp
+    participant U as JavaScript UI
+
+    A->>H: Hook event as JSON on stdin
+    H->>H: Map event to a state, details, and session ID
+    H->>B: Publish validated telemetry (QoS 1)
+    B-->>H: Acknowledgment (awaited up to 1 second)
+    H-->>A: Protocol JSON on stdout
+    B->>S: Deliver on vauxhall/agents/+/activity
+    S->>S: Drop oversized, malformed, or invalid messages
+    S->>D: Valid telemetry
+    D->>U: agent-update event
+    U->>U: Create or update the card and its history
+```
+
+1. **The agent runs a hook.** On each event the agent runs the registered
+   command from the workspace's `.vauxhall-venv` and writes the event to its
+   stdin.
+2. **The hook builds telemetry.** It maps the event to a state (`Acting`,
+   `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
+   `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and
+   resolves the session ID from the agent's own session ID, a hash of the
+   transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
+   skipped.
+3. **The client publishes it.** `TelemetryClient` validates the payload against
+   schema version 1, publishes it at QoS 1 to
+   `vauxhall/agents/<agent_name>/activity`, and waits up to one second for the
+   broker's acknowledgment. The hook always writes valid protocol JSON on
+   stdout, even when telemetry fails, so the agent is never blocked.
+4. **The broker routes it.** Mosquitto delivers the message to the dashboard,
+   which subscribes to `vauxhall/agents/+/activity`.
+5. **The subscriber filters it.** `DashboardSubscriber` drops messages larger
+   than `max_payload_bytes`, then those that fail JSON decoding or validation,
+   and logs each drop without payload values.
+6. **The backend dispatches it.** `DashboardApp` forwards the event to the
+   window. Until the frontend signals readiness, events are queued, keeping the
+   newest `pending_update_limit` of them; the queue is drained in order when the
+   frontend becomes ready.
+7. **The frontend renders it.** The UI keys the card by agent, workspace, and
+   session ID, creates it if needed (evicting the least recently seen card at
+   `max_active_agents`), then updates its state color, activity log, metric
+   badges, last-seen timer, and open history modal, and re-applies the current
+   search and sort.
+
+Information also flows the other way, from the UI to the backend over
+`DashboardIPC`: reading settings and view state, saving them, and copying a
+workspace path. Saved settings that change the broker restart the subscriber,
+and the backend pushes the new stale threshold and card limit back to the UI.
+
 ## Requirements
 
 - Python 3.10 or newer

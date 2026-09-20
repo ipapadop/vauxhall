@@ -150,9 +150,42 @@ and the backend pushes the new stale threshold and card limit back to the UI.
 
 ## Requirements
 
-- Python 3.10 or newer
+- Python 3.10, 3.11, 3.12, or 3.13
 - Mosquitto MQTT broker (for example, `brew install mosquitto` or
   `sudo apt install mosquitto`)
+
+### Supported platforms
+
+Vauxhall is tested on Linux, macOS, and Windows. CI runs the full test suite
+on every supported Python version on Linux, and on Python 3.13 on macOS and
+Windows. It also installs the built wheel outside the checkout and starts the
+packaged dashboard on all three operating systems.
+
+| | Dashboard | Hooks |
+| --- | --- | --- |
+| Python | 3.10 - 3.13 | 3.10 - 3.13 |
+| Linux | glibc 2.28+ on x86-64, glibc 2.39+ on ARM64 | any |
+| macOS | 12 or newer, Intel or Apple silicon | any |
+| Windows | 10 or newer, x86-64 or ARM64 | any |
+
+The hooks depend only on `paho-mqtt`, which is pure Python, so they run
+anywhere a supported Python does. The dashboard's reach is narrower because
+`pyloid` pins `pyside6==6.9.2`, which ships binary wheels only for the
+platforms above.
+
+### Explicitly unsupported
+
+- **Python 3.9 and older**: the code uses syntax and standard-library
+  behavior introduced in 3.10.
+- **Python 3.14 and newer**: `pyloid` declares `Requires-Python: <3.14`, and
+  its pinned `pyside6==6.9.2` does the same, so the dashboard cannot be
+  installed. The cap is on the whole package rather than the `dashboard`
+  extra, so `pip` rejects the install with a clear `Requires-Python` message
+  instead of a dependency-resolution trace. The cap will be lifted once
+  `pyloid` supports a newer PySide6.
+- **musl-based Linux** (Alpine and similar), **32-bit** platforms, and
+  **BSD**: PySide6 publishes no wheels for them, so the dashboard cannot be
+  installed. Hooks still work if a supported Python is available.
 
 ## Installation
 
@@ -393,7 +426,9 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
   the same environment CI uses. After changing dependencies in
   `pyproject.toml`, run `uv lock` and commit `uv.lock`.
 - **Python**: Run `ruff format .` and `ruff check .` with the pinned Ruff
-  version, then `.venv/bin/pytest`.
+  version, then `.venv/bin/pytest`. The packaged dashboard startup test is
+  deselected by default because it downloads Qt; run it with
+  `.venv/bin/pytest -m packaged`.
 - **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
   `npm test`.
 - **Packaging**: After changing metadata, entry points, or bundled assets, run

@@ -10,7 +10,7 @@ name = "vauxhall"
 version = "0.1.0"
 description = "Vauxhall Agent Dashboard & Hooks"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -23,14 +23,15 @@ keywords = ["ai-agents", "dashboard", "hooks", "monitoring", "mqtt", "telemetry"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development",
     "Topic :: System :: Monitoring",
 ]
@@ -128,3 +129,9 @@ quote-style = "double"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# The packaged tests download and install the dashboard's Qt dependencies, so
+# they run in their own CI job rather than on every suite run.
+addopts = ["-m", "not packaged"]
+markers = [
+    "packaged: installs the built wheel and starts the dashboard it contains",
+]

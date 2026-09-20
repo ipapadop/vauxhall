@@ -47,9 +47,7 @@ Security = "https://github.com/ipapadop/vauxhall/security/advisories"
 
 [project.scripts]
 vauxhall = "vauxhall.dashboard.app:main"
-vauxhall-install-claude = "vauxhall.hooks.claude.install:install"
-vauxhall-install-codex = "vauxhall.hooks.codex.install:install"
-vauxhall-install-gemini = "vauxhall.hooks.gemini.install:install"
+vauxhall-hook-install = "vauxhall.hooks.cli:main"
 
 [project.optional-dependencies]
 dashboard = [

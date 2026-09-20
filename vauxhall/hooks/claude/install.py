@@ -30,17 +30,10 @@ HANDLERS = {
     )
 }
 
-
-def install() -> None:
-    """Install Vauxhall telemetry hooks into the current Claude Code project."""
-    installation.install_hooks(
-        agent="Claude Code",
-        module=HOOK_MODULE,
-        settings_path=Path.cwd() / SETTINGS_PATH,
-        handlers=HANDLERS,
-        next_step="Restart Claude Code, or review the new hooks with /hooks.",
-    )
-
-
-if __name__ == "__main__":
-    install()
+INSTALLER = installation.HookInstaller(
+    agent="Claude Code",
+    module=HOOK_MODULE,
+    settings_path=SETTINGS_PATH,
+    handlers=HANDLERS,
+    next_step="Restart Claude Code, or review the new hooks with /hooks.",
+)

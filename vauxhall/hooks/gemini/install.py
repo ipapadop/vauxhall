@@ -78,18 +78,12 @@ def _is_vauxhall_handler(handler: object) -> bool:
     )
 
 
-def install() -> None:
-    """Install Vauxhall telemetry hooks into the current Gemini workspace."""
-    installation.install_hooks(
-        agent="Gemini",
-        module=HOOK_MODULE,
-        settings_path=Path.cwd() / SETTINGS_PATH,
-        handlers=HANDLERS,
-        is_owned=_is_vauxhall_handler,
-        option_keys=_HOOK_OPTION_KEYS,
-        next_step="You can now monitor this workspace in the Vauxhall Dashboard.",
-    )
-
-
-if __name__ == "__main__":
-    install()
+INSTALLER = installation.HookInstaller(
+    agent="Gemini",
+    module=HOOK_MODULE,
+    settings_path=SETTINGS_PATH,
+    handlers=HANDLERS,
+    is_owned=_is_vauxhall_handler,
+    option_keys=_HOOK_OPTION_KEYS,
+    next_step="You can now monitor this workspace in the Vauxhall Dashboard.",
+)

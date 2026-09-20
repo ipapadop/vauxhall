@@ -162,8 +162,13 @@ def private_directory(name: str) -> Path:
     directory = Path(tempfile.gettempdir()) / f"{name}{_USER_SUFFIX}"
     directory.mkdir(mode=0o700, exist_ok=True)
     info = directory.lstat()
-    owned = not hasattr(os, "getuid") or info.st_uid == os.getuid()
-    if not stat.S_ISDIR(info.st_mode) or not owned or info.st_mode & 0o077:
+    private = stat.S_ISDIR(info.st_mode)
+    if hasattr(os, "getuid"):
+        # Windows ignores the creation mode, reports every directory as world
+        # accessible, and names no owner, so these checks would always fail
+        # there. It gives each account its own temporary directory instead.
+        private = private and info.st_uid == os.getuid() and not info.st_mode & 0o077
+    if not private:
         message = f"{directory} is not a private directory"
         raise OSError(message)
     return directory

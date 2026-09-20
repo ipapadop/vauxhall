@@ -4,7 +4,9 @@
 """Main entry point for the Vauxhall Dashboard application."""
 
 import logging
+import sys
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -316,8 +318,22 @@ class DashboardApp:
             logger.info("Vauxhall Dashboard shutting down...")
 
 
+def _use_utf8_output() -> None:
+    """Keep non-ASCII output from killing whoever writes it.
+
+    The UI server prints a banner containing emoji. Windows consoles default to
+    a code page that cannot represent them, and the resulting UnicodeEncodeError
+    stops the server before it serves anything.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            with suppress(AttributeError, OSError, ValueError):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> None:
     """Run the Vauxhall Dashboard application."""
+    _use_utf8_output()
     setup_logging(level=settings.logging.level)
     logger.info("Starting Vauxhall Dashboard...")
 

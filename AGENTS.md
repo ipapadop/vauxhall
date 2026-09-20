@@ -601,6 +601,9 @@ All contributors, including AI agents, must:
    - Run `.venv/bin/pytest`. The packaging tests build real wheels, check
      metadata and bundled UI assets, install the wheel into clean environments,
      and run both hook installers outside the source checkout.
+   - `.venv/bin/pytest -m packaged` runs the packaged dashboard startup test,
+     which is deselected by default because it downloads Qt. CI runs it on
+     Linux, macOS, and Windows.
    - With Node.js 20.19 or newer, run `npm test` for the frontend.
    - Add unit tests for every new feature and bug fix.
 3. **Documentation**: After every change, update `README.md` (features,

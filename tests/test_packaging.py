@@ -8,9 +8,13 @@ import configparser
 import importlib.metadata
 import json
 import os
+import re
 import shlex
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 import zipfile
 from email.parser import Parser
 from pathlib import Path
@@ -18,6 +22,12 @@ from pathlib import Path
 import pytest
 
 import vauxhall
+
+SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12", "3.13")
+REQUIRES_PYTHON = ">=3.10,<3.14"
+DASHBOARD_START_SECONDS = 90
+DASHBOARD_SETTLE_SECONDS = 5
+DASHBOARD_STOP_SECONDS = 30
 
 
 def _build_wheel(wheel_dir: Path) -> Path:
@@ -75,6 +85,57 @@ def _venv_script(venv_dir: Path, name: str) -> Path:
     if os.name == "nt":
         return venv_dir / "Scripts" / f"{name}.exe"
     return venv_dir / "bin" / name
+
+
+def _free_port() -> int:
+    """Return a port that is free when asked.
+
+    Returns:
+        The port number.
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def _serves_ui(dashboard: subprocess.Popen[str], port: int) -> bool:
+    """Wait for a running dashboard to answer on its UI port.
+
+    Args:
+        dashboard: The running dashboard process.
+        port: Port the dashboard was told to serve its UI on.
+
+    Returns:
+        Whether the dashboard served its UI before exiting or timing out.
+    """
+    url = f"http://127.0.0.1:{port}/index.html"
+    deadline = time.monotonic() + DASHBOARD_START_SECONDS
+    while time.monotonic() < deadline:
+        if dashboard.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                return response.status == 200
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
+def _stop_dashboard(dashboard: subprocess.Popen[str]) -> str:
+    """Stop a running dashboard and collect everything it printed.
+
+    Args:
+        dashboard: The running dashboard process.
+
+    Returns:
+        The dashboard's combined standard output and error.
+    """
+    dashboard.terminate()
+    try:
+        return dashboard.communicate(timeout=DASHBOARD_STOP_SECONDS)[0]
+    except subprocess.TimeoutExpired:
+        dashboard.kill()
+        return dashboard.communicate()[0]
 
 
 def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
@@ -228,20 +289,46 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         "Changelog, https://github.com/ipapadop/vauxhall/releases",
         "Security, https://github.com/ipapadop/vauxhall/security/advisories",
     }
+    # Setuptools reorders the clauses, so compare them rather than the string.
+    assert set(metadata["Requires-Python"].split(",")) == set(
+        REQUIRES_PYTHON.split(",")
+    )
+    classifiers = set(metadata.get_all("Classifier"))
     assert {
         "Development Status :: 3 - Alpha",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
-    } <= set(metadata.get_all("Classifier"))
+        "Operating System :: MacOS",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: POSIX :: Linux",
+        *(
+            f"Programming Language :: Python :: {version}"
+            for version in SUPPORTED_PYTHON_VERSIONS
+        ),
+    } <= classifiers
+    # A classifier for a version outside ``Requires-Python`` advertises support
+    # that cannot be installed.
+    assert {
+        classifier
+        for classifier in classifiers
+        if classifier.startswith("Programming Language :: Python :: 3.")
+    } == {
+        f"Programming Language :: Python :: {version}"
+        for version in SUPPORTED_PYTHON_VERSIONS
+    }
     assert entry_points["console_scripts"] == {
         "vauxhall": "vauxhall.dashboard.app:main",
         "vauxhall-hook-install": "vauxhall.hooks.cli:main",
     }
     assert 'pyloid>=0.27.2; extra == "dashboard"' in metadata.get_all("Requires-Dist")
+
+
+def test_readme_promises_the_supported_python_versions() -> None:
+    """The README must name exactly the Python versions the package allows."""
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    requirement = next(
+        line for line in readme.splitlines() if line.startswith("- Python ")
+    )
+
+    assert re.findall(r"3\.\d+", requirement) == list(SUPPORTED_PYTHON_VERSIONS)
 
 
 def test_package_version_matches_installed_distribution() -> None:
@@ -366,3 +453,71 @@ def test_wheel_installer_is_independent_of_source_checkout(
         text=True,
     ).stdout.strip()
     assert installed_version == "0.1.0"
+
+
+@pytest.mark.packaged
+def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
+    """The installed dashboard must start and serve its UI on a desktop OS.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    wheel_path = _build_wheel(tmp_path / "wheel")
+    dashboard_venv = tmp_path / "dashboard-venv"
+    subprocess.run(
+        [sys.executable, "-m", "venv", str(dashboard_venv)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            str(_venv_python(dashboard_venv)),
+            "-m",
+            "pip",
+            "install",
+            f"{wheel_path}[dashboard]",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    port = _free_port()
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = os.environ.copy()
+    environment.update(
+        {
+            # Qt needs a display, and Chromium needs its GPU and sandbox off to
+            # run without one on a build machine.
+            "QT_QPA_PLATFORM": "offscreen",
+            "QTWEBENGINE_CHROMIUM_FLAGS": (
+                "--disable-gpu --no-sandbox --disable-software-rasterizer "
+                "--in-process-gpu"
+            ),
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "VAUXHALL_DASHBOARD_PORT": str(port),
+        }
+    )
+    dashboard = subprocess.Popen(
+        [str(_venv_script(dashboard_venv, "vauxhall"))],
+        cwd=home,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    try:
+        served = _serves_ui(dashboard, port)
+        # The UI is served before the window opens, so a dashboard that cannot
+        # draw answers once and then dies. Give it the chance to do so.
+        time.sleep(DASHBOARD_SETTLE_SECONDS)
+        still_running = dashboard.poll() is None
+    finally:
+        output = _stop_dashboard(dashboard)
+
+    assert served, output
+    assert still_running, output

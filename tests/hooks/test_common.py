@@ -78,6 +78,27 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("*.claimed"))
 
 
+def test_private_directory_allows_a_platform_without_posix_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A platform that reports no owner and no mode bits must still be usable.
+
+    Windows ignores the mode a directory is created with, reports every
+    directory as world accessible, and has no ``os.getuid``.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setattr(common.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.delattr(common.os, "getuid", raising=False)
+    directory = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
+    directory.mkdir()
+    directory.chmod(0o777)
+
+    assert common.private_directory("vauxhall-messages-claude") == directory
+
+
 def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> None:
     """Streaming text is kept private and published once per completed message.
 
@@ -137,6 +158,11 @@ def test_discard_message_chunks_prevents_next_turn_contamination(
     assert message == "new"
 
 
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"),
+    reason="Windows has no mode bits to plant, and its temporary directory is "
+    "per account",
+)
 def test_private_directory_rejects_a_directory_another_account_could_reach(
     tmp_path: Path,
 ) -> None:
@@ -145,8 +171,7 @@ def test_private_directory_rejects_a_directory_another_account_could_reach(
     Args:
         tmp_path: Pytest temporary directory.
     """
-    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
-    planted = tmp_path / f"vauxhall-messages-claude{suffix}"
+    planted = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
     planted.mkdir()
     planted.chmod(0o777)
 

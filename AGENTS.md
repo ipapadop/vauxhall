@@ -148,7 +148,10 @@ telemetry. Rejection logs never include payload values. The dashboard and
   own click-to-copy handler sits on top of the workspace button rather than
   replacing it. The history and settings modals are `<dialog>` elements opened
   with `showModal()`, so the browser contains focus and Escape closes them;
-  closing returns focus to the control that opened it. Search, sort, filter, and
+  closing returns focus to the control that opened it, or to the agent grid
+  when that control's card was evicted meanwhile. Each card is a `group` named
+  by agent and session, and its history button names the agent, workspace, and
+  session, so concurrent sessions stay distinguishable. Search, sort, filter, and
   theme controls carry `aria-label`s, the status line is `role="status"` with
   `aria-live="polite"`, and `:focus-visible` draws an accent outline. Under
   `prefers-reduced-motion: reduce`, `--transition-speed` drops to `0.01ms` and

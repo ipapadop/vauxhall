@@ -47,7 +47,21 @@ test('the workspace and history controls are buttons with accessible names', () 
     assert.equal(workspace.textContent, IDENTITY.workspace);
     assert.equal(history.tagName, 'BUTTON');
     assert.equal(history.getAttribute('type'), 'button');
-    assert.equal(history.getAttribute('aria-label'), 'View history for Codex');
+    assert.equal(history.getAttribute('aria-label'), 'View history for Codex in /home/user/project, session session-1');
+});
+
+test('each card names its session, so concurrent sessions stay distinguishable', () => {
+    setupPage();
+    const same = { agent: 'Codex', workspace: '/home/user/project' };
+    const first = createCard({ ...same, session_id: 'one' }, null, () => {});
+    const second = createCard({ ...same, session_id: 'two' }, null, () => {});
+
+    assert.equal(first.getAttribute('role'), 'group');
+    assert.equal(first.getAttribute('aria-label'), 'Codex session one');
+    assert.notEqual(
+        first.querySelector('.history-icon').getAttribute('aria-label'),
+        second.querySelector('.history-icon').getAttribute('aria-label'),
+    );
 });
 
 test('activating the workspace button copies the path exactly once', async () => {

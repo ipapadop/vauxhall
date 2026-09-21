@@ -508,7 +508,10 @@ def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
         env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        # The dashboard writes UTF-8 whatever the console code page, and its
+        # banner includes emoji that the Windows default codec cannot decode.
+        encoding="utf-8",
+        errors="replace",
     )
 
     try:

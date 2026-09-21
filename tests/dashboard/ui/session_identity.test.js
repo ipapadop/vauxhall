@@ -145,14 +145,20 @@ test('configured capacity retains existing cards and closes an evicted card moda
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.equal(firstCard.history.length, 2);
 
-    firstCard.querySelector('.history-icon').click();
+    const opener = firstCard.querySelector('.history-icon');
+    opener.click();
     assert.ok(document.getElementById('history-modal').hasAttribute('open'));
+    const focused = [];
+    opener.focus = () => focused.push('opener');
+    document.getElementById('agent-grid').focus = () => focused.push('grid');
 
     onAgentUpdate({ ...base, session_id: 'native:two' });
 
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.equal(agents[firstKey], undefined);
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
+    // The opener left with its card, so focus goes to the grid, not the body.
+    assert.deepEqual(focused, ['grid']);
 });
 
 test('capacity loads before readiness delivers queued events', async (t) => {

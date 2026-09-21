@@ -429,7 +429,7 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
 - **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
   `npm test`.
 - **Accessibility**: Dashboard changes must keep the
-  [accessibility contract](#accessibility): real buttons, accessible names,
+  [accessibility contract](AGENTS.md#dashboard-behavior): real buttons, accessible names,
   `<dialog>` modals, live regions, and reduced-motion support, covered by
   `tests/dashboard/ui/accessibility.test.js`.
 - **Coverage**: `.venv/bin/pytest --cov` and, on Node.js 22.8 or newer,

@@ -108,8 +108,12 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     sessionElement.textContent = `Session: ${sessionId}`;
     sessionElement.title = sessionId;
 
+    // Concurrent sessions can share an agent and a workspace, so the names
+    // carry the whole card identity.
+    card.setAttribute('role', 'group');
+    card.setAttribute('aria-label', `${agent} session ${sessionId}`);
     const historyButton = card.querySelector('.history-icon');
-    historyButton.setAttribute('aria-label', `View history for ${agent}`);
+    historyButton.setAttribute('aria-label', `View history for ${agent} in ${workspace}, session ${sessionId}`);
     historyButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openHistoryCallback(historyButton);

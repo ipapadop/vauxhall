@@ -5,12 +5,15 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # The release workflow runs the same checks before it publishes anything.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # A literal prefix, because a called workflow sees the caller's name.
+  group: lint-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

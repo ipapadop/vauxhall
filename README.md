@@ -6,9 +6,18 @@
 
 # Vauxhall Agent Dashboard
 
-Vauxhall is a real-time dashboard for agents such as Claude Code,
-Codex, and Gemini CLI. Agents publish telemetry over MQTT, and the dashboard
-shows each agent session as a card in a grid.
+Vauxhall is a desktop dashboard that shows what your coding agents are doing.
+It has built-in hooks for Claude Code, Codex, and Gemini CLI, and any other
+agent can report to it through a small Python client or plain MQTT. The hooks
+publish telemetry to an MQTT broker, and the dashboard shows each agent
+session as a card in a grid.
+
+> [!IMPORTANT]
+> Vauxhall is **alpha** software. Interfaces can change between minor
+> releases, the MQTT connection has no authentication or encryption yet, and
+> the hooks publish prompts and commands. Read
+> [Known limitations](#known-limitations) and [docs/privacy.md](docs/privacy.md)
+> before using it with sensitive work.
 
 <p align="center">
   <img src="docs/dashboard.png" width="900"
@@ -54,6 +63,271 @@ shows each agent session as a card in a grid.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
   and never turned into shell commands. Hooks always return valid protocol JSON,
   even when telemetry fails.
+
+## First run
+
+This path runs everything on one machine and ends with a test card on the
+dashboard. It takes a few minutes, most of it downloading Qt.
+
+**1. Install and start Mosquitto**, the MQTT broker, with its command-line
+clients:
+
+```bash
+# macOS
+brew install mosquitto && brew services start mosquitto
+# Debian and Ubuntu (the package starts the broker as a service)
+sudo apt install mosquitto mosquitto-clients
+# Windows: run the installer from https://mosquitto.org/download/
+```
+
+Mosquitto 2 listens only on `localhost:1883` by default, which is what
+Vauxhall expects. Keep it that way; see [docs/privacy.md](docs/privacy.md).
+
+**2. Install Vauxhall** with [pipx](https://pipx.pypa.io/), which puts the
+`vauxhall` and `vauxhall-hook-install` commands on your `PATH`:
+
+```bash
+pipx install "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"
+```
+
+**3. Start the dashboard:**
+
+```bash
+vauxhall
+```
+
+The status line at the top shows `Connected to Agent Fleet` once it reaches
+the broker.
+
+**4. Send a test event** from another terminal:
+
+```bash
+mosquitto_pub -h localhost -q 1 -t vauxhall/agents/Hello/activity -m '{"schema_version": 1, "agent": "Hello", "workspace": "/tmp/hello", "session_id": "first-run", "state": "Thinking", "details": {"status": "It works"}}'
+```
+
+A green **Hello** card appears with `It works` in its activity log. On
+Windows, save the JSON to `hello.json` and run
+`mosquitto_pub -h localhost -q 1 -t vauxhall/agents/Hello/activity -f hello.json`
+from the Mosquitto installation directory.
+
+**5. Connect an agent.** In a project you work on with Claude Code, Codex, or
+Gemini CLI, install the hooks for the agents you use and restart them:
+
+```bash
+cd /path/to/project
+vauxhall-hook-install claude codex gemini
+```
+
+The installer creates `.vauxhall-venv` in the project; add it to
+`.gitignore`. Codex also asks you to trust the new hooks: open `/hooks` in
+Codex. Start a session and its card appears on the dashboard.
+
+If a step doesn't work, see [docs/troubleshooting.md](docs/troubleshooting.md).
+
+## Installation
+
+Vauxhall is installed from GitHub for now; it isn't on PyPI yet. Every install
+command below needs Git. To install a release or another branch, tag, or
+commit, add `@<ref>` to the URL, for example
+`git+https://github.com/ipapadop/vauxhall.git@v0.1.0`.
+
+| Machine | Install |
+| --- | --- |
+| Dashboard | `pipx install "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"` |
+| Agents only | `pipx install "vauxhall[hooks] @ git+https://github.com/ipapadop/vauxhall.git"` |
+
+The `hooks` extra installs only `paho-mqtt`. Without pipx, install either one
+with `pip` into a virtual environment of your own. From a clone, run
+`pip install ".[dashboard]"` or `pip install ".[hooks]"`. Each GitHub release
+also carries a wheel and a source archive, with a `SHA256SUMS` file to check
+them.
+
+**The dashboard's download is large.** The desktop window runs on Qt through
+PySide6, a download of about 260 MB on Linux and Windows and 450 MB on macOS,
+and about 670 MB once installed. Machines that only run agents need just the
+`hooks` extra, which is under 1 MB.
+
+## Compatibility
+
+Requirements:
+
+- Python 3.10, 3.11, 3.12, or 3.13
+- An MQTT broker, such as [Mosquitto](https://mosquitto.org/) 2
+
+| | Dashboard | Hooks |
+| --- | --- | --- |
+| Python | 3.10 - 3.13 | 3.10 - 3.13 |
+| Linux | glibc 2.28+ on x86-64, glibc 2.39+ on ARM64 | any |
+| macOS | 12 or newer, Intel or Apple silicon | any |
+| Windows | 10 or newer, x86-64 or ARM64 | any |
+
+The hooks depend only on `paho-mqtt`, which is pure Python, so they run
+anywhere a supported Python does. The dashboard's reach is narrower because
+`pyloid` pins `pyside6==6.9.2`, which ships binary wheels only for the
+platforms above. CI runs the full test suite on every supported Python version
+on Linux and on Python 3.13 on macOS and Windows, and starts the packaged
+dashboard on all three.
+
+| Agent | Integration | Settings file written | Needs |
+| --- | --- | --- | --- |
+| Claude Code | Built in | `.claude/settings.local.json` | A release with command hooks, including `MessageDisplay`, `PostCompact`, and `StopFailure` |
+| Codex | Built in | `.codex/hooks.json` | A release with the stable `hooks` feature, including `Interrupt` and `SubagentStart` |
+| Gemini CLI | Built in | `.gemini/settings.json` | A release with hooks, including `AfterModel` and `PreCompress` |
+| Anything else | `TelemetryClient` or raw MQTT | None | Python 3.10+, or any MQTT client |
+
+The hooks follow each agent's documented hook format. An agent release
+without one of the events still works, without that event's updates. The
+release notes record the agent versions each Vauxhall release was checked
+with.
+
+## Usage
+
+### Running the dashboard
+
+Run `vauxhall`, or `uv run vauxhall` from a source checkout. Clicking a card
+copies its workspace path; the ⚙️ button opens the settings dialog. See
+[docs/configuration.md](docs/configuration.md) for every setting.
+
+### Installing agent hooks
+
+Run the installer from the agent's workspace, naming each agent to install:
+
+```bash
+# One agent
+vauxhall-hook-install claude
+
+# Several agents at once, sharing one hooks environment
+vauxhall-hook-install claude codex gemini
+```
+
+The agents are `claude`, `codex`, and `gemini`; at least one is required.
+
+The installer recreates `.vauxhall-venv` in the workspace and installs
+Vauxhall into it from the same source as the running copy: the same Git
+commit, local directory, or wheel file, or otherwise the matching PyPI
+release. Agents named in one command share that environment, so it is built
+once however many you install. It then registers hooks that run the installed
+hook module, so the hooks don't run code from a source checkout. Before
+changing an existing hook or settings file, the installer backs it up and
+validates it. Every named agent's settings are validated before the
+environment is built, so an invalid file leaves them all unchanged and exits
+with an error. Reinstalling replaces only Vauxhall's own handlers and writes
+each file atomically, preserving unrelated settings and hooks. For Claude Code
+the installer writes `.claude/settings.local.json`; restart Claude Code or open
+`/hooks` to apply the hooks. For Codex, open `/hooks` after installing to
+review and trust the new project hooks.
+
+Run the installer again to enable assistant messages in existing workspaces.
+Claude Code and Gemini CLI report completed messages during a turn. Codex
+reports its final reply from the `Stop` hook and reads interim commentary from
+its local session record when a later hook runs. Codex interim messages are
+best effort because the record format can change and writes may lag hook events.
+
+See [docs/integrations.md](docs/integrations.md) for event mappings, manual
+configuration, the telemetry schema, and integrating other agents.
+
+### Monitoring agents on other machines
+
+Keep the broker on the dashboard machine's loopback interface and forward it
+to each agent machine over SSH. [docs/remote-deployment.md](docs/remote-deployment.md)
+has the commands.
+
+### Simulating agents
+
+To try the dashboard without real agents, publish mock telemetry from a source
+checkout:
+
+```bash
+uv run python scripts/simulate_agent.py -n 5 -t 20
+```
+
+- `-n`, `--num-agents`: Number of concurrent agents (default 1).
+- `-t`, `--num-transitions`: Events per agent (default 5).
+
+## Uninstalling
+
+### Hooks
+
+In each workspace where you installed hooks:
+
+1. **Remove the handlers** from the agent's settings file:
+   `.claude/settings.local.json`, `.codex/hooks.json`, or
+   `.gemini/settings.json`. Delete every handler whose `command` ends with
+   `-m vauxhall.hooks.<agent>.telemetry_hook`, then any matcher group or event
+   left empty. On Windows, the installer's commands start with
+   `powershell.exe -NoProfile -NonInteractive -EncodedCommand`. In
+   `.gemini/settings.json`, also delete handlers named `vauxhall-...` that run
+   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the
+   installer created the file (no `.bak` next to it), you can delete the file
+   instead. Codex's installer also added a top-level `"description"`, which you
+   can delete.
+2. **Remove the hook environment**: `rm -rf .vauxhall-venv`, or
+   `Remove-Item -Recurse -Force .vauxhall-venv` in PowerShell. Do this after
+   step 1; otherwise the agent reports a failing hook on every event.
+3. **Restart the agent.** Delete the `.bak` backups once you no longer need
+   them.
+
+### Vauxhall
+
+```bash
+pipx uninstall vauxhall
+rm -rf ~/.config/vauxhall   # settings and remembered view
+```
+
+Temporary files are in `vauxhall-*` directories in the system temporary
+directory; see [docs/privacy.md](docs/privacy.md#on-disk).
+
+## Privacy and security
+
+The hooks publish your prompts, shell commands, assistant messages, tool names,
+and workspace paths, and Gemini CLI's hook publishes the complete input of
+every tool call. Anyone who can connect to the broker can read all of it.
+Tool output is never published. The dashboard keeps telemetry in memory only.
+
+- Use the unauthenticated `localhost:1883` default for local development only.
+- Reach remote agents over SSH, as in
+  [docs/remote-deployment.md](docs/remote-deployment.md); never expose the
+  broker on a network.
+- [docs/privacy.md](docs/privacy.md) lists every field each integration
+  publishes, where data is kept, and how to limit it.
+
+Report vulnerabilities through the repository's
+[security advisories](https://github.com/ipapadop/vauxhall/security/advisories).
+
+## Known limitations
+
+- **Alpha**: while the version is `0.x`, a minor release can break
+  compatibility; see the [versioning policy](docs/releasing.md#versioning-policy).
+- **No MQTT authentication or TLS** (issue #3). Remote agents need an SSH
+  tunnel.
+- **No per-field privacy controls**, and the Gemini CLI hook publishes whole
+  tool inputs (issue #3).
+- **Not on PyPI yet**; install from GitHub.
+- **No uninstall command**; hooks are removed by hand, as above.
+- **Agent gaps**: Claude Code has no interrupt event and hooks don't see token
+  counts; Codex doesn't report Bash exit codes to hooks, so those calls show
+  `result unavailable`, and its interim messages are best effort; Gemini CLI
+  can't tell identical overlapping tool calls apart, so their durations may
+  be swapped. See [docs/integrations.md](docs/integrations.md).
+- **LOCAL/REMOTE badge**: hooks don't send `env`, so the badge is guessed from
+  the workspace path, and remote workspaces under `/home` show LOCAL.
+- **Nothing is stored**: a card's history holds 20 events and is lost when the
+  dashboard exits.
+- **Dashboard platforms** are limited to those PySide6 6.9.2 supports, and Qt
+  is a large download.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [docs/integrations.md](docs/integrations.md) | Telemetry schema, states, each agent's event mapping and manual setup, and publishing from other agents |
+| [docs/configuration.md](docs/configuration.md) | Configuration files, environment variables, precedence, defaults, and the settings dialog |
+| [docs/privacy.md](docs/privacy.md) | Every field collected, retention, and broker exposure |
+| [docs/remote-deployment.md](docs/remote-deployment.md) | Monitoring agents on other machines over SSH |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Broker, dashboard, hook, and trust problems |
+| [docs/releasing.md](docs/releasing.md) | Versioning and compatibility policy, and the release process |
+| [CHANGELOG.md](CHANGELOG.md) | Changes in each release |
+| [AGENTS.md](AGENTS.md) | Dashboard behavior contract and rules for contributors |
 
 ## Architecture
 
@@ -159,250 +433,6 @@ Information also flows the other way, from the UI to the backend over
 workspace path. Saved settings that change the broker restart the subscriber,
 and the backend pushes the new stale threshold and card limit back to the UI.
 
-## Requirements
-
-- Python 3.10, 3.11, 3.12, or 3.13
-- Mosquitto MQTT broker (for example, `brew install mosquitto` or
-  `sudo apt install mosquitto`)
-
-### Supported platforms
-
-Vauxhall is tested on Linux, macOS, and Windows. CI runs the full test suite
-on every supported Python version on Linux, and on Python 3.13 on macOS and
-Windows. It also installs the built wheel outside the checkout and starts the
-packaged dashboard on all three operating systems.
-
-| | Dashboard | Hooks |
-| --- | --- | --- |
-| Python | 3.10 - 3.13 | 3.10 - 3.13 |
-| Linux | glibc 2.28+ on x86-64, glibc 2.39+ on ARM64 | any |
-| macOS | 12 or newer, Intel or Apple silicon | any |
-| Windows | 10 or newer, x86-64 or ARM64 | any |
-
-The hooks depend only on `paho-mqtt`, which is pure Python, so they run
-anywhere a supported Python does. The dashboard's reach is narrower because
-`pyloid` pins `pyside6==6.9.2`, which ships binary wheels only for the
-platforms above.
-
-## Installation
-
-Install it from GitHub with pip, which needs Git on the machine.
-
-Dashboard:
-
-```bash
-pip install "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"
-```
-
-Agent machines (installs only `paho-mqtt`):
-
-```bash
-pip install "vauxhall[hooks] @ git+https://github.com/ipapadop/vauxhall.git"
-```
-
-To install a specific branch, tag, or commit, add `@<ref>` to the URL, for
-example `git+https://github.com/ipapadop/vauxhall.git@main`.
-
-To install from a local clone instead:
-
-```bash
-git clone https://github.com/ipapadop/vauxhall.git
-cd vauxhall
-pip install ".[dashboard]"  # or ".[hooks]" on agent machines
-```
-
-## Usage
-
-### 1. Start the broker
-
-```bash
-mosquitto
-```
-
-### 2. Run the dashboard
-
-```bash
-vauxhall
-```
-
-From a source checkout, run `uv run vauxhall`.
-
-### 3. Install agent hooks
-
-Run the installer from the agent's workspace, naming each agent to install:
-
-```bash
-# One agent
-vauxhall-hook-install claude
-
-# Several agents at once, sharing one hooks environment
-vauxhall-hook-install claude codex gemini
-```
-
-The agents are `claude`, `codex`, and `gemini`; at least one is required.
-
-The installer recreates `.vauxhall-venv` in the workspace and installs
-Vauxhall into it from the same source as the running copy: the same Git
-commit, local directory, or wheel file, or otherwise the matching PyPI
-release. Agents named in one command share that environment, so it is built
-once however many you install. It then registers hooks that run the installed
-hook module, so the hooks don't run code from a source checkout. Before
-changing an existing hook or settings file, the installer backs it up and
-validates it. Every named agent's settings are validated before the
-environment is built, so an invalid file leaves them all unchanged and exits
-with an error. Reinstalling replaces only Vauxhall's own handlers and writes
-each file atomically, preserving unrelated settings and hooks. For Claude Code
-the installer writes `.claude/settings.local.json`; restart Claude Code or open
-`/hooks` to apply the hooks. For Codex, open `/hooks` after installing to
-review and trust the new project hooks.
-
-Run the installer again to enable assistant messages in existing workspaces.
-Claude Code and Gemini CLI report completed messages during a turn. Codex
-reports its final reply from the `Stop` hook and reads interim commentary from
-its local session record when a later hook runs. Codex interim messages are
-best effort because the record format can change and writes may lag hook events.
-
-See [AGENTS.md](AGENTS.md) for event mappings, manual configuration, and
-integrating other agents.
-
-### 4. Simulate agents
-
-To try the dashboard without real agents, publish mock telemetry from a source
-checkout:
-
-```bash
-uv run python scripts/simulate_agent.py -n 5 -t 20
-```
-
-- `-n`, `--num-agents`: Number of concurrent agents (default 1).
-- `-t`, `--num-transitions`: Events per agent (default 5).
-
-## Configuration
-
-The dashboard reads `vauxhall_dashboard.json` and hooks read
-`vauxhall_hooks.json`, from the current directory or, if the file is not there,
-from `~/.config/vauxhall/`. Environment variables override file values, which
-override the defaults. Hooks use only the `mqtt` and `logging` sections. See
-`vauxhall_dashboard.json.example` and `vauxhall_hooks.json.example`.
-
-| Section | Field | Environment variable | Default | Valid values |
-| --- | --- | --- | --- | --- |
-| `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
-| `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
-| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535 |
-| `logging` | `level` | `VAUXHALL_LOGGING_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
-| `dashboard` | `port` | `VAUXHALL_DASHBOARD_PORT` | `8080` | Integer 1–65535 |
-| `dashboard` | `debug` | `VAUXHALL_DASHBOARD_DEBUG` | `false` | Boolean (`true`/`false`, `1`/`0`, or `yes`/`no`) |
-| `dashboard` | `window_title` | `VAUXHALL_DASHBOARD_WINDOW_TITLE` | `Vauxhall Agent Dashboard` | Non-empty string |
-| `dashboard` | `width` | `VAUXHALL_DASHBOARD_WIDTH` | `1000` | Integer 320–16384 |
-| `dashboard` | `height` | `VAUXHALL_DASHBOARD_HEIGHT` | `800` | Integer 320–16384 |
-| `dashboard` | `stale_threshold` | `VAUXHALL_DASHBOARD_STALE_THRESHOLD` | `120` | Integer 1–86400 seconds |
-| `dashboard` | `pending_update_limit` | `VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` | `500` | Integer 1–10000 |
-| `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
-| `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
-
-Invalid values (malformed JSON, non-object sections, wrong types, out-of-range
-values, or unparsable environment values) stop the dashboard at startup. The
-error names the environment variable or file path, the field, the value, and
-the expected constraint. Hooks print the error to stderr and still return valid
-protocol JSON. MQTT authentication and TLS are not supported yet (issue #3).
-
-`vauxhall.core.config_store` saves configuration for the planned settings
-editor (issue #29):
-
-- `save_user_config(filename, config_type, changes)` always writes the per-user
-  file `~/.config/vauxhall/<filename>`. It merges the changes into the existing
-  file, keeps other keys, removes values equal to their defaults, validates the
-  result with the same loader the dashboard or hooks use, and replaces the file
-  atomically.
-- `field_sources(filename, config_type)` reports whether each field comes from
-  an environment variable, a file, or its default, and whether saving can
-  change it.
-
-A field can't be saved when an environment variable sets it, or when a
-configuration file exists in the current directory, because that file hides the
-per-user file entirely. Unknown or read-only fields, malformed files, and
-invalid values raise `ConfigurationError` and leave the file unchanged.
-
-### Settings dialog
-
-The ⚙️ toolbar button opens a dialog with one row per field. Each row shows
-where the value comes from (default, file, or environment) and has a reset
-button. Fields set by an environment variable, and every field when a
-configuration file exists in the current directory, are read-only. Values are
-checked as you type and again when saving; if anything is invalid, nothing is
-saved.
-
-Saved changes take effect as follows:
-
-| When | Fields |
-| --- | --- |
-| Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes` |
-| After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive` |
-| After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
-
-Lowering `max_active_agents` removes the least recently seen surplus cards
-right away. When the MQTT
-values in the dialog differ from the ones the hooks use, including after a
-reset, **Also update hooks configuration** saves the differing values to
-`~/.config/vauxhall/vauxhall_hooks.json`, even if the dashboard's own values
-are unchanged. Both files are validated
-before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
-environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
-run on another machine. The option is unavailable, with the reason shown, when
-the hooks configuration is malformed or a `vauxhall_hooks.json` in the current
-directory takes precedence over the per-user file.
-
-### Remembered view
-
-The dashboard keeps view preferences in `~/.config/vauxhall/dashboard_state.json`,
-separate from the configuration files. It writes this file itself; you don't
-need to edit it.
-
-- **Theme, sort order, and history state filter** are saved half a second after
-  you change them, or right away when the dashboard closes. A change you make
-  before the saved preferences load is kept. The search text is not saved.
-- **Window size, position, and maximized state** are saved when the dashboard
-  closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
-  only set the size on first start. A saved position is used only if the
-  window's top edge would still be on a connected screen. A maximized window
-  keeps the normal size and position it had when the dashboard started, so if
-  you move it to another monitor before maximizing, it reopens on the first one.
-- **Theme on first paint**: the theme is also kept in the page's local storage,
-  so the dashboard starts with the right theme before the state file is read.
-  A theme saved there by earlier versions is copied to the state file the first
-  time the dashboard starts.
-
-Unknown keys and invalid values are ignored. An unreadable or corrupt file is
-logged and treated as empty.
-
-## Telemetry
-
-Producers publish schema version 1 JSON to
-`vauxhall/agents/<agent_name>/activity`. The `schema_version`, `agent`,
-`workspace`, `session_id`, and `state` fields are required. `session_id` must
-stay the same for a whole session and be unique among concurrent sessions of
-the same agent in the same workspace; generate a UUID when the session starts.
-
-```python
-from uuid import uuid4
-
-from vauxhall.hooks.client import TelemetryClient
-
-session_id = str(uuid4())
-client = TelemetryClient(host="localhost", port=1883)
-client.send(
-    agent="MyAgent",
-    workspace="/path/to/project",
-    session_id=session_id,
-    state="Acting",
-    tool="grep",
-)
-```
-
-The dashboard logs and drops oversized, malformed, and invalid messages. See
-[AGENTS.md](AGENTS.md#telemetry-schema) for the full schema and field limits.
-
 ## Project Structure
 
 - `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
@@ -410,9 +440,11 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
 - `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
   Code, Codex, and Gemini CLI hooks and installers.
-- `docs/`: The dashboard screenshot shown above.
+- `docs/`: User documentation and the dashboard screenshot shown above.
 - `scripts/`: The agent simulator and a logging color check.
-- `tests/`: Python tests mirroring the `vauxhall/` package layout, with frontend tests in `tests/dashboard/ui/`.
+- `scripts/release_notes.py`: The release workflow's tag and changelog check.
+- `tests/`: Python tests mirroring the `vauxhall/` package layout, with
+  frontend tests in `tests/dashboard/ui/`.
 
 ## Development
 
@@ -436,7 +468,12 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
   `npm run test:coverage` check the floors CI enforces. Raise a floor when
   coverage rises rather than lowering it to make a change pass.
 - **Packaging**: After changing metadata, entry points, or bundled assets, run
-  `python -m build` and `twine check dist/*`.
+  `python -m build` and `twine check dist/*`. The sdist is a complete source
+  artifact: a new top-level file the tests or build need goes in
+  `MANIFEST.in`.
+- **Changelog and releases**: Add user-visible changes under
+  `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). Pushing a `v*` tag runs
+  the release workflow; see [docs/releasing.md](docs/releasing.md).
 
 ## License
 

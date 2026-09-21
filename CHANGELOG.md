@@ -7,7 +7,7 @@ the [versioning policy](docs/releasing.md#versioning-policy).
 ## [Unreleased]
 
 The first release, planned as 0.1.0. It is alpha software; see
-[known limitations](README.md#known-limitations).
+[known limitations](https://github.com/ipapadop/vauxhall#known-limitations).
 
 ### Added
 

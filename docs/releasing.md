@@ -13,8 +13,9 @@ While the version is `0.x`:
   [changelog](../CHANGELOG.md), with what to do about it.
 - A **patch** release (`0.1.0` → `0.1.1`) only fixes bugs and never breaks
   anything listed below.
-- A version with a pre-release suffix (`rc1`, `b1`) is published as a GitHub
-  pre-release.
+- A version with a pre-release suffix (`a1`, `b1`, `rc1`, or `.dev1`) is
+  published as a GitHub pre-release. A post-release (`0.1.0.post1`) is a
+  normal release.
 
 From `1.0.0` on, breaking changes need a major release.
 
@@ -41,7 +42,9 @@ fix, not a breaking change.
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Every pull request
 with a user-visible change adds a line under `## [Unreleased]`, in the
 **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**, or
-**Security** group.
+**Security** group. Links in an entry must be absolute URLs, such as
+`https://github.com/ipapadop/vauxhall/blob/main/docs/privacy.md`, because the
+entry becomes the GitHub release notes, where relative links don't resolve.
 
 ## Making a release
 
@@ -74,9 +77,12 @@ with a user-visible change adds a line under `## [Unreleased]`, in the
       `SHA256SUMS` file, using the changelog entry as its notes, and then
       publishes it.
 
-   If any step fails, nothing is released. Fix the problem, delete the tag
+   If any step fails, nothing is published. A transient failure can be
+   re-run from the Actions page; the last job reuses a draft release that an
+   earlier attempt left behind. To change what is released instead, delete
+   that draft if there is one (`gh release delete v0.1.0`), delete the tag
    (`git push --delete origin v0.1.0`; with the tag ruleset below, only an
-   admin can), and tag again.
+   admin can), fix the problem, and tag again.
 
 To check a download, run `sha256sum -c SHA256SUMS` in the directory that holds
 the release files.
@@ -89,8 +95,9 @@ in the repository:
 - **Immutable releases** (*Settings → General → Releases*). Once a release is
   published, its files and tag can't be changed. The workflow attaches every
   file before publishing for this reason.
-- **A tag ruleset** that blocks moving or deleting `v*` tags. Rulesets need a public repository or GitHub Pro
-  (see issue #17). Once available, create it with:
+- **A tag ruleset** that blocks moving or deleting `v*` tags. Rulesets need
+  a public repository or GitHub Pro (see issue #17). Once available, create it
+  with:
 
   ```bash
   gh api repos/ipapadop/vauxhall/rulesets --method POST --input - <<'EOF'

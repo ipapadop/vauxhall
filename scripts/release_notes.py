@@ -5,17 +5,25 @@
 
 The release workflow runs this before building, so a tag that does not match
 the package version, or a version without a dated changelog entry, stops the
-release before anything is published.
+release before anything is published. In GitHub Actions it also sets the
+step's ``prerelease`` output.
 """
 
 import argparse
 import importlib.metadata
+import os
 import re
 import sys
 from pathlib import Path
 
 HEADING = re.compile(r"^## \[(?P<version>[^\]]+)\](?: - (?P<date>.+))?$")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# A link reference definition, such as ``[0.1.0]: https://...``, which ends the
+# last entry. A body line that merely starts with a link is not one.
+LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s")
+# PEP 440 alpha, beta, release candidate, and development segments. A post
+# release, such as ``0.1.0.post1``, is a final release.
+PRERELEASE = re.compile(r"(a|b|rc|\.dev)\d+")
 
 
 class ReleaseError(Exception):
@@ -39,7 +47,7 @@ def release_notes(changelog: str, version: str) -> str:
     start = None
     for index, line in enumerate(lines):
         match = HEADING.match(line)
-        if start is not None and (match or line.startswith("[")):
+        if start is not None and (match or LINK_DEFINITION.match(line)):
             end = index
             break
         if match and match["version"] == version:
@@ -74,6 +82,19 @@ def check_tag(tag: str, version: str) -> None:
         raise ReleaseError(msg)
 
 
+def is_prerelease(version: str) -> bool:
+    """Return whether a version is a pre-release.
+
+    Args:
+        version: A PEP 440 version, without a leading ``v``.
+
+    Returns:
+        Whether the version has an alpha, beta, release candidate, or
+        development segment.
+    """
+    return PRERELEASE.search(version) is not None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Check a release tag and write its notes.
 
@@ -97,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 1
     args.output.write_text(notes + "\n", encoding="utf-8")
+    if github_output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(github_output).open("a", encoding="utf-8") as outputs:
+            outputs.write(f"prerelease={str(is_prerelease(version)).lower()}\n")
     return 0
 
 

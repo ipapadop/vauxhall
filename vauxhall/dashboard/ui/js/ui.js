@@ -8,6 +8,8 @@
  * @description Handles DOM manipulation, card creation, and updates.
  */
 
+import { closeDialog, openDialog } from './dialog.js';
+
 const WAITING_STATES = new Set(['Waiting', 'Waiting for Input', 'Input Required']);
 const STATUS_ORDER = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
 
@@ -30,6 +32,12 @@ const textOf = (card, selector) => card.querySelector(selector)?.textContent || 
  * @returns {number} The token count.
  */
 const tokensOf = (card) => parseInt(card.querySelector('.metric-badge.tokens')?.dataset.value || '0');
+
+/**
+ * Returns whether the viewer asked for reduced motion.
+ * @returns {boolean} Whether animations should be skipped.
+ */
+const prefersReducedMotion = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
 const CARD_COMPARATORS = {
     name: (a, b) => textOf(a, '.agent-name').localeCompare(textOf(b, '.agent-name')),
@@ -55,7 +63,7 @@ function textSpan(className, value) {
  * Creates an agent card element.
  * @param {object} data - Initial telemetry data.
  * @param {any} pyloidIpc - Pyloid IPC bridge.
- * @param {Function} openHistoryCallback - Function to call when history icon is clicked.
+ * @param {Function} openHistoryCallback - Called with the history button when it is activated.
  * @returns {HTMLElement} The created card.
  */
 export function createCard(data, pyloidIpc, openHistoryCallback) {
@@ -75,7 +83,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                     <span class="env-badge" title="Execution environment"></span>
                     <div class="agent-name" title="Agent name"></div>
                 </div>
-                <div class="agent-workspace" title="Current workspace path"></div>
+                <button type="button" class="agent-workspace" title="Copy workspace path"></button>
                 <div class="agent-session" title="Agent session identifier"></div>
             </div>
             <div class="status-badge" title="Current agent state">Idle</div>
@@ -87,7 +95,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
                 <div class="metric-badges" title="Recent operation metrics"></div>
             </div>
-            <span class="history-icon" title="View historical operations">🕒</span>
+            <button type="button" class="history-icon" title="View historical operations">🕒</button>
         </div>
     `;
 
@@ -100,17 +108,29 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     sessionElement.textContent = `Session: ${sessionId}`;
     sessionElement.title = sessionId;
 
-    card.querySelector('.history-icon').addEventListener('click', (e) => {
+    // Concurrent sessions can share an agent and a workspace, so the names
+    // carry the whole card identity.
+    card.setAttribute('role', 'group');
+    card.setAttribute('aria-label', `${agent} session ${sessionId}`);
+    const historyButton = card.querySelector('.history-icon');
+    historyButton.setAttribute('aria-label', `View history for ${agent} in ${workspace}, session ${sessionId}`);
+    historyButton.addEventListener('click', (e) => {
         e.stopPropagation();
-        openHistoryCallback();
+        openHistoryCallback(historyButton);
     });
 
     // Copy the raw workspace path; never build a shell command from it
-    card.addEventListener('click', () => {
+    const copyWorkspace = () => {
         pyloidIpc?.DashboardIPC?.copy_to_clipboard(workspace).then((success) => {
             if (success) showCopyFeedback(card);
         });
+    };
+    // The workspace button is the keyboard route to the whole-card click below.
+    card.querySelector('.agent-workspace').addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyWorkspace();
     });
+    card.addEventListener('click', copyWorkspace);
 
     return card;
 }
@@ -311,6 +331,8 @@ export function sortGrid(criteria, grid) {
     const compare = Object.hasOwn(CARD_COMPARATORS, criteria) ? CARD_COMPARATORS[criteria] : () => 0;
     cardsArray.sort(compare).forEach(card => grid.appendChild(card));
 
+    if (prefersReducedMotion()) return;
+
     // INVERT & PLAY
     requestAnimationFrame(() => {
         firstPositions.forEach(({ card, top, left }) => {
@@ -421,7 +443,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     if (!isSilent) {
         // Initial open: Show modal and jump to latest event
         const historyModal = document.getElementById('history-modal');
-        if (historyModal) historyModal.style.display = "block";
+        if (historyModal) openDialog(historyModal);
         body.scrollTop = body.scrollHeight;
     } else if (isAtBottom && !isInteracting) {
         // Live update: Only follow tail if user was already at the bottom and isn't hovering
@@ -437,5 +459,5 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
  */
 export function closeHistoryModal() {
     const historyModal = document.getElementById('history-modal');
-    if (historyModal) historyModal.style.display = "none";
+    if (historyModal) closeDialog(historyModal);
 }

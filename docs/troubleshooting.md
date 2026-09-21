@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+SPDX-License-Identifier: MIT
+-->
+
 # Troubleshooting
 
 Two tools find most problems. `mosquitto_sub`, which ships with Mosquitto,

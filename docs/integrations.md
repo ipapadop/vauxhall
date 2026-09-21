@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+SPDX-License-Identifier: MIT
+-->
+
 # Agent Integrations
 
 Vauxhall works with any agent that can publish JSON over MQTT. It ships hooks

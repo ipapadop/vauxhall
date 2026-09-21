@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+SPDX-License-Identifier: MIT
+-->
+
 # Monitoring Agents on Other Machines
 
 Vauxhall's MQTT connection has no authentication or encryption yet (issue #3),

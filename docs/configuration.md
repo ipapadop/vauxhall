@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+SPDX-License-Identifier: MIT
+-->
+
 # Configuration
 
 Vauxhall needs no configuration when the broker runs on the same machine as

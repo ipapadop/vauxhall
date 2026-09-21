@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+SPDX-License-Identifier: MIT
+-->
+
 # Privacy and Data Handling
 
 Vauxhall's hooks copy parts of what your agents do into MQTT messages.

@@ -18,14 +18,14 @@
                 </a>
                 <div>
                     <h1>Vauxhall Agent Dashboard</h1>
-                    <p id="js-status">Connecting...</p>
+                    <p id="js-status" role="status" aria-live="polite">Connecting...</p>
                 </div>
             </div>
             <div class="toolbar">
                 <button id="settings-btn" class="secondary-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙️</button>
-                <button id="theme-toggle" class="secondary-btn" title="Toggle Light/Dark Theme">🌓</button>
-                <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar" title="Filter agents by name or workspace path">
-                <select id="sort-select" class="secondary-btn" title="Sort agent cards">
+                <button id="theme-toggle" class="secondary-btn" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">🌓</button>
+                <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar" title="Filter agents by name or workspace path" aria-label="Filter agents by name or workspace path">
+                <select id="sort-select" class="secondary-btn" title="Sort agent cards" aria-label="Sort agent cards">
                     <option value="name" selected>Agent Name</option>
                     <option value="recent">Recently Active</option>
                     <option value="status">Status</option>
@@ -36,18 +36,18 @@
             </div>
         </div>
     </header>
-    <main id="agent-grid">
+    <main id="agent-grid" aria-label="Agent cards">
         <!-- Agent cards will be injected here -->
     </main>
 
-    <div id="history-modal" class="modal">
+    <dialog id="history-modal" class="modal" aria-labelledby="modal-agent-name">
         <div class="modal-content">
             <div class="modal-header">
                 <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
                     <h2 id="modal-agent-name">Agent History</h2>
                     <div class="modal-toolbar" style="display: flex; gap: 10px;">
-                        <input type="text" id="modal-search" placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;">
-                        <select id="modal-state-filter" class="secondary-btn">
+                        <input type="text" id="modal-search" placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;" aria-label="Filter history entries">
+                        <select id="modal-state-filter" class="secondary-btn" aria-label="Filter history by state">
                             <option value="ALL">All States</option>
                             <option value="Acting">Acting</option>
                             <option value="Thinking">Thinking</option>
@@ -56,13 +56,13 @@
                         </select>
                     </div>
                 </div>
-                <span class="close-btn" title="Close history">&times;</span>
+                <button type="button" class="close-btn" title="Close history" aria-label="Close history">&times;</button>
             </div>
-            <div id="modal-history-body" class="modal-body">
+            <div id="modal-history-body" class="modal-body" tabindex="0" role="log" aria-label="History entries">
                 <!-- Timeline items will be injected here -->
             </div>
         </div>
-    </div>
+    </dialog>
 
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
         <form id="settings-form" novalidate>

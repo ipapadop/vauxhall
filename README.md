@@ -10,6 +10,11 @@ Vauxhall is a real-time dashboard for agents such as Claude Code,
 Codex, and Gemini CLI. Agents publish telemetry over MQTT, and the dashboard
 shows each agent session as a card in a grid.
 
+<p align="center">
+  <img src="docs/dashboard.png" width="900"
+       alt="The Vauxhall dashboard showing six agent session cards: two Claude Code sessions thinking, a Codex session waiting for input, an idle Codex session, a Gemini CLI session in error, and a Gemini CLI session waiting for input.">
+</p>
+
 ## Features
 
 - **Live state**: Cards are color-coded by state: Acting, Thinking, Waiting for
@@ -28,7 +33,13 @@ shows each agent session as a card in a grid.
   name, recent activity, status, or latest token count.
 - **Stale detection**: Cards show a "last seen" timer and turn gray after the
   stale threshold (120 seconds by default). **Clear Stale** removes them.
-- **Copy workspace**: Clicking a card copies its raw workspace path.
+- **Copy workspace**: Clicking a card copies its raw workspace path; the
+  workspace path on each card is also a button, so it works from the keyboard.
+- **Keyboard and screen reader support**: Every control is a real button or a
+  labeled form control, the history and settings modals are native dialogs that
+  close on Escape and return focus to the control that opened them, the
+  connection line is a live region, focus is always visible, and card movement
+  stops when the system asks for reduced motion.
 - **Settings**: The ⚙️ button opens a settings dialog that saves to
   `~/.config/vauxhall/`, applies most changes without a restart, and can also
   update the hooks configuration.
@@ -380,6 +391,22 @@ need to edit it.
 Unknown keys and invalid values are ignored. An unreadable or corrupt file is
 logged and treated as empty.
 
+## Accessibility
+
+- **Controls**: The card's workspace path, the 🕒 history icon, and the modal's
+  close control are buttons, so Tab reaches them and Enter or Space activates
+  them. The search box, sort order, state filter, and theme toggle carry their
+  own accessible names.
+- **Modals**: The history and settings modals are `<dialog>` elements opened
+  with `showModal()`. The browser keeps focus inside them, Escape closes them,
+  and focus returns to the control that opened them.
+- **Announcements**: The line under the title is a polite live region, so
+  connection and retry messages are announced without stealing focus.
+- **Focus**: Keyboard focus draws a two-pixel accent outline on every control.
+- **Motion**: Under `prefers-reduced-motion: reduce`, transitions are cut to a
+  hundredth of a millisecond, the card hover lift is dropped, and re-sorting
+  moves cards without the slide animation.
+
 ## Telemetry
 
 Producers publish schema version 1 JSON to
@@ -414,6 +441,7 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
 - `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
   Code, Codex, and Gemini CLI hooks and installers.
+- `docs/`: The dashboard screenshot shown above.
 - `scripts/`: The agent simulator and a logging color check.
 - `tests/`: Python tests mirroring the `vauxhall/` package layout, with frontend tests in `tests/dashboard/ui/`.
 
@@ -431,6 +459,10 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
   `.venv/bin/pytest -m packaged`.
 - **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
   `npm test`.
+- **Accessibility**: Dashboard changes must keep the
+  [accessibility contract](#accessibility): real buttons, accessible names,
+  `<dialog>` modals, live regions, and reduced-motion support, covered by
+  `tests/dashboard/ui/accessibility.test.js`.
 - **Coverage**: `.venv/bin/pytest --cov` and, on Node.js 22.8 or newer,
   `npm run test:coverage` check the floors CI enforces. Raise a floor when
   coverage rises rather than lowering it to make a change pass.

@@ -8,6 +8,7 @@
  * @description Settings dialog: renders configuration fields and saves changes through the Python bridge.
  */
 
+import { closeDialog, openDialog } from './dialog.js';
 import { selectOption } from './preferences.js';
 
 const SECTION_TITLES = { mqtt: 'MQTT', logging: 'Logging', dashboard: 'Dashboard' };
@@ -271,27 +272,6 @@ export function savedNotes(result) {
     if (result.restart_required?.length) notes.push(`Restart Vauxhall to apply: ${result.restart_required.join(', ')}.`);
     if (result.hooks_error) notes.push(`Hooks configuration not updated: ${result.hooks_error}`);
     return notes.length ? `Saved. ${notes.join(' ')}` : '';
-}
-
-/**
- * Opens a dialog, falling back to the open attribute without showModal().
- * @param {HTMLDialogElement} dialog - The dialog to open.
- */
-function openDialog(dialog) {
-    if (typeof dialog.showModal === 'function') {
-        if (!dialog.open) dialog.showModal();
-    } else {
-        dialog.setAttribute('open', '');
-    }
-}
-
-/**
- * Closes a dialog, falling back to the open attribute without close().
- * @param {HTMLDialogElement} dialog - The dialog to close.
- */
-function closeDialog(dialog) {
-    if (typeof dialog.close === 'function') dialog.close();
-    else dialog.removeAttribute('open');
 }
 
 /**

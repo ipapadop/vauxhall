@@ -58,10 +58,15 @@ async function init() {
 
     // Tracks which agent is currently being viewed in the modal for live updates
     let currentHistoryKey = null;
-    const closeModal = () => {
-        closeHistoryModal();
+    let historyOpener = null;
+    const closeModal = () => closeHistoryModal();
+    // The close button, the backdrop, and Escape all end in the dialog's close
+    // event, so the view state and the focus return are restored in one place.
+    modal?.addEventListener('close', () => {
         currentHistoryKey = null;
-    };
+        if (historyOpener?.isConnected) historyOpener.focus?.();
+        historyOpener = null;
+    });
     const refreshModal = () => {
         if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
     };
@@ -136,8 +141,9 @@ async function init() {
 
                 if (!card) {
                     if (ensureAgentCapacity(maxActiveAgents).includes(currentHistoryKey)) closeModal();
-                    card = createCard(data, window.ipc, () => {
+                    card = createCard(data, window.ipc, (opener) => {
                         currentHistoryKey = key; // Lock modal to this agent
+                        historyOpener = opener;
                         openHistoryModal(key, agents);
                     });
                     agents[key] = card;

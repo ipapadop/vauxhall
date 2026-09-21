@@ -217,7 +217,7 @@ function dashboardPage(t, ipc, storage = {}) {
                 <option value="recent">Recent</option>
             </select>
             <div id="agent-grid"></div>
-            <div id="history-modal"></div>
+            <dialog id="history-modal"></dialog>
             <select id="modal-state-filter">
                 <option value="ALL" selected>All</option>
                 <option value="Error">Error</option>

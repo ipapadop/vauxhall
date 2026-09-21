@@ -21,7 +21,7 @@ const CONTENT_HEIGHT = 1000;
 function setupPage() {
     const { document, window } = parseHTML(`
         <html><body>
-            <div id="history-modal"></div>
+            <dialog id="history-modal"></dialog>
             <div id="modal-agent-name"></div>
             <input id="modal-search" value="">
             <select id="modal-state-filter">
@@ -129,7 +129,7 @@ test('opening the modal shows it and renders the history oldest first', () => {
 
     openHistoryModal(KEY, { [KEY]: card });
 
-    assert.equal(document.getElementById('history-modal').style.display, 'block');
+    assert.ok(document.getElementById('history-modal').hasAttribute('open'));
     assert.equal(document.getElementById('modal-agent-name').textContent, `History: ${KEY}`);
     assert.deepEqual(rendered(document), [
         { state: 'Thinking', details: 'Prompt: first' },
@@ -154,7 +154,7 @@ test('closing the modal hides it', () => {
 
     closeHistoryModal();
 
-    assert.equal(document.getElementById('history-modal').style.display, 'none');
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
 });
 
 test('the search box narrows the history to matching details', () => {
@@ -256,13 +256,13 @@ test('a live update re-renders without retitling or reopening the modal', () => 
     const agents = { [KEY]: card };
     openHistoryModal(KEY, agents);
     document.getElementById('modal-agent-name').textContent = 'untouched';
-    document.getElementById('history-modal').style.display = 'none';
+    document.getElementById('history-modal').removeAttribute('open');
 
     updateAgentHistory(card, { state: 'Error', details: { error: 'boom' } });
     openHistoryModal(KEY, agents, true);
 
     assert.equal(document.getElementById('modal-agent-name').textContent, 'untouched');
-    assert.equal(document.getElementById('history-modal').style.display, 'none');
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
     assert.deepEqual(rendered(document).map((item) => item.state), ['Acting', 'Error']);
 });
 
@@ -297,5 +297,5 @@ test('the modal ignores a key with no card and a card with no history', () => {
     openHistoryModal(KEY, { [KEY]: withoutHistory });
 
     assert.equal(body.children.length, 0);
-    assert.equal(document.getElementById('history-modal').style.display, '');
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
 });

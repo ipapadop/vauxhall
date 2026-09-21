@@ -27,7 +27,7 @@ test('same agent and workspace sessions create separate cards', async (t) => {
         <html><body>
             <div id="js-status"></div>
             <div id="agent-grid"></div>
-            <div id="history-modal"></div>
+            <dialog id="history-modal"></dialog>
         </body></html>
     `);
     let onAgentUpdate;
@@ -93,7 +93,7 @@ test('configured capacity retains existing cards and closes an evicted card moda
     const { document, window } = parseHTML(`
         <html><body>
             <div id="agent-grid"></div>
-            <div id="history-modal"></div>
+            <dialog id="history-modal"></dialog>
             <div id="modal-agent-name"></div>
             <input id="modal-search" value="">
             <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
@@ -146,20 +146,20 @@ test('configured capacity retains existing cards and closes an evicted card moda
     assert.equal(firstCard.history.length, 2);
 
     firstCard.querySelector('.history-icon').click();
-    assert.equal(document.getElementById('history-modal').style.display, 'block');
+    assert.ok(document.getElementById('history-modal').hasAttribute('open'));
 
     onAgentUpdate({ ...base, session_id: 'native:two' });
 
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.equal(agents[firstKey], undefined);
-    assert.equal(document.getElementById('history-modal').style.display, 'none');
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
 });
 
 test('capacity loads before readiness delivers queued events', async (t) => {
     const { document, window } = parseHTML(`
         <html><body>
             <div id="agent-grid"></div>
-            <div id="history-modal"></div>
+            <dialog id="history-modal"></dialog>
         </body></html>
     `);
     let onAgentUpdate;

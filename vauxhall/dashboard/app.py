@@ -40,6 +40,9 @@ from vauxhall.dashboard.ui_state import (
 
 logger = get_logger(__name__)
 
+UI_DIR = (Path(__file__).parent / "ui").resolve()
+ICON_FILE = UI_DIR / "icon.png"
+
 
 class DashboardApp:
     """Encapsulates the Dashboard application state and logic."""
@@ -264,6 +267,9 @@ class DashboardApp:
             dict[str, Any]: The window geometry saved by the previous run.
         """
         saved_window = load_ui_state().get("window", {})
+        # Pyloid reads the icon while the window loads, so it has to be set
+        # before the window exists.
+        self.app.set_icon(str(ICON_FILE))
         self.window = self.app.create_window(
             title=settings.dashboard.window_title,
             width=saved_window.get("width", settings.dashboard.width),
@@ -300,9 +306,8 @@ class DashboardApp:
         try:
             self.mqtt.start()
 
-            ui_dir = (Path(__file__).parent / "ui").resolve()
-            url = pyloid_serve(str(ui_dir), port=settings.dashboard.port)
-            logger.info("Serving UI from %s at %s", ui_dir, url)
+            url = pyloid_serve(str(UI_DIR), port=settings.dashboard.port)
+            logger.info("Serving UI from %s at %s", UI_DIR, url)
 
             self.window.load_url(url)
             self.window.show_and_focus()

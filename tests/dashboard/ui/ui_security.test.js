@@ -14,7 +14,7 @@ beforeEach(() => {
     const { document, window } = parseHTML(`
         <html>
             <body>
-                <div id="history-modal"></div>
+                <dialog id="history-modal"></dialog>
                 <div id="modal-agent-name"></div>
                 <input id="modal-search" value="">
                 <select id="modal-state-filter"><option value="ALL" selected>All</option></select>

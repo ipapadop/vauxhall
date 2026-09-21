@@ -184,24 +184,9 @@ anywhere a supported Python does. The dashboard's reach is narrower because
 `pyloid` pins `pyside6==6.9.2`, which ships binary wheels only for the
 platforms above.
 
-### Explicitly unsupported
-
-- **Python 3.9 and older**: the code uses syntax and standard-library
-  behavior introduced in 3.10.
-- **Python 3.14 and newer**: `pyloid` declares `Requires-Python: <3.14`, and
-  its pinned `pyside6==6.9.2` does the same, so the dashboard cannot be
-  installed. The cap is on the whole package rather than the `dashboard`
-  extra, so `pip` rejects the install with a clear `Requires-Python` message
-  instead of a dependency-resolution trace. The cap will be lifted once
-  `pyloid` supports a newer PySide6.
-- **musl-based Linux** (Alpine and similar), **32-bit** platforms, and
-  **BSD**: PySide6 publishes no wheels for them, so the dashboard cannot be
-  installed. Hooks still work if a supported Python is available.
-
 ## Installation
 
-Vauxhall isn't published on PyPI yet. Install it from GitHub with pip, which
-needs Git on the machine.
+Install it from GitHub with pip, which needs Git on the machine.
 
 Dashboard:
 
@@ -390,22 +375,6 @@ need to edit it.
 
 Unknown keys and invalid values are ignored. An unreadable or corrupt file is
 logged and treated as empty.
-
-## Accessibility
-
-- **Controls**: The card's workspace path, the 🕒 history icon, and the modal's
-  close control are buttons, so Tab reaches them and Enter or Space activates
-  them. The search box, sort order, state filter, and theme toggle carry their
-  own accessible names.
-- **Modals**: The history and settings modals are `<dialog>` elements opened
-  with `showModal()`. The browser keeps focus inside them, Escape closes them,
-  and focus returns to the control that opened them.
-- **Announcements**: The line under the title is a polite live region, so
-  connection and retry messages are announced without stealing focus.
-- **Focus**: Keyboard focus draws a two-pixel accent outline on every control.
-- **Motion**: Under `prefers-reduced-motion: reduce`, transitions are cut to a
-  hundredth of a millisecond, the card hover lift is dropped, and re-sorting
-  moves cards without the slide animation.
 
 ## Telemetry
 

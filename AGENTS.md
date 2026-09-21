@@ -619,6 +619,6 @@ All contributors, including AI agents, must:
    architecture, usage) and `AGENTS.md` (integration, states, dashboard
    behavior) to match the code.
 5. **History**: The commit history is a record, not a scratch space. Do not
-   squash or rewrite it as cleanup. See
-   [docs/repository-history.md](docs/repository-history.md) for the one
-   deliberate rewrite and the contact address every file must use.
+   squash or rewrite it as cleanup. Every file must carry the maintainer's
+   GitHub no-reply address, the same one the package metadata and the commit
+   metadata use.

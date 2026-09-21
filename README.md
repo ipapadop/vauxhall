@@ -416,7 +416,6 @@ The dashboard logs and drops oversized, malformed, and invalid messages. See
   Code, Codex, and Gemini CLI hooks and installers.
 - `scripts/`: The agent simulator and a logging color check.
 - `tests/`: Python tests mirroring the `vauxhall/` package layout, with frontend tests in `tests/dashboard/ui/`.
-- `docs/`: Notes on decisions that the code does not record on its own.
 
 ## Development
 
@@ -437,9 +436,6 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
   coverage rises rather than lowering it to make a change pass.
 - **Packaging**: After changing metadata, entry points, or bundled assets, run
   `python -m build` and `twine check dist/*`.
-- **History**: See [docs/repository-history.md](docs/repository-history.md) for
-  the contact address every file must carry and why the history was rewritten
-  once.
 
 ## License
 

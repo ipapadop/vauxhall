@@ -17,8 +17,7 @@ concurrency:
 
 jobs:
   # A history-aware scan, so a secret is caught even when a later commit
-  # removes it from the tree. See docs/repository-history.md for the audit
-  # this job keeps current.
+  # removes it from the tree.
   secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 15

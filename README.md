@@ -431,6 +431,9 @@ Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
   `.venv/bin/pytest -m packaged`.
 - **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
   `npm test`.
+- **Coverage**: `.venv/bin/pytest --cov` and, on Node.js 22.8 or newer,
+  `npm run test:coverage` check the floors CI enforces. Raise a floor when
+  coverage rises rather than lowering it to make a change pass.
 - **Packaging**: After changing metadata, entry points, or bundled assets, run
   `python -m build` and `twine check dist/*`.
 

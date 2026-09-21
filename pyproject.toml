@@ -69,6 +69,7 @@ lint = [
 test = [
     "build>=1.2.2",
     "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
     "setuptools>=77.0.0",
     "twine>=6.2.0",
     "wheel>=0.45.1",
@@ -87,7 +88,6 @@ include = ["vauxhall*"]
 line-length = 88
 target-version = "py310"
 required-version = "==0.16.7"
-extend-exclude = ["docs/superpowers"]
 
 [tool.ruff.lint]
 select = ["ALL",]
@@ -135,3 +135,14 @@ addopts = ["-m", "not packaged"]
 markers = [
     "packaged: installs the built wheel and starts the dashboard it contains",
 ]
+
+[tool.coverage.run]
+source = ["vauxhall"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+# The floor sits just under the coverage the default suite measures today, so
+# a change that leaves new code untested fails instead of quietly lowering it.
+# Raise it when coverage rises; never lower it to make a change pass.
+fail_under = 92

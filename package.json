@@ -6,7 +6,8 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "test": "node --test --test-isolation=none tests/dashboard/ui/*.test.js"
+    "test": "node --test --test-isolation=none tests/dashboard/ui/*.test.js",
+    "test:coverage": "node --test --test-isolation=none --experimental-test-coverage --test-coverage-include=vauxhall/dashboard/ui/js/** --test-coverage-lines=95 --test-coverage-branches=85 --test-coverage-functions=88 tests/dashboard/ui/*.test.js"
   },
   "devDependencies": {
     "linkedom": "0.18.13"

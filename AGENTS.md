@@ -606,6 +606,19 @@ All contributors, including AI agents, must:
      Linux, macOS, and Windows.
    - With Node.js 20.19 or newer, run `npm test` for the frontend.
    - Add unit tests for every new feature and bug fix.
-3. **Documentation**: After every change, update `README.md` (features,
+3. **Coverage**: Both suites have a floor that CI enforces, so a change that
+   leaves new code untested fails.
+   - `.venv/bin/pytest --cov` checks the Python floor in
+     `[tool.coverage.report]`.
+   - `npm run test:coverage` checks the frontend floor over
+     `vauxhall/dashboard/ui/js`. It needs Node.js 22.8 or newer for the
+     coverage thresholds; plain `npm test` runs on 20.19.
+   - Raise a floor when coverage rises. Never lower one to make a change pass;
+     write the missing test instead.
+4. **Documentation**: After every change, update `README.md` (features,
    architecture, usage) and `AGENTS.md` (integration, states, dashboard
    behavior) to match the code.
+5. **History**: The commit history is a record, not a scratch space. Do not
+   squash or rewrite it as cleanup. Every file must carry the maintainer's
+   GitHub no-reply address, the same one the package metadata and the commit
+   metadata use.

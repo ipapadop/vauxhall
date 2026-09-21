@@ -153,6 +153,7 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
         "vauxhall/dashboard/ui/app.js",
         "vauxhall/dashboard/ui/icon.png",
         "vauxhall/dashboard/ui/index.html",
+        "vauxhall/dashboard/ui/js/dialog.js",
         "vauxhall/dashboard/ui/js/ipc.js",
         "vauxhall/dashboard/ui/js/state.js",
         "vauxhall/dashboard/ui/js/ui.js",
@@ -507,7 +508,10 @@ def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
         env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        # The dashboard writes UTF-8 whatever the console code page, and its
+        # banner includes emoji that the Windows default codec cannot decode.
+        encoding="utf-8",
+        errors="replace",
     )
 
     try:
@@ -521,3 +525,5 @@ def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
 
     assert served, output
     assert still_running, output
+    # Pyloid reports a window built without an application icon.
+    assert "Icon is not set" not in output, output

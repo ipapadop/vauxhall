@@ -24,7 +24,7 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
-from vauxhall.dashboard.app import DashboardApp  # noqa: E402
+from vauxhall.dashboard.app import ICON_FILE, DashboardApp  # noqa: E402
 from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
@@ -120,6 +120,26 @@ class TestDashboardComponents(unittest.TestCase):
             IPCs=[self.dashboard.ipc],
         )
         mock_serve.assert_called_once_with(ANY, port=9090)
+
+    @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+    def test_run_sets_the_shipped_icon_before_the_window_loads(
+        self, mock_serve: MagicMock
+    ) -> None:
+        """Pyloid reads the icon while loading the window, so it must exist first.
+
+        Args:
+            mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
+        """
+        with patch("vauxhall.dashboard.app.DashboardSubscriber"):
+            self.mock_app.run.side_effect = KeyboardInterrupt
+            with pytest.raises(KeyboardInterrupt):
+                self.dashboard.run()
+
+        assert ICON_FILE.is_file()
+        self.mock_app.set_icon.assert_called_once_with(str(ICON_FILE))
+        called = [name for name, _, _ in self.mock_app.mock_calls]
+        assert called.index("set_icon") < called.index("create_window")
+        mock_serve.assert_called_once()
 
     def test_on_telemetry_queuing(self) -> None:
         """Verify that telemetry queued when IPC is not ready and flushed on drain."""

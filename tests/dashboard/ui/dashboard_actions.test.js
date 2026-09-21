@@ -30,13 +30,13 @@ const PAGE = `
             <option value="tokens">Tokens</option>
         </select>
         <div id="agent-grid"></div>
-        <div id="history-modal">
-            <span class="close-btn"></span>
+        <dialog id="history-modal">
+            <button type="button" class="close-btn"></button>
             <div id="modal-agent-name"></div>
             <input id="modal-search" value="">
             <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
             <div id="modal-history-body"></div>
-        </div>
+        </dialog>
     </body></html>
 `;
 
@@ -212,7 +212,7 @@ test('the history icon opens the modal for that card', async (t) => {
 
     agents[key].querySelector('.history-icon').click();
 
-    assert.equal(document.getElementById('history-modal').style.display, 'block');
+    assert.ok(document.getElementById('history-modal').hasAttribute('open'));
     assert.equal(document.getElementById('modal-agent-name').textContent, `History: ${key}`);
     assert.equal(document.querySelectorAll('.history-item').length, 1);
 });
@@ -226,7 +226,32 @@ test('the close button hides the modal and stops its live updates', async (t) =>
     document.querySelector('.close-btn').click();
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'grep' } });
 
-    assert.equal(document.getElementById('history-modal').style.display, 'none');
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
+    assert.equal(document.querySelectorAll('.history-item').length, 1);
+});
+
+test('closing the modal returns focus to the history button that opened it', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
+    const history = agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon');
+    let focused = 0;
+    history.focus = () => { focused++; };
+    history.click();
+
+    document.querySelector('.close-btn').click();
+
+    assert.equal(focused, 1);
+});
+
+test('dismissing the modal with Escape stops its live updates', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+
+    // A dialog dismissed with Escape reports it as the close event.
+    document.getElementById('history-modal').dispatchEvent(new window.Event('close'));
+    listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'grep' } });
+
     assert.equal(document.querySelectorAll('.history-item').length, 1);
 });
 
@@ -266,7 +291,7 @@ test('clicking the backdrop closes the modal', async (t) => {
 
     window.onclick({ target: modal });
 
-    assert.equal(modal.style.display, 'none');
+    assert.ok(!modal.hasAttribute('open'));
 });
 
 test('clicking a card copies its workspace path', async (t) => {

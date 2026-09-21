@@ -142,6 +142,20 @@ telemetry. Rejection logs never include payload values. The dashboard and
   checked; server errors appear next to the
   named field, and the dialog stays open to show restart or hooks notes. See
   [README.md](README.md#settings-dialog) for when each field takes effect.
+- **Accessibility**: Every interactive control is a `<button>` or a labeled
+  form control; no `div` or `span` carries a click handler as its only way in.
+  The card's workspace path and its 🕒 history icon are buttons, and the card's
+  own click-to-copy handler sits on top of the workspace button rather than
+  replacing it. The history and settings modals are `<dialog>` elements opened
+  with `showModal()`, so the browser contains focus and Escape closes them;
+  closing returns focus to the control that opened it, or to the agent grid
+  when that control's card was evicted meanwhile. Each card is a `group` named
+  by agent and session, and its history button names the agent, workspace, and
+  session, so concurrent sessions stay distinguishable. Search, sort, filter, and
+  theme controls carry `aria-label`s, the status line is `role="status"` with
+  `aria-live="polite"`, and `:focus-visible` draws an accent outline. Under
+  `prefers-reduced-motion: reduce`, `--transition-speed` drops to `0.01ms` and
+  `sortGrid` re-orders without animating.
 - **Remembered view**: The first paint uses the theme cached in the
   `vauxhall-theme` localStorage key. On startup the frontend then applies the
   theme, sort order, and history state filter from
@@ -191,6 +205,15 @@ telemetry. Rejection logs never include payload values. The dashboard and
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are
   kept instead of being sent to the destroyed window.
+- **Dialogs**: `vauxhall/dashboard/ui/js/dialog.js` opens and closes both
+  modals. `openDialog` prefers `showModal()` and does nothing on an open
+  dialog; `closeDialog` prefers `close()`. Without native dialog support both
+  fall back to the `open` attribute, and the fallback dispatches the `close`
+  event itself, so focus restoration and view state run on one path.
+- **Window icon**: `DashboardApp._create_window` calls `Pyloid.set_icon` with
+  `vauxhall/dashboard/ui/icon.png` before creating the window, because Pyloid
+  reads `app.icon` while the window loads and otherwise logs `Icon is not set.`
+  The packaged startup test fails if that line appears.
 - **Pyloid**: Pyloid 0.27.2 or newer is required. Its `BrowserWindow` marshals
   cross-thread commands to the UI thread, so MQTT callbacks call
   `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
@@ -618,7 +641,27 @@ All contributors, including AI agents, must:
 4. **Documentation**: After every change, update `README.md` (features,
    architecture, usage) and `AGENTS.md` (integration, states, dashboard
    behavior) to match the code.
-5. **History**: The commit history is a record, not a scratch space. Do not
+5. **Accessibility**: Dashboard changes must keep the contract under
+   [Dashboard Behavior](#dashboard-behavior). Reviews reject a change that
+   breaks any of these, so check them before opening one:
+   - Anything a user activates is a `<button>` or a native form control. Never
+     give a `div` or `span` a click handler and call it done.
+   - Every control has an accessible name: its own text, a `<label for>`, or an
+     `aria-label`. A `title` alone is not a name.
+   - A new overlay is a `<dialog>` opened with `showModal()` through
+     `vauxhall/dashboard/ui/js/dialog.js`, and focus returns to whatever opened
+     it. Do not hand-roll a focus trap or toggle `style.display`.
+   - Text that changes on its own belongs in a live region.
+   - New motion is timed by `--transition-speed` or is skipped when
+     `prefers-reduced-motion: reduce` matches. Do not hard-code a duration.
+   - Cover the keyboard and dialog behavior of anything new in
+     `tests/dashboard/ui/accessibility.test.js`.
+6. **Assets**: `vauxhall/dashboard/ui/icon.png` is a 256x256 render of
+   `vauxhall/dashboard/ui/logo.svg` centered on a rounded dark tile, and
+   `docs/dashboard.png` is a capture of the running dashboard. Refresh the
+   screenshot whenever the dashboard changes visibly, from a real run with
+   representative telemetry, not a mock-up.
+7. **History**: The commit history is a record, not a scratch space. Do not
    squash or rewrite it as cleanup. Every file must carry the maintainer's
    GitHub no-reply address, the same one the package metadata and the commit
    metadata use.

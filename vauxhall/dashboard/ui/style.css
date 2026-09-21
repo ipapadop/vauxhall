@@ -45,6 +45,11 @@ body {
     transition: background-color var(--transition-speed), color var(--transition-speed);
 }
 
+:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
 header {
     margin-bottom: 20px;
     border-bottom: 1px solid var(--border-color);
@@ -138,6 +143,7 @@ header {
     text-overflow: ellipsis;
 }
 
+/* A button so the path can be copied from the keyboard; the path is the label. */
 .agent-workspace {
     font-size: 0.8em;
     color: var(--text-muted);
@@ -146,6 +152,15 @@ header {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    appearance: none;
+    background: none;
+    border: none;
+    font-family: inherit;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
 }
 
 .agent-session {
@@ -204,7 +219,6 @@ header {
 }
 
 .search-bar:focus {
-    outline: none;
     border-color: var(--accent-color);
 }
 
@@ -277,6 +291,12 @@ header {
     font-size: 1.1em;
     opacity: 0.6;
     transition: opacity var(--transition-speed);
+    appearance: none;
+    background: none;
+    border: none;
+    color: inherit;
+    line-height: 1;
+    padding: 0;
 }
 
 .history-icon:hover {
@@ -292,6 +312,19 @@ header {
     top: 0;
     width: 100%;
     height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    color: var(--text-color);
+}
+
+.modal[open] {
+    display: block;
+}
+
+.modal::backdrop {
     background-color: var(--modal-overlay);
     backdrop-filter: blur(4px);
 }
@@ -327,6 +360,11 @@ header {
     font-weight: bold;
     cursor: pointer;
     color: var(--text-muted);
+    appearance: none;
+    background: none;
+    border: none;
+    line-height: 1;
+    padding: 0 4px;
 }
 
 .close-btn:hover {
@@ -530,14 +568,6 @@ header {
     color: #ffffff;
 }
 
-.settings-dialog button:focus-visible,
-.settings-dialog input:focus-visible,
-.settings-dialog select:focus-visible,
-#settings-btn:focus-visible {
-    outline: 2px solid var(--accent-color);
-    outline-offset: 2px;
-}
-
 @media (max-width: 600px) {
     .settings-row {
         grid-template-columns: 1fr auto auto;
@@ -546,5 +576,18 @@ header {
             "input input input"
             "note note note"
             "error error error";
+    }
+}
+
+/* Every transition in this file is timed by --transition-speed, so shortening
+   it is enough to stop motion; the card lift is a transform, so it is opted out
+   separately. */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --transition-speed: 0.01ms;
+    }
+
+    .agent-card:hover {
+        transform: none;
     }
 }

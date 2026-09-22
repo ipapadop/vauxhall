@@ -10,9 +10,11 @@ import json
 import os
 import re
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.request
 import zipfile
@@ -250,6 +252,69 @@ def test_wheel_and_sdist_pass_strict_twine_check(tmp_path: Path) -> None:
     )
 
 
+def test_sdist_contains_every_tracked_source_file(tmp_path: Path) -> None:
+    """The sdist must be a complete developer source artifact.
+
+    Every tracked file except the GitHub and Git configuration must be in it,
+    so the sdist alone can run the Python and frontend tests.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    project_root = Path(__file__).parents[1]
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("needs Git to list the tracked files")
+    tracked = subprocess.run(
+        [git, "ls-files"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if tracked.returncode != 0:
+        pytest.skip("needs a Git checkout to list the tracked files")
+    # Build from a copy of the tracked files, because setuptools also packs
+    # whatever an existing ``*.egg-info/SOURCES.txt`` in the checkout lists,
+    # which would hide a file missing from ``MANIFEST.in``.
+    source = tmp_path / "source"
+    for path in tracked.stdout.splitlines():
+        (source / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(project_root / path, source / path)
+    expected = {
+        path
+        for path in tracked.stdout.splitlines()
+        if not path.startswith(".github/") and path != ".gitignore"
+    }
+    dist_dir = tmp_path / "dist"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--sdist",
+            "--no-isolation",
+            "--outdir",
+            str(dist_dir),
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with tarfile.open(next(dist_dir.glob("*.tar.gz"))) as sdist:
+        # Drop the leading ``vauxhall-<version>/`` directory.
+        members = {
+            member.name.split("/", 1)[1]
+            for member in sdist.getmembers()
+            if member.isfile()
+        }
+
+    assert expected - members == set()
+    assert not any("__pycache__" in member for member in members)
+
+
 def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
     """Built distributions must expose publishable metadata and commands.
 
@@ -287,7 +352,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         "Repository, https://github.com/ipapadop/vauxhall",
         "Documentation, https://github.com/ipapadop/vauxhall#readme",
         "Issues, https://github.com/ipapadop/vauxhall/issues",
-        "Changelog, https://github.com/ipapadop/vauxhall/releases",
+        "Changelog, https://github.com/ipapadop/vauxhall/blob/main/CHANGELOG.md",
         "Security, https://github.com/ipapadop/vauxhall/security/advisories",
     }
     # Setuptools reorders the clauses, so compare them rather than the string.

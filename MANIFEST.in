@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
+# SPDX-License-Identifier: MIT
+
+# The sdist is a complete developer source artifact: with it alone, and no Git
+# checkout, you can run every Python and frontend test and rebuild the wheel.
+include AGENTS.md CHANGELOG.md
+include package.json package-lock.json uv.lock
+include vauxhall_dashboard.json.example vauxhall_hooks.json.example
+graft docs
+graft scripts
+graft tests
+prune node_modules
+global-exclude __pycache__ *.py[cod]

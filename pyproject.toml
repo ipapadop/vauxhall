@@ -43,7 +43,7 @@ dependencies = [
 Repository = "https://github.com/ipapadop/vauxhall"
 Documentation = "https://github.com/ipapadop/vauxhall#readme"
 Issues = "https://github.com/ipapadop/vauxhall/issues"
-Changelog = "https://github.com/ipapadop/vauxhall/releases"
+Changelog = "https://github.com/ipapadop/vauxhall/blob/main/CHANGELOG.md"
 Security = "https://github.com/ipapadop/vauxhall/security/advisories"
 
 [project.scripts]

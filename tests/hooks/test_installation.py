@@ -4,6 +4,7 @@
 """Tests for the shared hook installation helpers and the agent installers."""
 
 import base64
+import importlib
 import json
 import shlex
 import sys
@@ -246,6 +247,18 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
             capture_output=True,
         ),
     ]
+
+
+@INSTALLERS
+def test_installer_registers_exactly_the_handled_events(installer: ModuleType) -> None:
+    """The installer registers every event its hook handles, and no others.
+
+    Args:
+        installer: The installer module under test.
+    """
+    hook = importlib.import_module(installer.HOOK_MODULE)
+
+    assert set(installer.HANDLERS) == set(hook._HANDLERS)
 
 
 @INSTALLERS

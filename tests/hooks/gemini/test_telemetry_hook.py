@@ -102,7 +102,7 @@ def test_telemetry_initialization_failure_outputs_valid_json() -> None:
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=output),
         patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient",
+            "vauxhall.hooks.common.create_telemetry_client",
             side_effect=RuntimeError,
         ),
     ):
@@ -221,11 +221,11 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_class.return_value
+        client = client_factory.return_value
         client.__enter__.return_value = client
         main()
 
@@ -239,6 +239,27 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
         "session_id": "native:session-123",
     }
     assert "secret" not in json.dumps(client.send.call_args.kwargs)
+
+
+def test_gemini_connect_timeout_fits_hook_budget() -> None:
+    """Gemini's hook connects with the same short timeout as the other agents."""
+    hook_data = {
+        "hook_event_name": "AfterAgent",
+        "session_id": "session-123",
+        "cwd": "/workspace",
+    }
+
+    with (
+        patch("vauxhall.hooks.client.TelemetryClient") as client_class,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        main()
+
+    client.send.assert_called_once()
+    assert client.client.connect_timeout == 1.0
 
 
 @pytest.mark.parametrize(
@@ -271,11 +292,11 @@ def test_gemini_session_end_maps_documented_reasons(
     }
 
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_class.return_value
+        client = client_factory.return_value
         client.__enter__.return_value = client
         main()
 
@@ -305,13 +326,11 @@ def test_notification_tool_permission() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         main()
 
@@ -336,13 +355,11 @@ def test_ask_user_tool() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         main()
 
@@ -368,13 +385,11 @@ def test_after_model_tokens() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         main()
 
@@ -413,13 +428,11 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdout", new=io.StringIO()),
         patch("time.time") as mock_time,
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
 
         # 1. BeforeTool
@@ -495,16 +508,14 @@ def test_tool_durations_are_isolated_by_session_and_tool(tmp_path: Path) -> None
     ]
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdout", new=io.StringIO()),
         patch(
             "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1001.0, 1002.0, 1003.0, 1005.0, 1008.0],
         ),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         for event in events:
             with patch("sys.stdin", io.StringIO(json.dumps(event))):
@@ -527,13 +538,11 @@ def test_unknown_tool_before_tool() -> None:
     }
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         main()
 
@@ -548,16 +557,14 @@ def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
     """Telemetry must be skipped when the hook has no stable identity source."""
     hook_data = {"hook_event_name": "BeforeAgent", "cwd": "/workspace"}
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
         patch.dict("os.environ", {}, clear=True),
     ):
         main()
 
-    mock_client_class.assert_not_called()
+    mock_client_factory.assert_not_called()
 
 
 def test_tool_durations_are_isolated_by_tool_input(
@@ -596,16 +603,14 @@ def test_tool_durations_are_isolated_by_tool_input(
     ]
 
     with (
-        patch(
-            "vauxhall.hooks.gemini.telemetry_hook.TelemetryClient"
-        ) as mock_client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
         patch("sys.stdout", new=io.StringIO()),
         patch(
             "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1004.0, 1005.0, 1010.0],
         ),
     ):
-        mock_instance = mock_client_class.return_value
+        mock_instance = mock_client_factory.return_value
         mock_instance.__enter__.return_value = mock_instance
         for item in events:
             with patch("sys.stdin", io.StringIO(json.dumps(item))):
@@ -664,10 +669,10 @@ def _run(*events: dict) -> MagicMock:
         The mocked telemetry client.
     """
     with (
-        patch("vauxhall.hooks.gemini.telemetry_hook.TelemetryClient") as client_class,
+        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_class.return_value
+        client = client_factory.return_value
         client.__enter__.return_value = client
         for event in events:
             with patch("sys.stdin", io.StringIO(json.dumps(event))):

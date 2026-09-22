@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-from uuid import uuid4
 
 from vauxhall import __version__
+from vauxhall.core.config_store import write_json_atomically
 
 WINDOWS_ENCODED_COMMAND_PREFIX = (
     "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
@@ -244,28 +244,6 @@ def register_hook_handler(
             group.setdefault("hooks", []).append(handler)
             return
     groups.append({"matcher": "*", "hooks": [handler]})
-
-
-def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
-    """Replace a JSON file so readers see either the old or the new content.
-
-    Args:
-        path: The file to replace.
-        data: The data to serialize into it.
-    """
-    temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary_path.open("x") as file:
-            json.dump(data, file, indent=2)
-            file.write("\n")
-            file.flush()
-            os.fsync(file.fileno())
-        if path.exists():
-            shutil.copymode(path, temporary_path)
-        temporary_path.replace(path)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
 
 
 def build_hook_command(venv_python: Path, module: str) -> str:

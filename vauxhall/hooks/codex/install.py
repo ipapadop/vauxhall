@@ -6,24 +6,13 @@
 from pathlib import Path
 
 from vauxhall.hooks import installation
+from vauxhall.hooks.codex import telemetry_hook
 
 HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
 SETTINGS_PATH = Path(".codex") / "hooks.json"
 HANDLERS = {
     event: {"statusMessage": "Sending Vauxhall telemetry", "timeout": 3}
-    for event in (
-        "SessionStart",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PermissionRequest",
-        "PostToolUse",
-        "SubagentStart",
-        "PreCompact",
-        "PostCompact",
-        "Stop",
-        "Interrupt",
-        "SessionEnd",
-    )
+    for event in telemetry_hook._HANDLERS
 }
 
 INSTALLER = installation.HookInstaller(

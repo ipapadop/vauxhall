@@ -38,6 +38,22 @@ def _is_section_map(value: object) -> bool:
     )
 
 
+def _json_object(payload: str) -> dict[str, Any] | None:
+    """Parse a bridge payload that must be a JSON object.
+
+    Args:
+        payload: The JSON text received from the frontend.
+
+    Returns:
+        The parsed object, or ``None`` when the payload is not a JSON object.
+    """
+    try:
+        value = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
 
@@ -134,12 +150,7 @@ class DashboardIPC(PyloidIPC):
         Returns:
             str: JSON describing the outcome.
         """
-        try:
-            request = json.loads(payload)
-        except json.JSONDecodeError:
-            request = None
-        if not isinstance(request, dict):
-            request = {}
+        request = _json_object(payload) or {}
         changes = request.get("changes")
         update_hooks = request.get("update_hooks", False)
         if (
@@ -178,11 +189,8 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: True if the request was valid and the state file was written.
         """
-        try:
-            changes = json.loads(payload)
-        except json.JSONDecodeError:
-            changes = None
-        if not isinstance(changes, dict):
+        changes = _json_object(payload)
+        if changes is None:
             return False
         try:
             update_ui_state(frontend_preferences(changes))

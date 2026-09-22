@@ -32,3 +32,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A complete source distribution that can run every Python and frontend test.
 - A tag-triggered release workflow that tests, builds, checks, and attaches
   the wheel and source distribution to a GitHub release.
+
+### Fixed
+
+- The Gemini CLI hook limits its MQTT connection attempt to 1 second, like the
+  Claude Code and Codex hooks, instead of waiting longer when the broker is
+  unreachable.

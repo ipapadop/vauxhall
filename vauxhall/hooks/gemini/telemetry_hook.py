@@ -10,15 +10,10 @@ stdin and publishes its telemetry.
 
 import json
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from vauxhall.hooks import common
 from vauxhall.hooks.identity import resolve_session_id
-
-if TYPE_CHECKING:
-    from vauxhall.hooks.client import TelemetryClient
-else:
-    TelemetryClient = None
 
 # Finish reasons that do not end a streamed model response.
 _UNFINISHED_REASONS = ("", "FINISH_REASON_UNSPECIFIED")
@@ -73,23 +68,6 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     if response.get("error") is not None:
         return "Error", "failed", "Tool reported an error"
     return "Thinking", "completed", None
-
-
-def _create_telemetry_client() -> "TelemetryClient":
-    """Create the telemetry client only inside the hook failure boundary.
-
-    Returns:
-        A telemetry client, imported on first use when the module-level import
-        did not succeed.
-    """
-    if TelemetryClient is not None:
-        return TelemetryClient()
-
-    from vauxhall.hooks.client import (  # noqa: PLC0415
-        TelemetryClient as _TelemetryClient,
-    )
-
-    return _TelemetryClient()
 
 
 def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
@@ -278,9 +256,7 @@ _HANDLERS: dict[str, common.EventHandler] = {
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
     common.run_hook(
-        lambda input_data: common.publish_telemetry(
-            input_data, "Gemini", _HANDLERS, _create_telemetry_client
-        )
+        partial(common.publish_telemetry, agent="Gemini", handlers=_HANDLERS)
     )
 
 

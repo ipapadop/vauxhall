@@ -418,7 +418,8 @@ reason values are not published.
 ### Failure Handling
 
 As with Codex, the hook writes one JSON object to stdout for every input and
-sends logs and configuration errors to stderr.
+sends logs and configuration errors to stderr. Its MQTT connection attempt is
+limited to 1 second.
 
 ### Automated Installation
 

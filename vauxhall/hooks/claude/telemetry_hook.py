@@ -168,7 +168,7 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
         that does not end one, an event without a message identity, or an
         event fired inside a subagent.
     """
-    if common._is_subagent_event(input_data):
+    if common.is_subagent_event(input_data):
         return None
     session_id = resolve_session_id(input_data)
     message_id = input_data.get("message_id")
@@ -183,7 +183,7 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
     return ("Thinking", {"message": message}) if message else None
 
 
-_HANDLERS: dict[str, common.EventHandler] = {
+HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
     "PreToolUse": _handle_pre_tool,
@@ -204,7 +204,7 @@ _HANDLERS: dict[str, common.EventHandler] = {
 def main() -> None:
     """Process one Claude Code hook event without disrupting its protocol."""
     common.run_hook(
-        partial(common.publish_telemetry, agent="Claude Code", handlers=_HANDLERS)
+        partial(common.publish_telemetry, agent="Claude Code", handlers=HANDLERS)
     )
 
 

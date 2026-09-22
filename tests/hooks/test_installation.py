@@ -258,7 +258,7 @@ def test_installer_registers_exactly_the_handled_events(installer: ModuleType) -
     """
     hook = importlib.import_module(installer.HOOK_MODULE)
 
-    assert set(installer.HANDLERS) == set(hook._HANDLERS)
+    assert set(installer.HANDLERS) == set(hook.HANDLERS)
 
 
 @INSTALLERS

@@ -92,7 +92,7 @@ def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
     return state, details
 
 
-_HANDLERS: dict[str, common.EventHandler] = {
+HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
     "PreToolUse": _handle_pre_tool,
@@ -112,7 +112,7 @@ def main() -> None:
     """Process one Codex hook event without disrupting its protocol."""
     common.run_hook(
         lambda input_data: common.publish_telemetry(
-            input_data, "Codex", _HANDLERS, messages=new_messages(input_data)
+            input_data, "Codex", HANDLERS, messages=new_messages(input_data)
         )
     )
 

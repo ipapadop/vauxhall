@@ -12,7 +12,7 @@ HOOK_MODULE = "vauxhall.hooks.codex.telemetry_hook"
 SETTINGS_PATH = Path(".codex") / "hooks.json"
 HANDLERS = {
     event: {"statusMessage": "Sending Vauxhall telemetry", "timeout": 3}
-    for event in telemetry_hook._HANDLERS
+    for event in telemetry_hook.HANDLERS
 }
 
 INSTALLER = installation.HookInstaller(

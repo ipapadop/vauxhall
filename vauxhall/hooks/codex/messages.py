@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from vauxhall.hooks.common import _NOFOLLOW, message_text, private_directory
+from vauxhall.hooks.common import NOFOLLOW, message_text, private_directory
 
 _MAX_READ_BYTES = 1_048_576
 
@@ -39,7 +39,7 @@ def _write_cursor(path: Path, offset: int) -> None:
         path: The cursor file to write.
         offset: Byte offset of the first record not yet reported.
     """
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _NOFOLLOW
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NOFOLLOW
     fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as output:
         output.write(str(offset))
@@ -111,7 +111,7 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         }:
             return []
         try:
-            saved = os.open(cursor, os.O_RDONLY | _NOFOLLOW)
+            saved = os.open(cursor, os.O_RDONLY | NOFOLLOW)
             with os.fdopen(saved, encoding="ascii") as source:
                 offset = int(source.read())
         except (OSError, ValueError):

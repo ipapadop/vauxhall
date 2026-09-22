@@ -240,7 +240,7 @@ def _handle_before_agent(input_data: dict[str, Any]) -> common.Telemetry:
     return common.prompt_submit_telemetry(input_data)
 
 
-_HANDLERS: dict[str, common.EventHandler] = {
+HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "BeforeAgent": _handle_before_agent,
     "AfterAgent": common.ready_telemetry,
@@ -256,7 +256,7 @@ _HANDLERS: dict[str, common.EventHandler] = {
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
     common.run_hook(
-        partial(common.publish_telemetry, agent="Gemini", handlers=_HANDLERS)
+        partial(common.publish_telemetry, agent="Gemini", handlers=HANDLERS)
     )
 
 

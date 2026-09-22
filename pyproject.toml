@@ -64,7 +64,7 @@ dev = [
     "vauxhall[dashboard]",
 ]
 lint = [
-    "ruff==0.16.7",
+    "ruff==0.16.8",
 ]
 test = [
     "build>=1.2.2",
@@ -87,7 +87,6 @@ include = ["vauxhall*"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-required-version = "==0.16.7"
 
 [tool.ruff.lint]
 select = ["ALL",]

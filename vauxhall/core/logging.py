@@ -27,6 +27,16 @@ class ColoredFormatter(logging.Formatter):
         logging.ERROR: RED,
         logging.CRITICAL: BOLD_RED,
     }
+    # One formatter per color, built once and reused for every record instead
+    # of compiling a new format string on every call. A plain loop, not a
+    # comprehension, since a comprehension's body can't see RESET from the
+    # enclosing class scope.
+    _FORMATTERS: ClassVar[dict[str, logging.Formatter]] = {}
+    for _color in {*COLORS.values(), GREY}:
+        _FORMATTERS[_color] = logging.Formatter(
+            f"%(asctime)s [{_color}%(levelname)s{RESET}] %(name)s: %(message)s"
+        )
+    del _color
 
     def format(self, record: logging.LogRecord) -> str:
         """Format a log record with a colored level name.
@@ -37,11 +47,7 @@ class ColoredFormatter(logging.Formatter):
         Returns:
             The formatted line, with the level name wrapped in color codes.
         """
-        log_color = self.COLORS.get(record.levelno, self.GREY)
-        format_str = (
-            f"%(asctime)s [{log_color}%(levelname)s{self.RESET}] %(name)s: %(message)s"
-        )
-        formatter = logging.Formatter(format_str)
+        formatter = self._FORMATTERS[self.COLORS.get(record.levelno, self.GREY)]
         return formatter.format(record)
 
 

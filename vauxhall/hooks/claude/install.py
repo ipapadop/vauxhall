@@ -11,7 +11,7 @@ from vauxhall.hooks.claude import telemetry_hook
 HOOK_MODULE = "vauxhall.hooks.claude.telemetry_hook"
 # The hook command contains a machine-specific path, so it belongs in local settings.
 SETTINGS_PATH = Path(".claude") / "settings.local.json"
-HANDLERS = {event: {"timeout": 3} for event in telemetry_hook._HANDLERS}
+HANDLERS = {event: {"timeout": 3} for event in telemetry_hook.HANDLERS}
 
 INSTALLER = installation.HookInstaller(
     agent="Claude Code",

@@ -43,7 +43,7 @@ _MESSAGE_MAX_AGE_SECONDS = 86400
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
 # The system temporary directory is shared, so a name another account could
 # pre-create is opened without following a symlink into somewhere it owns.
-_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def is_cancelled(response: dict[str, Any]) -> bool:
@@ -240,7 +240,7 @@ def collect_message_chunk(
     try:
         path = _message_path(agent, identity)
         try:
-            source = os.open(path, os.O_RDONLY | _NOFOLLOW)
+            source = os.open(path, os.O_RDONLY | NOFOLLOW)
         except FileNotFoundError:
             previous = ""
         else:
@@ -248,7 +248,7 @@ def collect_message_chunk(
                 previous = existing.read()
         combined = previous + delta
         bounded = message_text(combined) or ""
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _NOFOLLOW, 0o600)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NOFOLLOW, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             output.write(bounded)
         if final:
@@ -349,7 +349,7 @@ def subagent_start_telemetry(input_data: dict[str, Any]) -> Telemetry:
     return "Acting", details
 
 
-def _is_subagent_event(input_data: dict[str, Any]) -> bool:
+def is_subagent_event(input_data: dict[str, Any]) -> bool:
     """Return whether an event fired inside a subagent, not the main thread.
 
     Args:
@@ -370,7 +370,7 @@ def pre_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
     Returns:
         The thinking state and a compaction status, or ``None`` for a subagent.
     """
-    if _is_subagent_event(input_data):
+    if is_subagent_event(input_data):
         return None
     trigger = input_data.get("trigger")
     status = "Compacting context"
@@ -390,7 +390,7 @@ def post_compact_telemetry(input_data: dict[str, Any]) -> Telemetry | None:
     Returns:
         The state to resume in and a compacted status, or ``None`` for a subagent.
     """
-    if _is_subagent_event(input_data):
+    if is_subagent_event(input_data):
         return None
     state = "Idle" if input_data.get("trigger") == "manual" else "Thinking"
     return state, {"status": "Context compacted"}

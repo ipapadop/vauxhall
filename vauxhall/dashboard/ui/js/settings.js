@@ -9,6 +9,7 @@
  */
 
 import { closeDialog, openDialog } from './dialog.js';
+import { saveDenylist } from './denylist.js';
 import { selectOption } from './preferences.js';
 
 const SECTION_TITLES = { mqtt: 'MQTT', logging: 'Logging', dashboard: 'Dashboard' };
@@ -210,6 +211,28 @@ export function renderSettingsForm(container, descriptor) {
 }
 
 /**
+ * Renders the denylisted agents list, each with a button that removes it.
+ * @param {HTMLElement} list - The `<ul>` that receives the entries.
+ * @param {HTMLElement} section - The fieldset wrapping the list, hidden when empty.
+ * @param {string[]} denylist - The currently denylisted agent names.
+ * @param {(next: string[]) => void} onRemove - Called with the denylist after removing an entry.
+ */
+export function renderDenylist(list, section, denylist, onRemove) {
+    setHidden(section, denylist.length === 0);
+    list.replaceChildren();
+    denylist.forEach((agent) => {
+        const item = element('li', 'denylist-item');
+        item.appendChild(element('span', '', agent));
+        const remove = element('button', 'secondary-btn', 'Remove');
+        remove.setAttribute('type', 'button');
+        remove.setAttribute('aria-label', `Remove ${agent} from the denylist`);
+        remove.addEventListener('click', () => onRemove(denylist.filter((name) => name !== agent)));
+        item.appendChild(remove);
+        list.appendChild(item);
+    });
+}
+
+/**
  * Reads the editable fields, returning changed values and client-side errors.
  * @param {HTMLElement} container - Element holding the rendered fields.
  * @param {object} descriptor - Result of DashboardIPC.get_settings().
@@ -287,6 +310,8 @@ export function initSettings(ipc) {
     const hooks = document.getElementById('settings-hooks');
     const updateHooks = document.getElementById('settings-update-hooks');
     const hooksPath = document.getElementById('settings-hooks-path');
+    const denylistSection = document.getElementById('settings-denylist-section');
+    const denylistList = document.getElementById('settings-denylist-list');
     if (!button || !dialog || !form || !container || !message || !hooks || !updateHooks || !ipc?.get_settings) return;
 
     let descriptor = null;
@@ -295,12 +320,27 @@ export function initSettings(ipc) {
         setHidden(hooks, !collectHookChanges(container, descriptor).mqtt);
     };
 
+    const removeFromDenylist = async (next) => {
+        try {
+            const result = await saveDenylist(ipc, next);
+            if (!result.ok) {
+                message.textContent = `Could not update the denylist. ${result.error ?? ''}`.trim();
+                return;
+            }
+            await load(message.textContent);
+        } catch (err) {
+            console.error('Failed to update agent denylist:', err);
+            message.textContent = 'Could not update the denylist.';
+        }
+    };
+
     const load = async (text = '') => {
         descriptor = JSON.parse(await ipc.get_settings());
         if (descriptor.error) {
             container.replaceChildren();
             message.textContent = descriptor.error;
             setHidden(hooks, true);
+            if (denylistSection) setHidden(denylistSection, true);
             return;
         }
         renderSettingsForm(container, descriptor);
@@ -310,6 +350,9 @@ export function initSettings(ipc) {
         setDisabled(updateHooks, Boolean(descriptor.hooks_error));
         updateHooks.setAttribute('title', descriptor.hooks_error ?? '');
         refreshHooks();
+        if (denylistList && denylistSection) {
+            renderDenylist(denylistList, denylistSection, descriptor.agent_denylist ?? [], removeFromDenylist);
+        }
     };
 
     button.addEventListener('click', async () => {

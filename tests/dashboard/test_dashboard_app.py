@@ -228,6 +228,38 @@ class TestDashboardComponents(unittest.TestCase):
         ):
             assert sentinel not in logs.output[0]
 
+    def test_on_telemetry_drops_denylisted_agent(self) -> None:
+        """Telemetry for a denylisted agent is dropped, not queued or forwarded."""
+        self.dashboard.ipc.is_ready = True
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["TestAgent"]
+        ):
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        self.dashboard.window.invoke.assert_not_called()
+        assert not self.dashboard.pending_updates
+
+    def test_on_telemetry_drops_denylisted_agent_while_not_ready(self) -> None:
+        """A denylisted agent's telemetry is not queued for a later drain."""
+        self.dashboard.ipc.is_ready = False
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["TestAgent"]
+        ):
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        assert not self.dashboard.pending_updates
+
+    def test_on_telemetry_allows_agents_not_on_the_denylist(self) -> None:
+        """Telemetry for an agent not on the denylist is forwarded as usual."""
+        self.dashboard.ipc.is_ready = True
+        valid_data = self.valid_telemetry()
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["OtherAgent"]
+        ):
+            self.dashboard.on_telemetry(valid_data)
+
+        self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
+
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""
         ipc = DashboardIPC()

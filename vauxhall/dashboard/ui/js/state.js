@@ -98,3 +98,27 @@ export function clearAgents() {
 export function removeAgent(key) {
     delete agents[key];
 }
+
+/**
+ * Returns whether a card is hidden, snoozed from the "Hide until next event" menu action.
+ * @param {HTMLElement} card - The agent card element.
+ * @returns {boolean} Whether the card is hidden.
+ */
+export function isHidden(card) {
+    return card.dataset.hidden === 'true';
+}
+
+/**
+ * Hides a card until its agent reports a new event, or shows it again.
+ * @param {HTMLElement} card - The agent card element.
+ * @param {boolean} hidden - Whether the card should be hidden.
+ */
+export function setHidden(card, hidden) {
+    if (hidden) {
+        card.dataset.hidden = 'true';
+        card.style.display = 'none';
+    } else {
+        delete card.dataset.hidden;
+        card.style.display = '';
+    }
+}

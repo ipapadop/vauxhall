@@ -30,17 +30,19 @@ function setupPage() {
 function cardWithClipboard() {
     const clipboard = [];
     const opened = [];
+    const menuOpened = [];
     const ipc = { DashboardIPC: { copy_to_clipboard: async (path) => { clipboard.push(path); return true; } } };
-    const card = createCard({ ...IDENTITY }, ipc, (opener) => opened.push(opener));
-    return { card, clipboard, opened };
+    const card = createCard({ ...IDENTITY }, ipc, (opener) => opened.push(opener), (opener) => menuOpened.push(opener));
+    return { card, clipboard, opened, menuOpened };
 }
 
-test('the workspace and history controls are buttons with accessible names', () => {
+test('the workspace, history, and menu controls are buttons with accessible names', () => {
     setupPage();
     const { card } = cardWithClipboard();
 
     const workspace = card.querySelector('.agent-workspace');
     const history = card.querySelector('.history-icon');
+    const menu = card.querySelector('.menu-icon');
 
     assert.equal(workspace.tagName, 'BUTTON');
     assert.equal(workspace.getAttribute('type'), 'button');
@@ -48,6 +50,19 @@ test('the workspace and history controls are buttons with accessible names', () 
     assert.equal(history.tagName, 'BUTTON');
     assert.equal(history.getAttribute('type'), 'button');
     assert.equal(history.getAttribute('aria-label'), 'View history for Codex in /home/user/project, session session-1');
+    assert.equal(menu.tagName, 'BUTTON');
+    assert.equal(menu.getAttribute('type'), 'button');
+    assert.equal(menu.getAttribute('aria-label'), 'Options for Codex in /home/user/project, session session-1');
+});
+
+test('activating the menu button reports it as the control to focus again', () => {
+    setupPage();
+    const { card, menuOpened } = cardWithClipboard();
+    const menu = card.querySelector('.menu-icon');
+
+    menu.click();
+
+    assert.deepEqual(menuOpened, [menu]);
 });
 
 test('each card names its session, so concurrent sessions stay distinguishable', () => {

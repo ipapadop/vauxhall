@@ -215,6 +215,19 @@ test('a query matching nothing hides every card', (t) => {
     assert.deepEqual(Object.values(agents).map((card) => card.style.display), ['none', 'none']);
 });
 
+test('a hidden card is not shown by a matching search', (t) => {
+    setupGrid(t);
+    const agents = {
+        claude: addCard({ agent: 'Claude' }),
+        codex: addCard({ agent: 'Codex' }),
+    };
+    agents.claude.dataset.hidden = 'true';
+
+    filterGrid('claude', agents);
+
+    assert.equal(agents.claude.style.display, 'none');
+});
+
 test('search leaves a card without name or workspace elements alone', (t) => {
     setupGrid(t);
     const bare = document.createElement('div');

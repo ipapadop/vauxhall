@@ -64,9 +64,10 @@ function textSpan(className, value) {
  * @param {object} data - Initial telemetry data.
  * @param {any} pyloidIpc - Pyloid IPC bridge.
  * @param {Function} openHistoryCallback - Called with the history button when it is activated.
+ * @param {Function} [openMenuCallback] - Called with the menu button when it is activated.
  * @returns {HTMLElement} The created card.
  */
-export function createCard(data, pyloidIpc, openHistoryCallback) {
+export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallback) {
     const agent = String(data.agent ?? '');
     const workspace = String(data.workspace ?? '');
     const sessionId = String(data.session_id ?? '');
@@ -95,6 +96,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
                 <div class="metric-badges" title="Recent operation metrics"></div>
             </div>
+            <button type="button" class="menu-icon" title="Agent options">⋮</button>
             <button type="button" class="history-icon" title="View historical operations">🕒</button>
         </div>
     `;
@@ -117,6 +119,13 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     historyButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openHistoryCallback(historyButton);
+    });
+
+    const menuButton = card.querySelector('.menu-icon');
+    menuButton.setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
+    menuButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMenuCallback?.(menuButton);
     });
 
     // Copy the raw workspace path; never build a shell command from it
@@ -309,7 +318,8 @@ export function filterGrid(query, agents) {
 
         const name = nameElement.textContent?.toLowerCase() || '';
         const workspace = workspaceElement.textContent?.toLowerCase() || '';
-        card.style.display = name.includes(query) || workspace.includes(query) ? 'flex' : 'none';
+        const matches = name.includes(query) || workspace.includes(query);
+        card.style.display = matches && card.dataset.hidden !== 'true' ? 'flex' : 'none';
     });
 }
 

@@ -8,8 +8,10 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
+import { closeDialog, openDialog } from './js/dialog.js';
+import { saveDenylist } from './js/denylist.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
 import { cacheTheme, cachedTheme, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
@@ -72,6 +74,38 @@ async function init() {
         if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
     };
 
+    // Tracks which agent card the options menu is currently acting on.
+    const cardMenuModal = document.getElementById('card-menu-modal');
+    let currentMenuKey = null;
+    let menuOpener = null;
+    const closeMenu = () => closeDialog(cardMenuModal);
+    cardMenuModal?.addEventListener('close', () => {
+        currentMenuKey = null;
+        (menuOpener?.isConnected ? menuOpener : grid).focus?.();
+        menuOpener = null;
+    });
+    document.getElementById('card-menu-close')?.addEventListener('click', closeMenu);
+    document.getElementById('card-menu-hide')?.addEventListener('click', () => {
+        const card = agents[currentMenuKey];
+        if (card) setHidden(card, true);
+        closeMenu();
+    });
+    document.getElementById('card-menu-denylist')?.addEventListener('click', async () => {
+        const card = agents[currentMenuKey];
+        const agentName = card?.querySelector('.agent-name')?.textContent;
+        closeMenu();
+        if (!agentName || !window.ipc?.DashboardIPC) return;
+        try {
+            const descriptor = JSON.parse(await window.ipc.DashboardIPC.get_settings());
+            const denylist = descriptor.agent_denylist ?? [];
+            if (denylist.includes(agentName)) return;
+            const result = await saveDenylist(window.ipc.DashboardIPC, [...denylist, agentName]);
+            if (!result.ok) console.error('Failed to add agent to denylist:', result.error);
+        } catch (err) {
+            console.error('Failed to update agent denylist:', err);
+        }
+    });
+
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
@@ -101,6 +135,7 @@ async function init() {
     // Close modal on background click
     window.onclick = (event) => {
         if (event.target === modal) closeModal();
+        if (event.target === cardMenuModal) closeMenu();
     };
 
     // Initialize IPC with Python backend
@@ -146,9 +181,16 @@ async function init() {
                         currentHistoryKey = key; // Lock modal to this agent
                         historyOpener = opener;
                         openHistoryModal(key, agents);
+                    }, (opener) => {
+                        currentMenuKey = key;
+                        menuOpener = opener;
+                        openDialog(cardMenuModal);
                     });
                     agents[key] = card;
                     grid.appendChild(card);
+                } else if (isHidden(card)) {
+                    // A hidden card reappears on its next event.
+                    setHidden(card, false);
                 }
 
                 updateAgentHistory(card, data);
@@ -169,6 +211,16 @@ async function init() {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
                 if (evictAgents(maxActiveAgents).includes(currentHistoryKey)) closeModal();
+
+                const denylist = new Set(changed.agent_denylist ?? []);
+                for (const [key, card] of Object.entries(agents)) {
+                    if (!denylist.has(card.querySelector('.agent-name')?.textContent)) continue;
+                    card.remove();
+                    removeAgent(key);
+                    if (key === currentHistoryKey) closeModal();
+                    if (key === currentMenuKey) closeMenu();
+                }
+
                 checkStaleness(agents, staleThresholdMs);
             },
             onReady: () => {

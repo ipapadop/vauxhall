@@ -168,6 +168,70 @@ def test_dashboard_limits_reject_values_outside_locked_boundaries(
             DashboardConfig.load(path)
 
 
+def test_agent_denylist_loads_from_file(tmp_path: Path) -> None:
+    """The agent denylist round-trips from a configuration file as a list.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    path.write_text(
+        json.dumps({"dashboard": {"agent_denylist": ["codex", "gemini"]}}),
+        encoding="utf-8",
+    )
+
+    config = DashboardConfig.load(path)
+
+    assert config.dashboard.agent_denylist == ["codex", "gemini"]
+
+
+def test_agent_denylist_defaults_to_empty(tmp_path: Path) -> None:
+    """Without an explicit value, the agent denylist is empty.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    config = DashboardConfig.load(tmp_path / "vauxhall_dashboard.json")
+
+    assert config.dashboard.agent_denylist == []
+
+
+def test_agent_denylist_wrong_type_in_file_reports_expected_list(
+    tmp_path: Path,
+) -> None:
+    """A non-list agent_denylist value names the expected type accurately.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    path.write_text(
+        json.dumps({"dashboard": {"agent_denylist": "codex"}}), encoding="utf-8"
+    )
+
+    with pytest.raises(
+        ConfigurationError, match=r"dashboard\.agent_denylist.*expected a list"
+    ):
+        DashboardConfig.load(path)
+
+
+def test_agent_denylist_cannot_be_set_by_environment_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A list-valued field rejects an environment override with a clear error.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("VAUXHALL_DASHBOARD_AGENT_DENYLIST", "codex")
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"VAUXHALL_DASHBOARD_AGENT_DENYLIST.*only settable via a config file",
+    ):
+        DashboardConfig.load()
+
+
 def test_invalid_environment_value_overrides_valid_file(tmp_path: Path) -> None:
     """An invalid environment override cannot be masked by a valid file value.
 

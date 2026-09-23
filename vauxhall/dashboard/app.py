@@ -114,6 +114,12 @@ class DashboardApp:
             assert isinstance(data, dict)
             telemetry = dict(data)
 
+            if telemetry["agent"] in settings.dashboard.agent_denylist:
+                logger.debug(
+                    "Dropping denylisted agent telemetry: %s", telemetry["agent"]
+                )
+                return
+
             with self._updates_lock:
                 if not self.ipc.is_ready:
                     logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
@@ -244,6 +250,7 @@ class DashboardApp:
                     {
                         "stale_threshold": settings.dashboard.stale_threshold,
                         "max_active_agents": settings.dashboard.max_active_agents,
+                        "agent_denylist": settings.dashboard.agent_denylist,
                     },
                 )
         return reconnecting

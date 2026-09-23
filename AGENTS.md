@@ -33,6 +33,15 @@ agent's hooks), [configuration](docs/configuration.md),
   default) turns gray and shows `STALE`. Staleness is checked every 10 seconds.
 - **Copying**: Clicking a card copies the raw `workspace` value. Telemetry is
   never inserted into HTML markup or shell commands.
+- **Agent menu**: A card's ⋮ button opens a `<dialog>` with two actions.
+  **Hide until next event** sets `display: none` on that card (tracked
+  through `dataset.hidden`, not removed from `agents` state or the DOM); the
+  card reappears, unhidden, the next time its identity's telemetry arrives. A
+  hidden card stays hidden through search filtering. **Add agent to
+  denylist** reads the current `dashboard.agent_denylist` from
+  `DashboardIPC.get_settings()`, appends the agent's name (not its workspace
+  or session), and saves it through `DashboardIPC.save_settings()` like any
+  other setting.
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
   `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
@@ -41,19 +50,22 @@ agent's hooks), [configuration](docs/configuration.md),
   the hooks use. Save sends only changed values to
   `DashboardIPC.save_settings()`, with `update_hooks` set when the option is
   checked; server errors appear next to the
-  named field, and the dialog stays open to show restart or hooks notes. See
-  [configuration.md](docs/configuration.md#settings-dialog) for when each
-  field takes effect.
+  named field, and the dialog stays open to show restart or hooks notes. Below
+  the fields, a denylisted-agents list (from `get_settings()`'s
+  `agent_denylist`) offers a **Remove** button per entry, hidden when the list
+  is empty. See [configuration.md](docs/configuration.md#settings-dialog) for
+  when each field takes effect.
 - **Accessibility**: Every interactive control is a `<button>` or a labeled
   form control; no `div` or `span` carries a click handler as its only way in.
-  The card's workspace path and its 🕒 history icon are buttons, and the card's
-  own click-to-copy handler sits on top of the workspace button rather than
-  replacing it. The history and settings modals are `<dialog>` elements opened
-  with `showModal()`, so the browser contains focus and Escape closes them;
-  closing returns focus to the control that opened it, or to the agent grid
-  when that control's card was evicted meanwhile. Each card is a `group` named
-  by agent and session, and its history button names the agent, workspace, and
-  session, so concurrent sessions stay distinguishable. Search, sort, filter, and
+  The card's workspace path, its 🕒 history icon, and its ⋮ menu icon are
+  buttons, and the card's own click-to-copy handler sits on top of the
+  workspace button rather than replacing it. The history, agent menu, and
+  settings modals are `<dialog>` elements opened with `showModal()`, so the
+  browser contains focus and Escape closes them; closing returns focus to the
+  control that opened it, or to the agent grid when that control's card was
+  evicted meanwhile. Each card is a `group` named by agent and session, and its
+  history and menu buttons name the agent, workspace, and session, so
+  concurrent sessions stay distinguishable. Search, sort, filter, and
   theme controls carry `aria-label`s, the status line is `role="status"` with
   `aria-live="polite"`, and `:focus-visible` draws an accent outline. Under
   `prefers-reduced-motion: reduce`, `--transition-speed` drops to `0.01ms` and
@@ -88,9 +100,16 @@ agent's hooks), [configuration](docs/configuration.md),
   settings, and sets the root log level if it changed. Broker changes stop the
   current `DashboardSubscriber` and start a new one with the new host and port;
   a failed start is logged, and the saved settings stay. If the frontend is
-  ready, it receives a `settings-changed` event with the new stale threshold
-  and card limit. `vauxhall.hooks.config` is imported lazily, so a malformed
-  hooks file only disables the hooks option.
+  ready, it receives a `settings-changed` event with the new stale threshold,
+  card limit, and agent denylist; the frontend removes any card whose agent is
+  newly denylisted. `vauxhall.hooks.config` is imported lazily, so a malformed
+  hooks file only disables the hooks option. `on_telemetry` drops an event
+  whose `agent` is in `dashboard.agent_denylist` before it is queued or
+  dispatched, so a denylisted agent's telemetry never reaches the frontend.
+  `agent_denylist` is a list-valued field; unlike every other setting it isn't
+  settable by an environment variable, and it is described separately from
+  `DashboardIPC.get_settings()`'s per-field `fields` list so the settings
+  editor doesn't try to render it as a scalar input.
 - **View state**: `vauxhall.dashboard.ui_state` reads and writes
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.

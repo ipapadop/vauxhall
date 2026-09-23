@@ -10,6 +10,7 @@ import {
     collectChanges,
     collectHookChanges,
     initSettings,
+    renderDenylist,
     renderSettingsForm,
     savedNotes,
     showErrors,
@@ -21,6 +22,9 @@ const DIALOG = `
         <form id="settings-form">
             <p id="settings-message"></p>
             <div id="settings-fields"></div>
+            <fieldset id="settings-denylist-section" hidden>
+                <ul id="settings-denylist-list"></ul>
+            </fieldset>
             <div id="settings-hooks" hidden>
                 <input type="checkbox" id="settings-update-hooks">
                 <code id="settings-hooks-path"></code>
@@ -277,6 +281,75 @@ test('dialog shows a load error instead of fields', async () => {
 
     assert.equal(document.getElementById('settings-message').textContent, '/x: mqtt must be an object, got 5');
     assert.equal(document.getElementById('settings-fields').children.length, 0);
+});
+
+test('renderDenylist hides the section when empty and lists entries when not', () => {
+    const document = setup('<fieldset id="section" hidden><ul id="list"></ul></fieldset>');
+    const section = document.getElementById('section');
+    const list = document.getElementById('list');
+
+    renderDenylist(list, section, [], () => {});
+    assert.ok(section.hasAttribute('hidden'));
+
+    const removed = [];
+    renderDenylist(list, section, ['codex', 'gemini'], (next) => removed.push(next));
+
+    assert.equal(section.hasAttribute('hidden'), false);
+    const items = [...list.querySelectorAll('.denylist-item')];
+    assert.deepEqual(items.map((item) => item.querySelector('span').textContent), ['codex', 'gemini']);
+
+    items[0].querySelector('button').click();
+    assert.deepEqual(removed, [['gemini']]);
+});
+
+test('dialog shows the denylist and removing an entry saves and reloads it', async () => {
+    const document = setup(DIALOG);
+    const requests = [];
+    let denylist = ['codex'];
+    initSettings({
+        get_settings: async () => JSON.stringify({ ...descriptor(), agent_denylist: denylist }),
+        save_settings: async (payload) => {
+            const request = JSON.parse(payload);
+            requests.push(request);
+            denylist = request.changes.dashboard.agent_denylist;
+            return JSON.stringify({ ok: true, restart_required: [], reconnecting: false, hooks_updated: false, hooks_error: null });
+        },
+    });
+    const section = document.getElementById('settings-denylist-section');
+
+    document.getElementById('settings-btn').dispatchEvent(new Event('click'));
+    await flush();
+    assert.equal(section.hasAttribute('hidden'), false);
+    assert.equal(document.getElementById('settings-denylist-list').children.length, 1);
+
+    document.getElementById('settings-denylist-list').querySelector('button').dispatchEvent(new Event('click'));
+    await flush();
+
+    assert.deepEqual(requests, [{ changes: { dashboard: { agent_denylist: [] } }, update_hooks: false }]);
+    assert.ok(section.hasAttribute('hidden'));
+});
+
+test('a failed denylist removal shows the error and keeps the entry', async () => {
+    const document = setup(DIALOG);
+    const requests = [];
+    initSettings({
+        get_settings: async () => JSON.stringify({ ...descriptor(), agent_denylist: ['codex'] }),
+        save_settings: async (payload) => {
+            requests.push(JSON.parse(payload));
+            return JSON.stringify({ ok: false, error: 'read-only', field: null, file: 'dashboard' });
+        },
+    });
+    const section = document.getElementById('settings-denylist-section');
+
+    document.getElementById('settings-btn').dispatchEvent(new Event('click'));
+    await flush();
+    document.getElementById('settings-denylist-list').querySelector('button').dispatchEvent(new Event('click'));
+    await flush();
+
+    assert.equal(requests.length, 1);
+    assert.equal(document.getElementById('settings-message').textContent, 'Could not update the denylist. read-only');
+    assert.equal(section.hasAttribute('hidden'), false);
+    assert.equal(document.getElementById('settings-denylist-list').children.length, 1);
 });
 
 test('hook changes compare editable MQTT fields with the values the hooks use', () => {

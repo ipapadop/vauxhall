@@ -215,6 +215,23 @@ def test_agent_denylist_wrong_type_in_file_reports_expected_list(
         DashboardConfig.load(path)
 
 
+def test_agent_denylist_rejects_non_string_entries(tmp_path: Path) -> None:
+    """An agent_denylist entry that is not a string is rejected.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    path.write_text(
+        json.dumps({"dashboard": {"agent_denylist": ["codex", 1]}}), encoding="utf-8"
+    )
+
+    with pytest.raises(
+        ConfigurationError, match=r"dashboard\.agent_denylist.*expected a list"
+    ):
+        DashboardConfig.load(path)
+
+
 def test_agent_denylist_cannot_be_set_by_environment_variable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

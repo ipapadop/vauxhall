@@ -24,6 +24,7 @@ const DIALOG = `
             <div id="settings-fields"></div>
             <fieldset id="settings-denylist-section" hidden>
                 <ul id="settings-denylist-list"></ul>
+                <p id="settings-denylist-readonly-note" hidden></p>
             </fieldset>
             <div id="settings-hooks" hidden>
                 <input type="checkbox" id="settings-update-hooks">
@@ -283,8 +284,10 @@ test('dialog shows a load error instead of fields', async () => {
     assert.equal(document.getElementById('settings-fields').children.length, 0);
 });
 
+const DENYLIST_SECTION = '<fieldset id="section" hidden><ul id="list"></ul><p id="settings-denylist-readonly-note" hidden></p></fieldset>';
+
 test('renderDenylist hides the section when empty and lists entries when not', () => {
-    const document = setup('<fieldset id="section" hidden><ul id="list"></ul></fieldset>');
+    const document = setup(DENYLIST_SECTION);
     const section = document.getElementById('section');
     const list = document.getElementById('list');
 
@@ -303,7 +306,7 @@ test('renderDenylist hides the section when empty and lists entries when not', (
 });
 
 test('renderDenylist removes only the clicked entry when names repeat', () => {
-    const document = setup('<fieldset id="section" hidden><ul id="list"></ul></fieldset>');
+    const document = setup(DENYLIST_SECTION);
     const section = document.getElementById('section');
     const list = document.getElementById('list');
 
@@ -313,6 +316,17 @@ test('renderDenylist removes only the clicked entry when names repeat', () => {
     const items = [...list.querySelectorAll('.denylist-item')];
     items[0].querySelector('button').click();
     assert.deepEqual(removed, [['codex']]);
+});
+
+test('renderDenylist disables removal and shows a note when the list is read-only', () => {
+    const document = setup(DENYLIST_SECTION);
+    const section = document.getElementById('section');
+    const list = document.getElementById('list');
+
+    renderDenylist(list, section, ['codex'], () => {}, false);
+
+    assert.equal(document.getElementById('settings-denylist-readonly-note').hasAttribute('hidden'), false);
+    assert.ok(list.querySelector('.denylist-item button').hasAttribute('disabled'));
 });
 
 test('dialog shows the denylist and removing an entry saves and reloads it', async () => {

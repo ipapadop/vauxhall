@@ -41,7 +41,8 @@ agent's hooks), [configuration](docs/configuration.md),
   denylist** reads the current `dashboard.agent_denylist` from
   `DashboardIPC.get_settings()`, appends the agent's name (not its workspace
   or session), and saves it through `DashboardIPC.save_settings()` like any
-  other setting.
+  other setting; a `get_settings()` error or a read-only `agent_denylist`
+  (its `agent_denylist_editable`) is logged and the save is skipped.
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
   `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
@@ -53,8 +54,11 @@ agent's hooks), [configuration](docs/configuration.md),
   named field, and the dialog stays open to show restart or hooks notes. Below
   the fields, a denylisted-agents list (from `get_settings()`'s
   `agent_denylist`) offers a **Remove** button per entry, hidden when the list
-  is empty. See [configuration.md](docs/configuration.md#settings-dialog) for
-  when each field takes effect.
+  is empty; removing an entry saves it alongside any other unsaved field
+  edits in the same request, and when `agent_denylist_editable` is false the
+  buttons are disabled with a note, matching a read-only field. See
+  [configuration.md](docs/configuration.md#settings-dialog) for when each
+  field takes effect.
 - **Accessibility**: Every interactive control is a `<button>` or a labeled
   form control; no `div` or `span` carries a click handler as its only way in.
   The card's workspace path, its 🕒 history icon, and its ⋮ menu icon are
@@ -105,11 +109,15 @@ agent's hooks), [configuration](docs/configuration.md),
   newly denylisted. `vauxhall.hooks.config` is imported lazily, so a malformed
   hooks file only disables the hooks option. `on_telemetry` drops an event
   whose `agent` is in `dashboard.agent_denylist` before it is queued or
-  dispatched, so a denylisted agent's telemetry never reaches the frontend.
+  dispatched, so a denylisted agent's telemetry never reaches the frontend;
+  it rechecks the denylist immediately before dispatch, under the same lock
+  `_apply_settings` dispatches `settings-changed` through, so a denylist save
+  racing a card's telemetry cannot resurrect a card that save just removed.
   `agent_denylist` is a list-valued field; unlike every other setting it isn't
   settable by an environment variable, and it is described separately from
-  `DashboardIPC.get_settings()`'s per-field `fields` list so the settings
-  editor doesn't try to render it as a scalar input.
+  `DashboardIPC.get_settings()`'s per-field `fields` list (as `agent_denylist`
+  and `agent_denylist_editable`) so the settings editor doesn't try to render
+  it as a scalar input.
 - **View state**: `vauxhall.dashboard.ui_state` reads and writes
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.

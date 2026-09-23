@@ -136,6 +136,14 @@ class DashboardApp:
                     return
 
             with self._dispatch_lock:
+                # Re-check under the lock _apply_settings dispatches through:
+                # a denylist save racing the check above must not resurrect a
+                # card that save just told the frontend to remove.
+                if telemetry["agent"] in settings.dashboard.agent_denylist:
+                    logger.debug(
+                        "Dropping denylisted agent telemetry: %s", telemetry["agent"]
+                    )
+                    return
                 self.window.invoke("agent-update", telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")

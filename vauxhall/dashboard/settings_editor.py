@@ -152,6 +152,7 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
     return {
         "fields": described,
         "agent_denylist": list(config.dashboard.agent_denylist),
+        "agent_denylist_editable": sources["dashboard.agent_denylist"].editable,
         "paths": {
             "dashboard": str(user_config_path(DASHBOARD_FILE)),
             "hooks": str(user_config_path(HOOKS_FILE)),

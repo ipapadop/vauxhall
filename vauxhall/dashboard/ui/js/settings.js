@@ -216,9 +216,11 @@ export function renderSettingsForm(container, descriptor) {
  * @param {HTMLElement} section - The fieldset wrapping the list, hidden when empty.
  * @param {string[]} denylist - The currently denylisted agent names.
  * @param {(next: string[]) => void} onRemove - Called with the denylist after removing an entry.
+ * @param {boolean} [editable] - Whether entries can be removed; disabled with a note when false.
  */
-export function renderDenylist(list, section, denylist, onRemove) {
+export function renderDenylist(list, section, denylist, onRemove, editable = true) {
     setHidden(section, denylist.length === 0);
+    setHidden(section.querySelector('#settings-denylist-readonly-note'), editable);
     list.replaceChildren();
     denylist.forEach((agent, index) => {
         const item = element('li', 'denylist-item');
@@ -226,6 +228,7 @@ export function renderDenylist(list, section, denylist, onRemove) {
         const remove = element('button', 'secondary-btn', 'Remove');
         remove.setAttribute('type', 'button');
         remove.setAttribute('aria-label', `Remove ${agent} from the denylist`);
+        setDisabled(remove, !editable);
         remove.addEventListener('click', () => onRemove(denylist.filter((_, i) => i !== index)));
         item.appendChild(remove);
         list.appendChild(item);
@@ -321,8 +324,14 @@ export function initSettings(ipc) {
     };
 
     const removeFromDenylist = async (next) => {
+        const { changes, errors } = collectChanges(container, descriptor);
+        showErrors(container, errors);
+        if (Object.keys(errors).length) {
+            message.textContent = 'Fix the highlighted settings before removing a denylist entry.';
+            return;
+        }
         try {
-            const result = await saveDenylist(ipc, next);
+            const result = await saveDenylist(ipc, next, changes);
             if (!result.ok) {
                 message.textContent = `Could not update the denylist. ${result.error ?? ''}`.trim();
                 return;
@@ -351,7 +360,7 @@ export function initSettings(ipc) {
         updateHooks.setAttribute('title', descriptor.hooks_error ?? '');
         refreshHooks();
         if (denylistList && denylistSection) {
-            renderDenylist(denylistList, denylistSection, descriptor.agent_denylist ?? [], removeFromDenylist);
+            renderDenylist(denylistList, denylistSection, descriptor.agent_denylist ?? [], removeFromDenylist, descriptor.agent_denylist_editable ?? true);
         }
     };
 

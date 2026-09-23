@@ -260,6 +260,28 @@ class TestDashboardComponents(unittest.TestCase):
 
         self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
 
+    def test_on_telemetry_rechecks_denylist_before_dispatch(self) -> None:
+        """A denylist save landing between the two checks still drops the telemetry."""
+        self.dashboard.ipc.is_ready = True
+        denylist: list[str] = []
+
+        class RacingLock:
+            """Simulates a concurrent denylist save completing at the dispatch lock."""
+
+            def __enter__(self) -> None:
+                denylist.append("TestAgent")
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", denylist
+        ):
+            self.dashboard._dispatch_lock = RacingLock()
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        self.dashboard.window.invoke.assert_not_called()
+
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""
         ipc = DashboardIPC()

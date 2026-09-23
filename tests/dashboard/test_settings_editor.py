@@ -109,6 +109,7 @@ def test_describe_settings_lists_every_field() -> None:
     assert fields["dashboard.window_title"]["apply"] == "restart"
     assert "dashboard.agent_denylist" not in fields
     assert described["agent_denylist"] == []
+    assert described["agent_denylist_editable"] is True
     assert described["paths"] == {
         "dashboard": str(user_config_path(DASHBOARD_FILE)),
         "hooks": str(user_config_path(HOOKS_FILE)),
@@ -155,6 +156,21 @@ def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
 
     assert described["hooks_mqtt"] is None
     assert "current directory takes precedence" in described["hooks_error"]
+
+
+def test_describe_settings_marks_agent_denylist_read_only_behind_a_cwd_file(
+    isolated_cwd: Path,
+) -> None:
+    """A dashboard file in the current directory makes the denylist read-only too.
+
+    Args:
+        isolated_cwd: Empty working directory holding no configuration file.
+    """
+    (isolated_cwd / DASHBOARD_FILE).write_text("{}")
+
+    described = describe_settings(dashboard_settings)
+
+    assert described["agent_denylist_editable"] is False
 
 
 @pytest.mark.parametrize(

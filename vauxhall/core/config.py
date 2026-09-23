@@ -258,7 +258,9 @@ class ConfigResolver:
         original_value = value
         if source.startswith("VAUXHALL_"):
             value = self._cast_environment_value(value, source, section, key, default)
-        elif type(value) is not type(default):
+        elif type(value) is not type(default) or (
+            isinstance(value, list) and not all(isinstance(item, str) for item in value)
+        ):
             raise ConfigurationError.invalid_value(
                 source, section, key, value, self._expected(metadata, default)
             )
@@ -342,7 +344,7 @@ class ConfigResolver:
             if isinstance(default, bool)
             else "an integer"
             if isinstance(default, int)
-            else "a list"
+            else "a list of strings"
             if isinstance(default, list)
             else "a string"
         )

@@ -101,6 +101,10 @@ async function init() {
                 console.error('Failed to update agent denylist:', descriptor.error);
                 return;
             }
+            if (descriptor.agent_denylist_editable === false) {
+                console.error('Failed to add agent to denylist: a configuration file in the current directory takes precedence.');
+                return;
+            }
             const denylist = descriptor.agent_denylist ?? [];
             if (denylist.includes(agentName)) return;
             const result = await saveDenylist(window.ipc.DashboardIPC, [...denylist, agentName]);
@@ -180,7 +184,9 @@ async function init() {
                 let card = agents[key];
 
                 if (!card) {
-                    if (ensureAgentCapacity(maxActiveAgents).includes(currentHistoryKey)) closeModal();
+                    const evicted = ensureAgentCapacity(maxActiveAgents);
+                    if (evicted.includes(currentHistoryKey)) closeModal();
+                    if (evicted.includes(currentMenuKey)) closeMenu();
                     card = createCard(data, window.ipc, (opener) => {
                         currentHistoryKey = key; // Lock modal to this agent
                         historyOpener = opener;
@@ -214,7 +220,9 @@ async function init() {
             onSettingsChanged: (changed) => {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
-                if (evictAgents(maxActiveAgents).includes(currentHistoryKey)) closeModal();
+                const evicted = evictAgents(maxActiveAgents);
+                if (evicted.includes(currentHistoryKey)) closeModal();
+                if (evicted.includes(currentMenuKey)) closeMenu();
 
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {

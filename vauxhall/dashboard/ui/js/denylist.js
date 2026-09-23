@@ -10,14 +10,16 @@
  */
 
 /**
- * Saves a new agent denylist through the settings bridge.
+ * Saves a new agent denylist through the settings bridge, alongside any other
+ * pending field changes so they are not discarded by the same save.
  * @param {object} ipc - The DashboardIPC bridge.
  * @param {string[]} next - The denylist to save.
+ * @param {object} [changes] - Other pending changes, grouped by section (as returned by collectChanges).
  * @returns {Promise<{ok: boolean, error?: string}>} The save outcome.
  */
-export async function saveDenylist(ipc, next) {
+export async function saveDenylist(ipc, next, changes = {}) {
     return JSON.parse(await ipc.save_settings(JSON.stringify({
-        changes: { dashboard: { agent_denylist: next } },
+        changes: { ...changes, dashboard: { ...changes.dashboard, agent_denylist: next } },
         update_hooks: false,
     })));
 }

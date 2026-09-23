@@ -423,6 +423,26 @@ test('a malformed config error is reported instead of saving an incomplete denyl
     assert.deepEqual(saves, []);
 });
 
+test('a read-only denylist is not saved to from the card menu', async (t) => {
+    const errors = [];
+    const originalError = console.error;
+    const saves = [];
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ agent_denylist: [], agent_denylist_editable: false }),
+        save_settings: async (payload) => { saves.push(JSON.parse(payload)); return JSON.stringify({ ok: true }); },
+    });
+    console.error = (...args) => errors.push(args);
+    t.after(() => { console.error = originalError; });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(saves, []);
+    assert.equal(errors.length, 1);
+});
+
 test('adding an already-denylisted agent does not save again', async (t) => {
     let calls = 0;
     const { listeners } = await bootDashboard(t, {
@@ -436,6 +456,28 @@ test('adding an already-denylisted agent does not save again', async (t) => {
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(calls, 0);
+});
+
+test('the card menu closes when its card is evicted to make room for a new one', async (t) => {
+    const { listeners } = await bootDashboard(t, { get_max_active_agents: async () => 1 });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
+
+    listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'two' });
+
+    assert.ok(!document.getElementById('card-menu-modal').hasAttribute('open'));
+});
+
+test('the card menu closes when its card is evicted by a lowered capacity', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 0 });
+
+    assert.ok(!document.getElementById('card-menu-modal').hasAttribute('open'));
 });
 
 test('a settings change carrying a denylist removes matching cards', async (t) => {

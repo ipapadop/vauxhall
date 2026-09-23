@@ -120,6 +120,9 @@ through the same settings pipeline. A denylisted agent's telemetry is dropped
 before it reaches the dashboard, so no card for it is created; any of its
 cards already on screen are removed immediately. The settings dialog lists
 denylisted agents, each with a **Remove** button, below the regular fields.
+Like any other field, the denylist is read-only, with the buttons disabled
+and a reason shown, when a `vauxhall_dashboard.json` in the current directory
+takes precedence over the per-user file.
 
 ## Remembered view
 

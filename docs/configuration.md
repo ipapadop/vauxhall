@@ -130,9 +130,10 @@ The dashboard keeps view preferences in `~/.config/vauxhall/dashboard_state.json
 separate from the configuration files. It writes this file itself; you don't
 need to edit it.
 
-- **Theme, sort order, and history state filter** are saved half a second after
-  you change them, or right away when the dashboard closes. A change you make
-  before the saved preferences load is kept. The search text is not saved.
+- **Theme, sort order, history state filter, attention first, and notify** are
+  saved half a second after you change them, or right away when the dashboard
+  closes. A change you make before the saved preferences load is kept. The
+  search text is not saved.
 - **Window size, position, and maximized state** are saved when the dashboard
   closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
   only set the size on first start. A saved position is used only if the
@@ -153,7 +154,7 @@ logged and treated as empty.
 | --- | --- | --- |
 | `~/.config/vauxhall/vauxhall_dashboard.json` | Settings dialog | Changed dashboard settings |
 | `~/.config/vauxhall/vauxhall_hooks.json` | Settings dialog, when **Also update hooks configuration** is checked | Changed hook MQTT settings |
-| `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, window geometry |
+| `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
 | `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the previous file |
 | `vauxhall-*` directories in the system temporary directory | Hooks | Tool start times and partial assistant messages; see [privacy.md](privacy.md#on-disk) |

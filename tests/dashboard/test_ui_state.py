@@ -121,6 +121,29 @@ def test_clean_rejects_non_string_or_empty_preferences(value: object) -> None:
     assert clean_ui_state({"history_filter": value}) == {}
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_clean_accepts_attention_first_and_notify_booleans(*, value: bool) -> None:
+    """The attention-first and notify preferences accept True and False.
+
+    Args:
+        value: The case's value.
+    """
+    assert clean_ui_state({"attention_first": value, "notify": value}) == {
+        "attention_first": value,
+        "notify": value,
+    }
+
+
+@pytest.mark.parametrize("value", ["true", 1, None, ["x"]])
+def test_clean_rejects_non_boolean_attention_first_and_notify(value: object) -> None:
+    """A non-boolean value for attention_first or notify is dropped.
+
+    Args:
+        value: The case's value.
+    """
+    assert clean_ui_state({"attention_first": value, "notify": value}) == {}
+
+
 def test_window_size_limits_follow_configured_size_limits() -> None:
     """Saved window sizes accept the same range as the configured size."""
     assert clean_ui_state({"window": {"width": 320, "height": 16384}}) == {
@@ -263,6 +286,15 @@ def test_ipc_save_ui_state_ignores_window_and_unknown_keys() -> None:
         "window": {"width": 900},
         "sort": "recent",
     }
+
+
+def test_ipc_round_trips_attention_first_and_notify() -> None:
+    """The attention-first and notify preferences save and load through the bridge."""
+    ipc = DashboardIPC()
+
+    assert ipc.save_ui_state(json.dumps({"attention_first": True, "notify": True}))
+
+    assert json.loads(ipc.get_ui_state()) == {"attention_first": True, "notify": True}
 
 
 @pytest.mark.parametrize("payload", ["not json", "[]"])

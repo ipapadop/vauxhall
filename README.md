@@ -39,7 +39,15 @@ session as a card in a grid.
   events. It updates live, can be filtered, and pauses auto-scroll while you
   hover.
 - **Search and sort**: Filter cards by agent name or workspace path, and sort by
-  name, recent activity, status, or latest token count.
+  name, recent activity, status, or latest token count. An **Attention first**
+  checkbox ranks cards in an error or waiting state before the rest, on top
+  of whatever sort is chosen.
+- **Fleet summary**: A bar under the header shows the total card count, how
+  many need attention, how many are stale, and the combined tokens across
+  every card's last operation.
+- **Notifications**: A **Notify me** checkbox, off by default, shows a
+  desktop notification each time a card starts needing attention (moves into
+  an error or waiting state).
 - **Stale detection**: Cards show a "last seen" timer and turn gray after the
   stale threshold (120 seconds by default). **Clear Stale** removes them.
 - **Copy workspace**: Clicking a card copies its raw workspace path; the
@@ -56,9 +64,9 @@ session as a card in a grid.
 - **Settings**: The ⚙️ button opens a settings dialog that saves to
   `~/.config/vauxhall/`, applies most changes without a restart, and can also
   update the hooks configuration.
-- **Remembered view**: The theme, sort order, history state filter, and window
-  size, position, and maximized state are restored the next time the dashboard
-  starts.
+- **Remembered view**: The theme, sort order, history state filter, attention
+  first and notify checkboxes, and window size, position, and maximized state
+  are restored the next time the dashboard starts.
 - **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
   report prompts, assistant messages, tool activity, permission waits, tool
   outcomes (completed, failed, cancelled, or result unavailable), and idle

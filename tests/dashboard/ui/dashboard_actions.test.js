@@ -29,6 +29,9 @@ const PAGE = `
             <option value="status">Status</option>
             <option value="tokens">Tokens</option>
         </select>
+        <input type="checkbox" id="attention-first-toggle">
+        <input type="checkbox" id="notify-toggle">
+        <div id="fleet-summary"></div>
         <div id="agent-grid"></div>
         <dialog id="history-modal">
             <button type="button" class="close-btn"></button>
@@ -74,6 +77,9 @@ async function bootDashboard(t, ipcOverrides = {}) {
             },
             get_settings: async () => JSON.stringify({ agent_denylist: [] }),
             save_settings: async () => JSON.stringify({ ok: true }),
+            get_ui_state: async () => '{}',
+            save_ui_state: async () => true,
+            notify: async () => true,
             ...ipcOverrides,
         },
     };
@@ -118,6 +124,15 @@ function choose(select, value) {
     for (const option of select.options) {
         if (option.value === value) option.selected = true;
     }
+}
+
+/**
+ * Checks a checkbox and fires its change event, the way clicking it would.
+ * @param {HTMLInputElement} checkbox - The checkbox element.
+ */
+function check(checkbox) {
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new window.Event('change'));
 }
 
 /**
@@ -499,4 +514,88 @@ test('denylisting the agent behind an open history modal closes it', async (t) =
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
 
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
+});
+
+test('checking attention first ranks a waiting card above others regardless of the chosen sort', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Apple', session_id: 'one', state: 'Idle' });
+    listeners['agent-update']({ ...BASE, agent: 'Zeta', session_id: 'two', state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    const sort = document.getElementById('sort-select');
+    choose(sort, 'name');
+    sort.dispatchEvent(new window.Event('change'));
+    assert.deepEqual(order(document), ['Apple', 'Zeta']);
+
+    check(document.getElementById('attention-first-toggle'));
+
+    assert.deepEqual(order(document), ['Zeta', 'Apple']);
+});
+
+test('attention first re-sorts a card that arrives while it is checked', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    const sort = document.getElementById('sort-select');
+    choose(sort, 'name');
+    sort.dispatchEvent(new window.Event('change'));
+    check(document.getElementById('attention-first-toggle'));
+
+    listeners['agent-update']({ ...BASE, agent: 'Zeta', session_id: 'one', state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    listeners['agent-update']({ ...BASE, agent: 'Apple', session_id: 'two', state: 'Idle' });
+
+    assert.deepEqual(order(document), ['Zeta', 'Apple']);
+});
+
+test('a card entering a waiting state sends a notification when notify is checked', async (t) => {
+    const notified = [];
+    const { document, listeners } = await bootDashboard(t, {
+        notify: async (title, message) => { notified.push([title, message]); return true; },
+    });
+    check(document.getElementById('notify-toggle'));
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input', details: { prompt: 'continue?' } });
+
+    assert.deepEqual(notified, [['Codex needs attention', 'Prompt: continue?']]);
+});
+
+test('no notification is sent while notify is unchecked', async (t) => {
+    const notified = [];
+    const { listeners } = await bootDashboard(t, {
+        notify: async (title, message) => { notified.push([title, message]); return true; },
+    });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input', details: { prompt: 'continue?' } });
+
+    assert.deepEqual(notified, []);
+});
+
+test('no notification is sent for an event that does not newly enter attention', async (t) => {
+    const notified = [];
+    const { document, listeners } = await bootDashboard(t, {
+        notify: async (title, message) => { notified.push([title, message]); return true; },
+    });
+    check(document.getElementById('notify-toggle'));
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input', details: { prompt: 'continue?' } });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Input Required', details: { prompt: 'still?' } });
+
+    assert.deepEqual(notified, [['Codex needs attention', 'Prompt: continue?']]);
+});
+
+test('the fleet summary reflects arriving cards, attention state, and tokens', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Acting', details: { tool: 'shell', tokens: 1500 } });
+    listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'two', state: 'Error', details: { error: 'boom' } });
+
+    const summary = document.getElementById('fleet-summary');
+    const texts = [...summary.children].map((badge) => badge.textContent);
+    assert.deepEqual(texts, ['2 agents', '1 needs attention', '0 stale', '1.5k tokens']);
+});
+
+test('clearing the dashboard resets the fleet summary', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+
+    document.getElementById('clear-btn').click();
+
+    const texts = [...document.getElementById('fleet-summary').children].map((badge) => badge.textContent);
+    assert.deepEqual(texts, ['0 agents', '0 need attention', '0 stale', '0 tokens']);
 });

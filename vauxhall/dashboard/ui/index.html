@@ -31,10 +31,19 @@
                     <option value="status">Status</option>
                     <option value="tokens">Latest Tokens</option>
                 </select>
+                <label class="toolbar-checkbox" title="Rank cards in Error or Waiting state first, regardless of the chosen sort">
+                    <input type="checkbox" id="attention-first-toggle">
+                    Attention first
+                </label>
+                <label class="toolbar-checkbox" title="Show a desktop notification when a card starts needing attention">
+                    <input type="checkbox" id="notify-toggle">
+                    Notify me
+                </label>
                 <button id="clear-stale-btn" class="secondary-btn" title="Remove inactive (stale) agents from the dashboard">Clear Stale</button>
                 <button id="clear-btn" class="secondary-btn" title="Remove all agents from the dashboard">Clear Dashboard</button>
             </div>
         </div>
+        <div id="fleet-summary" class="fleet-summary" role="status" aria-live="polite" aria-label="Fleet summary"></div>
     </header>
     <main id="agent-grid" aria-label="Agent cards" tabindex="-1">
         <!-- Agent cards will be injected here -->

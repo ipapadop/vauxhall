@@ -20,7 +20,9 @@ STATE_FILE = "dashboard_state.json"
 # Preferences the frontend reads and saves. The page ignores sort and filter
 # values it doesn't offer, so only their shape is checked here. The "window"
 # entry is written only by Python.
-FRONTEND_KEYS = ("theme", "sort", "history_filter")
+FRONTEND_KEYS = ("theme", "sort", "history_filter", "attention_first", "notify")
+# Preferences stored as booleans rather than the bounded strings the rest use.
+BOOLEAN_KEYS = {"attention_first", "notify"}
 THEMES = {"dark", "light"}
 MAX_PREFERENCE_LENGTH = 64
 # Saved window sizes follow the limits of the configured size.
@@ -58,8 +60,11 @@ def _is_valid_preference(key: str, value: object) -> bool:
         value: The candidate value.
 
     Returns:
-        Whether the value is a bounded string, and a known theme for "theme".
+        Whether the value is a bool for a boolean preference, or otherwise a
+        bounded string, and a known theme for "theme".
     """
+    if key in BOOLEAN_KEYS:
+        return isinstance(value, bool)
     if not isinstance(value, str) or not 0 < len(value) <= MAX_PREFERENCE_LENGTH:
         return False
     return key != "theme" or value in THEMES

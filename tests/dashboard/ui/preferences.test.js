@@ -54,14 +54,14 @@ function selects() {
  * Returns restorePreferences options that record what they apply and save.
  */
 function view(overrides = {}) {
-    const calls = { themes: [], sorts: [], saved: [] };
+    const calls = { themes: [], sorts: [], attentionFirsts: [], saved: [] };
     return {
         calls,
         options: {
             cached: null,
             changed: new Set(),
             applyTheme: theme => calls.themes.push(theme),
-            applySort: sort => calls.sorts.push(sort),
+            applySort: (sort, attentionFirst) => { calls.sorts.push(sort); calls.attentionFirsts.push(attentionFirst); },
             save: changes => calls.saved.push(changes),
             ...selects(),
             ...overrides,
@@ -195,6 +195,56 @@ test('copies a theme cached by earlier versions into the state file', async () =
     await restorePreferences({ get_ui_state: async () => '{}' }, options);
 
     assert.deepEqual(calls.saved, [{ theme: 'light' }]);
+});
+
+test('restores the attention-first and notify checkboxes', async () => {
+    const { calls, options } = view({
+        attentionFirstToggle: { checked: false },
+        notifyToggle: { checked: false },
+    });
+
+    await restorePreferences(
+        { get_ui_state: async () => '{"attention_first":true,"notify":true}' },
+        options,
+    );
+
+    assert.equal(options.attentionFirstToggle.checked, true);
+    assert.equal(options.notifyToggle.checked, true);
+    assert.deepEqual(calls.sorts, ['name']);
+    assert.deepEqual(calls.attentionFirsts, [true]);
+});
+
+test('attention-first and notify preferences changed before loading are not overwritten', async () => {
+    const { calls, options } = view({
+        changed: new Set(['attention_first', 'notify']),
+        attentionFirstToggle: { checked: false },
+        notifyToggle: { checked: false },
+    });
+
+    await restorePreferences(
+        { get_ui_state: async () => '{"attention_first":true,"notify":true}' },
+        options,
+    );
+
+    assert.equal(options.attentionFirstToggle.checked, false);
+    assert.equal(options.notifyToggle.checked, false);
+    assert.deepEqual(calls.sorts, []);
+});
+
+test('restoring only attention-first still re-sorts with the current sort value', async () => {
+    const { calls, options } = view({ attentionFirstToggle: { checked: false } });
+
+    await restorePreferences({ get_ui_state: async () => '{"attention_first":true}' }, options);
+
+    assert.equal(options.attentionFirstToggle.checked, true);
+    assert.deepEqual(calls.sorts, ['name']);
+    assert.deepEqual(calls.attentionFirsts, [true]);
+});
+
+test('missing attention-first and notify toggles are tolerated', async () => {
+    const { options } = view();
+
+    await restorePreferences({ get_ui_state: async () => '{"attention_first":true,"notify":true}' }, options);
 });
 
 test('a saved or already changed theme is not replaced by the cached theme', async () => {

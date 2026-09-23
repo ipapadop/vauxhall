@@ -61,6 +61,7 @@ class DashboardApp:
         self.ipc = DashboardIPC(
             on_ready_callback=self._on_frontend_ready,
             on_save_settings=self.save_settings,
+            on_notify=self._notify,
         )
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
@@ -147,6 +148,15 @@ class DashboardApp:
                 self.window.invoke("agent-update", telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
+
+    def _notify(self, title: str, message: str) -> None:
+        """Show an OS notification for a card that started needing attention.
+
+        Args:
+            title: The notification title.
+            message: The notification body.
+        """
+        self.app.show_notification(title, message)
 
     def on_status(self, message: str) -> None:
         """Record an MQTT status and forward it when the frontend is ready.

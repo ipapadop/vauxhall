@@ -9,7 +9,7 @@
  */
 
 import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden } from './js/state.js';
-import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal } from './js/ui.js';
+import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
 import { initIPC } from './js/ipc.js';
@@ -29,8 +29,12 @@ async function init() {
     const logoLink = document.getElementById('logo-link');
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
+    const attentionFirstToggle = document.getElementById('attention-first-toggle');
+    const notifyToggle = document.getElementById('notify-toggle');
     const modal = document.getElementById('history-modal');
     const historyFilter = document.getElementById('modal-state-filter');
+    const summaryContainer = document.getElementById('fleet-summary');
+    const refreshSummary = () => renderSummary(summaryContainer, agents);
 
     // Theme and view preferences. Saving starts once the Python bridge is available,
     // and preferences changed before the saved ones load are not overwritten.
@@ -117,6 +121,7 @@ async function init() {
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
+        refreshSummary();
     });
 
     document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
@@ -126,12 +131,20 @@ async function init() {
                 removeAgent(key);
             }
         }
+        refreshSummary();
     });
 
     searchInput?.addEventListener('input', (e) => filterGrid(e.target.value.toLowerCase(), agents));
     sortSelect?.addEventListener('change', (e) => {
-        sortGrid(e.target.value, grid);
+        sortGrid(e.target.value, grid, attentionFirstToggle?.checked);
         changePreference('sort', e.target.value);
+    });
+    attentionFirstToggle?.addEventListener('change', (e) => {
+        if (sortSelect?.value) sortGrid(sortSelect.value, grid, e.target.checked);
+        changePreference('attention_first', e.target.checked);
+    });
+    notifyToggle?.addEventListener('change', (e) => {
+        changePreference('notify', e.target.checked);
     });
     document.querySelector('.close-btn')?.addEventListener('click', closeModal);
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
@@ -159,12 +172,14 @@ async function init() {
             cached: initialTheme,
             changed: changedPreferences,
             applyTheme,
-            applySort: (sort) => {
-                if (grid.children.length) sortGrid(sort, grid);
+            applySort: (sort, attentionFirst) => {
+                if (grid.children.length) sortGrid(sort, grid, attentionFirst);
             },
             save: preferences.save,
             sortSelect,
             historyFilter,
+            attentionFirstToggle,
+            notifyToggle,
         });
 
         initSettings(window.ipc?.DashboardIPC);
@@ -205,14 +220,18 @@ async function init() {
 
                 updateAgentHistory(card, data);
                 updateLastSeen(card);
-                updateCard(card, data);
+                const { enteredAttention, message } = updateCard(card, data);
+                if (enteredAttention && notifyToggle?.checked) {
+                    window.ipc?.DashboardIPC?.notify(`${data.agent || 'Agent'} needs attention`, message);
+                }
 
                 // Push live updates to the history modal if it's viewing this agent
                 if (currentHistoryKey === key) openHistoryModal(key, agents, true);
 
                 // Re-apply filter and sort to keep view consistent
                 if (searchInput?.value) filterGrid(searchInput.value.toLowerCase(), agents);
-                if (sortSelect?.value) sortGrid(sortSelect.value, grid);
+                if (sortSelect?.value) sortGrid(sortSelect.value, grid, attentionFirstToggle?.checked);
+                refreshSummary();
             },
             onStatusUpdate: (msg) => {
                 if (status) status.innerText = msg;
@@ -234,6 +253,7 @@ async function init() {
                 }
 
                 checkStaleness(agents, staleThresholdMs);
+                refreshSummary();
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";
@@ -253,7 +273,10 @@ async function init() {
         });
 
         // Start staleness check every 10 seconds
-        setInterval(() => checkStaleness(agents, staleThresholdMs), 10000);
+        setInterval(() => {
+            checkStaleness(agents, staleThresholdMs);
+            refreshSummary();
+        }, 10000);
     } catch (err) {
         console.error("Initialization error:", err);
     }

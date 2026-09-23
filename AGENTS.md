@@ -20,6 +20,18 @@ agent's hooks), [configuration](docs/configuration.md),
 - **Metrics**: Positive `tokens` and `duration` values appear as footer badges.
   They reset when an `Acting` event, or a `Thinking` event with a `prompt`,
   starts a new operation.
+- **Fleet summary**: A live region under the header shows the total card
+  count, how many need attention (`Error` or a waiting state), how many are
+  stale, and the summed tokens across every card's last operation. It
+  re-renders after every telemetry update, staleness sweep, settings change,
+  and **Clear**/**Clear Stale**.
+- **Attention first**: A toolbar checkbox ranks cards needing attention
+  (`Error` or a waiting state) before the rest, on top of whatever sort is
+  chosen; it re-sorts on every telemetry update while checked.
+- **Notifications**: A toolbar checkbox, unchecked by default, shows an OS
+  notification (through `Pyloid.show_notification`) each time a card moves
+  into `Error` or a waiting state from one that wasn't; it does not repeat
+  while a card stays in an attention state.
 - **Activity log**: Each card shows its last 5 events, newest first, with
   `[HH:mm:ss]` timestamps. An event whose message matches the previous one is
   not repeated. The message is, in order of precedence: the prompt for waiting
@@ -76,13 +88,13 @@ agent's hooks), [configuration](docs/configuration.md),
   `sortGrid` re-orders without animating.
 - **Remembered view**: The first paint uses the theme cached in the
   `vauxhall-theme` localStorage key. On startup the frontend then applies the
-  theme, sort order, and history state filter from
-  `DashboardIPC.get_ui_state()` without delaying IPC setup, skipping any
-  preference the user already changed, and re-sorts existing cards. If no theme
-  is saved, the cached theme (from earlier versions) is saved. Changes are
-  batched and sent to `DashboardIPC.save_ui_state()` 500 ms after the last one,
-  or immediately on `pagehide`; a `false` result is logged. Theme changes also
-  update the localStorage cache.
+  theme, sort order, history state filter, and the attention-first and notify
+  checkboxes from `DashboardIPC.get_ui_state()` without delaying IPC setup,
+  skipping any preference the user already changed, and re-sorts existing
+  cards. If no theme is saved, the cached theme (from earlier versions) is
+  saved. Changes are batched and sent to `DashboardIPC.save_ui_state()` 500 ms
+  after the last one, or immediately on `pagehide`; a `false` result is
+  logged. Theme changes also update the localStorage cache.
 
 ## Dashboard Internals
 
@@ -123,8 +135,9 @@ agent's hooks), [configuration](docs/configuration.md),
   valid values, treats an unreadable file as empty, and writes atomically.
   Each update holds one lock across load, merge, and write, so a frontend save
   and the shutdown window save can't discard each other's fields.
-  `save_ui_state` accepts only `theme`, `sort`, and `history_filter`; only
-  Python writes `window`. `run()` creates the window with the saved size, calls
+  `save_ui_state` accepts only `theme`, `sort`, `history_filter`,
+  `attention_first`, and `notify`, the last two as booleans; only Python
+  writes `window`. `run()` creates the window with the saved size, calls
   `set_position` only when `visible_position` finds the top edge on a monitor's
   available area, and maximizes after showing the window. When the UI loop
   exits, it saves the size and position from Pyloid's public `get_size`,
@@ -146,6 +159,10 @@ agent's hooks), [configuration](docs/configuration.md),
 - **Pyloid**: Pyloid 0.27.2 or newer is required. Its `BrowserWindow` marshals
   cross-thread commands to the UI thread, so MQTT callbacks call
   `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
+- **Notifications**: `DashboardIPC.notify` calls the `on_notify` callback
+  `DashboardApp` registers, which calls `Pyloid.show_notification` for an
+  OS-level (system tray) notification. Without a registered callback, or if
+  it raises, `notify` returns `False` instead of propagating.
 
 ## Configuration
 

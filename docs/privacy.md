@@ -104,6 +104,12 @@ prompt and command capture. Today you can:
   later subscribers. Check your broker's own logging and persistence
   settings; Mosquitto doesn't log payloads by default.
 - **Clipboard**: Clicking a card copies its workspace path.
+- **Desktop notifications**: The **Notify me** checkbox is off by default. When
+  checked, a card that starts needing attention triggers an OS notification
+  (through `Pyloid.show_notification`) containing the agent name and the
+  card's latest prompt, message, or error text. The OS, not Vauxhall, decides
+  how long that notification (and any lock-screen preview or notification
+  history it keeps) is retained.
 
 ### On disk
 

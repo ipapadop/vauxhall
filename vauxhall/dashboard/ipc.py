@@ -61,6 +61,7 @@ class DashboardIPC(PyloidIPC):
         self,
         on_ready_callback: Callable[[], Any] | None = None,
         on_save_settings: Callable[..., dict[str, Any]] | None = None,
+        on_notify: Callable[[str, str], Any] | None = None,
     ) -> None:
         """Initialize the IPC bridge.
 
@@ -68,11 +69,14 @@ class DashboardIPC(PyloidIPC):
             on_ready_callback: Optional function to call when the frontend is ready.
             on_save_settings: Optional function that saves settings changes,
                 called with the changes and an ``update_hooks`` keyword.
+            on_notify: Optional function that shows a desktop notification,
+                called with a title and a message.
         """
         super().__init__()
         self.is_ready = False
         self.on_ready_callback = on_ready_callback
         self.on_save_settings = on_save_settings
+        self.on_notify = on_notify
 
     @Bridge(result=bool)
     def ping(self) -> bool:
@@ -214,6 +218,27 @@ class DashboardIPC(PyloidIPC):
             webbrowser.open(url)
         except Exception:
             logger.exception("Failed to open URL")
+            return False
+        else:
+            return True
+
+    @Bridge(str, str, result=bool)
+    def notify(self, title: str, message: str) -> bool:
+        """Show a desktop notification for a card that started needing attention.
+
+        Args:
+            title: The notification title.
+            message: The notification body.
+
+        Returns:
+            bool: True if a notification callback is registered and it succeeds.
+        """
+        if self.on_notify is None:
+            return False
+        try:
+            self.on_notify(title, message)
+        except Exception:
+            logger.exception("Failed to show notification")
             return False
         else:
             return True

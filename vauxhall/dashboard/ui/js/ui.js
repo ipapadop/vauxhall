@@ -78,6 +78,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
     card.className = 'agent-card';
     card.title = "Click to copy workspace path";
     card.innerHTML = `
+        <button type="button" class="menu-icon" title="Agent options">⋮</button>
         <div class="agent-header">
             <div class="agent-info">
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -96,7 +97,6 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
                 <div class="metric-badges" title="Recent operation metrics"></div>
             </div>
-            <button type="button" class="menu-icon" title="Agent options">⋮</button>
             <button type="button" class="history-icon" title="View historical operations">🕒</button>
         </div>
     `;

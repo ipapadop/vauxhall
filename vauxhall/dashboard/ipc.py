@@ -176,7 +176,8 @@ class DashboardIPC(PyloidIPC):
         """Return the saved view preferences.
 
         Returns:
-            str: JSON with any saved ``theme``, ``sort``, and ``history_filter``.
+            str: JSON with any saved ``theme``, ``sort``, ``history_filter``,
+                ``attention_first``, and ``notify``.
         """
         return json.dumps(frontend_preferences(load_ui_state()))
 
@@ -187,8 +188,8 @@ class DashboardIPC(PyloidIPC):
         Unknown keys, invalid values, and window geometry are ignored.
 
         Args:
-            payload: JSON object with any of ``theme``, ``sort``, and
-                ``history_filter``.
+            payload: JSON object with any of ``theme``, ``sort``,
+                ``history_filter``, ``attention_first``, and ``notify``.
 
         Returns:
             bool: True if the request was valid and the state file was written.

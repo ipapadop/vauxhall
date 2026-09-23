@@ -242,9 +242,12 @@ export function updateCard(card, data) {
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
 
-    const previousStatus = statusBadge?.textContent;
+    // The 'error'/'waiting' classes, unlike the status badge text, survive
+    // going stale (checkStaleness only overwrites the badge to "STALE"), so
+    // they're what tells a still-blocked stale card from one newly blocked.
+    const wasAttention = card.classList.contains('error') || card.classList.contains('waiting');
     if (statusBadge) statusBadge.textContent = data.state;
-    const enteredAttention = ATTENTION_STATES.has(data.state) && !ATTENTION_STATES.has(previousStatus);
+    const enteredAttention = ATTENTION_STATES.has(data.state) && !wasAttention;
 
     // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');

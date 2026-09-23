@@ -254,3 +254,16 @@ test('an event with no log message still reports whether it entered attention', 
     assert.equal(enteredAttention, true);
     assert.equal(message, 'Error');
 });
+
+test('a card that goes stale while waiting does not re-report attention on its next event', () => {
+    const card = makeCard();
+    updateCard(card, { state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    // checkStaleness overwrites the badge text to "STALE" but leaves the
+    // 'waiting' class alone; a naive read of the badge would see "STALE" as
+    // not an attention state and wrongly report re-entering attention below.
+    card.querySelector('.status-badge').textContent = 'STALE';
+
+    const { enteredAttention } = updateCard(card, { state: 'Waiting for Input', details: { prompt: 'still?' } });
+
+    assert.equal(enteredAttention, false);
+});

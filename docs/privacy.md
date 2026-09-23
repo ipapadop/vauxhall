@@ -85,6 +85,12 @@ prompt and command capture. Today you can:
 - **Uninstall the hooks** as described in the
   [README](../README.md#uninstalling).
 - **Keep the broker private**, as described above.
+- **Denylist an agent in the dashboard.** A card's ⋮ menu can add that agent's
+  name to `dashboard.agent_denylist` (see
+  [configuration.md](configuration.md#denylisted-agents)). This only changes
+  what the dashboard keeps and shows: the hook still publishes telemetry for
+  that agent to the broker, and any other subscriber still receives it. To
+  stop sending it at all, use one of the options above instead.
 
 ## Retention
 

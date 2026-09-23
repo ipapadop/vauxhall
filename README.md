@@ -44,6 +44,10 @@ session as a card in a grid.
   stale threshold (120 seconds by default). **Clear Stale** removes them.
 - **Copy workspace**: Clicking a card copies its raw workspace path; the
   workspace path on each card is also a button, so it works from the keyboard.
+- **Per-agent menu**: A card's ⋮ button can hide that card until its agent's
+  next event, or add the agent to a denylist saved in the dashboard
+  configuration; a denylisted agent's telemetry is dropped and no card for it
+  is shown, until it's removed from the settings dialog.
 - **Keyboard and screen reader support**: Every control is a real button or a
   labeled form control, the history and settings modals are native dialogs that
   close on Escape and return focus to the control that opened them, the

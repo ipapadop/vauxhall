@@ -20,6 +20,10 @@ The first release, planned as 0.1.0. It is alpha software; see
   live state, an activity log, a history modal, search, sort, stale detection,
   and a settings dialog. It remembers its theme, sort order, history filter,
   and window geometry.
+- A per-card menu to hide a card until its agent's next event, or add the
+  agent to a denylist saved in the dashboard configuration; denylisted
+  agents' telemetry is dropped and their cards removed, until the denylist
+  entry is removed from the settings dialog.
 - Hooks for Claude Code, Codex, and Gemini CLI, installed with
   `vauxhall-hook-install claude codex gemini` into an isolated `.vauxhall-venv`.
 - `TelemetryClient` and telemetry schema version 1 for other agents.

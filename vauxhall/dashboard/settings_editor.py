@@ -23,6 +23,7 @@ APPLY_MODES = {
     "dashboard.stale_threshold": "live",
     "dashboard.max_active_agents": "live",
     "dashboard.max_payload_bytes": "live",
+    "dashboard.agent_denylist": "live",
 }
 
 _FIELD_PATTERN = re.compile(r"\b(mqtt|logging|dashboard)\.([a-z_]+)\b")
@@ -121,6 +122,11 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
     for section in fields(config):
         section_config = getattr(config, section.name)
         for field in fields(section_config):
+            value = getattr(section_config, field.name)
+            # List-valued fields get their own dedicated editor, not this
+            # scalar one, so they are described separately below.
+            if isinstance(value, list):
+                continue
             key = f"{section.name}.{field.name}"
             source = sources[key]
             choices = field.metadata.get("choices")
@@ -129,7 +135,7 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
                     "key": key,
                     "section": section.name,
                     "name": field.name,
-                    "value": getattr(section_config, field.name),
+                    "value": value,
                     "default": field.default,
                     "type": _field_type(field.default),
                     "min": field.metadata.get("min"),
@@ -145,6 +151,8 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
 
     return {
         "fields": described,
+        "agent_denylist": list(config.dashboard.agent_denylist),
+        "agent_denylist_editable": sources["dashboard.agent_denylist"].editable,
         "paths": {
             "dashboard": str(user_config_path(DASHBOARD_FILE)),
             "hooks": str(user_config_path(HOOKS_FILE)),

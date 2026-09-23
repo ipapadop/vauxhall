@@ -6,11 +6,27 @@
 import json
 import os
 from collections.abc import Mapping
-from dataclasses import MISSING, dataclass, field, fields
+from dataclasses import MISSING, Field, dataclass, field, fields
 from pathlib import Path
 from typing import Any, TypeVar
 
 T = TypeVar("T")
+
+
+def _field_default(f: Field[Any]) -> Any:  # noqa: ANN401
+    """Return a dataclass field's default, calling its factory if it has one.
+
+    Args:
+        f: The field to read a default from.
+
+    Returns:
+        The field's default value, or ``None`` if it has neither.
+    """
+    if f.default is not MISSING:
+        return f.default
+    if f.default_factory is not MISSING:
+        return f.default_factory()
+    return None
 
 
 class ConfigurationError(ValueError):
@@ -203,7 +219,7 @@ class ConfigResolver:
                     f"{env_prefix}_{f.name.upper()}",
                     section,
                     f.name,
-                    f.default if f.default is not MISSING else None,
+                    _field_default(f),
                     f.metadata,
                 )
                 for f in fields(cls)
@@ -242,7 +258,9 @@ class ConfigResolver:
         original_value = value
         if source.startswith("VAUXHALL_"):
             value = self._cast_environment_value(value, source, section, key, default)
-        elif type(value) is not type(default):
+        elif type(value) is not type(default) or (
+            isinstance(value, list) and not all(isinstance(item, str) for item in value)
+        ):
             raise ConfigurationError.invalid_value(
                 source, section, key, value, self._expected(metadata, default)
             )
@@ -305,6 +323,10 @@ class ConfigResolver:
                 raise ConfigurationError.invalid_value(
                     source, section, key, value, "an integer"
                 ) from error
+        if isinstance(default, list):
+            raise ConfigurationError.invalid_value(
+                source, section, key, value, "a value only settable via a config file"
+            )
         return value  # type: ignore[return-value]
 
     def _expected(self, metadata: Mapping[str, object], default: object) -> str:
@@ -322,6 +344,8 @@ class ConfigResolver:
             if isinstance(default, bool)
             else "an integer"
             if isinstance(default, int)
+            else "a list of strings"
+            if isinstance(default, list)
             else "a string"
         )
         if metadata.get("non_empty"):

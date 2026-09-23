@@ -45,6 +45,7 @@ which overrides the default. See `vauxhall_dashboard.json.example` and
 | `dashboard` | `pending_update_limit` | `VAUXHALL_DASHBOARD_PENDING_UPDATE_LIMIT` | `500` | Integer 1–10000 |
 | `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
 | `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
+| `dashboard` | `agent_denylist` | Not settable via environment variable | `[]` | List of agent names |
 
 Invalid values (malformed JSON, non-object sections, wrong types, out-of-range
 values, or unparsable environment values) stop the dashboard at startup. The
@@ -95,7 +96,7 @@ Saved changes take effect as follows:
 
 | When | Fields |
 | --- | --- |
-| Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes` |
+| Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes`, `dashboard.agent_denylist` |
 | After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive` |
 | After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
 
@@ -110,6 +111,18 @@ environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
 run on another machine. The option is unavailable, with the reason shown, when
 the hooks configuration is malformed or a `vauxhall_hooks.json` in the current
 directory takes precedence over the per-user file.
+
+### Denylisted agents
+
+Each card's ⋮ menu has **Add agent to denylist**, which adds the agent's name
+(not its workspace or session) to `dashboard.agent_denylist` and saves it
+through the same settings pipeline. A denylisted agent's telemetry is dropped
+before it reaches the dashboard, so no card for it is created; any of its
+cards already on screen are removed immediately. The settings dialog lists
+denylisted agents, each with a **Remove** button, below the regular fields.
+Like any other field, the denylist is read-only, with the buttons disabled
+and a reason shown, when a `vauxhall_dashboard.json` in the current directory
+takes precedence over the per-user file.
 
 ## Remembered view
 

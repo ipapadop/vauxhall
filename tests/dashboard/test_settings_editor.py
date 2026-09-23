@@ -107,6 +107,9 @@ def test_describe_settings_lists_every_field() -> None:
     assert fields["logging.level"]["apply"] == "live"
     assert fields["dashboard.debug"]["type"] == "boolean"
     assert fields["dashboard.window_title"]["apply"] == "restart"
+    assert "dashboard.agent_denylist" not in fields
+    assert described["agent_denylist"] == []
+    assert described["agent_denylist_editable"] is True
     assert described["paths"] == {
         "dashboard": str(user_config_path(DASHBOARD_FILE)),
         "hooks": str(user_config_path(HOOKS_FILE)),
@@ -155,6 +158,21 @@ def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
     assert "current directory takes precedence" in described["hooks_error"]
 
 
+def test_describe_settings_marks_agent_denylist_read_only_behind_a_cwd_file(
+    isolated_cwd: Path,
+) -> None:
+    """A dashboard file in the current directory makes the denylist read-only too.
+
+    Args:
+        isolated_cwd: Empty working directory holding no configuration file.
+    """
+    (isolated_cwd / DASHBOARD_FILE).write_text("{}")
+
+    described = describe_settings(dashboard_settings)
+
+    assert described["agent_denylist_editable"] is False
+
+
 @pytest.mark.parametrize(
     ("message", "expected"),
     [
@@ -200,8 +218,50 @@ def test_save_applies_live_settings(dashboard: DashboardApp) -> None:
         "dashboard": {"stale_threshold": 300}
     }
     dashboard.window.invoke.assert_called_once_with(
-        "settings-changed", {"stale_threshold": 300, "max_active_agents": 100}
+        "settings-changed",
+        {"stale_threshold": 300, "max_active_agents": 100, "agent_denylist": []},
     )
+
+
+def test_save_applies_agent_denylist_live(dashboard: DashboardApp) -> None:
+    """Adding an agent to the denylist saves, applies live, and is broadcast.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    result = dashboard.save_settings({"dashboard": {"agent_denylist": ["codex"]}})
+
+    assert result["ok"] is True
+    assert result["restart_required"] == []
+    assert dashboard_settings.dashboard.agent_denylist == ["codex"]
+    assert json.loads(user_config_path(DASHBOARD_FILE).read_text()) == {
+        "dashboard": {"agent_denylist": ["codex"]}
+    }
+    dashboard.window.invoke.assert_called_once_with(
+        "settings-changed",
+        {
+            "stale_threshold": 120,
+            "max_active_agents": 100,
+            "agent_denylist": ["codex"],
+        },
+    )
+
+
+def test_save_removing_the_last_denylist_entry_clears_the_file(
+    dashboard: DashboardApp,
+) -> None:
+    """Emptying the denylist drops it from the saved file, like any default value.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    dashboard.save_settings({"dashboard": {"agent_denylist": ["codex"]}})
+
+    result = dashboard.save_settings({"dashboard": {"agent_denylist": []}})
+
+    assert result["ok"] is True
+    assert dashboard_settings.dashboard.agent_denylist == []
+    assert json.loads(user_config_path(DASHBOARD_FILE).read_text()) == {}
 
 
 def test_save_applies_logging_level(dashboard: DashboardApp) -> None:

@@ -37,15 +37,21 @@ const PAGE = `
             <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
             <div id="modal-history-body"></div>
         </dialog>
+        <dialog id="card-menu-modal">
+            <button type="button" id="card-menu-close"></button>
+            <button type="button" id="card-menu-hide">Hide until next event</button>
+            <button type="button" id="card-menu-denylist">Add agent to denylist</button>
+        </dialog>
     </body></html>
 `;
 
 /**
  * Starts the dashboard against a fresh document and returns its test handles.
  * @param {import('node:test').TestContext} t - The test context, used to restore globals.
+ * @param {object} [ipcOverrides] - Extra or replaced DashboardIPC bridge methods.
  * @returns {Promise<object>} The document and the captured backend callbacks.
  */
-async function bootDashboard(t) {
+async function bootDashboard(t, ipcOverrides = {}) {
     const { document, window } = parseHTML(PAGE);
     const listeners = {};
     window.pyloid = {
@@ -66,6 +72,9 @@ async function bootDashboard(t) {
                 clipboard.push(path);
                 return true;
             },
+            get_settings: async () => JSON.stringify({ agent_denylist: [] }),
+            save_settings: async () => JSON.stringify({ ok: true }),
+            ...ipcOverrides,
         },
     };
     // linkedom exposes innerText as a getter, so the status line the dashboard
@@ -302,4 +311,192 @@ test('clicking a card copies its workspace path', async (t) => {
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.deepEqual(clipboard, ['/home/user/project']);
+});
+
+test('the menu icon opens the card options dialog', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+
+    assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
+});
+
+test('hiding a card removes it from view until its agent reports again', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    const card = agents['["Codex","/home/user/project","one"]'];
+    card.querySelector('.menu-icon').click();
+
+    document.getElementById('card-menu-hide').click();
+
+    assert.equal(card.style.display, 'none');
+    assert.equal(card.dataset.hidden, 'true');
+
+    listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
+
+    assert.equal(card.style.display, '');
+    assert.equal(card.dataset.hidden, undefined);
+});
+
+test('the close button hides the card menu and returns focus to its opener', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    const menuButton = agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon');
+    let focused = 0;
+    menuButton.focus = () => { focused++; };
+    menuButton.click();
+
+    document.getElementById('card-menu-close').click();
+
+    assert.ok(!document.getElementById('card-menu-modal').hasAttribute('open'));
+    assert.equal(focused, 1);
+});
+
+test('clicking the card menu backdrop closes it', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    const menu = document.getElementById('card-menu-modal');
+
+    window.onclick({ target: menu });
+
+    assert.ok(!menu.hasAttribute('open'));
+});
+
+test('adding an agent to the denylist reads the current list and appends to it', async (t) => {
+    const saved = [];
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ agent_denylist: ['Gemini'] }),
+        save_settings: async (payload) => {
+            saved.push(JSON.parse(payload));
+            return JSON.stringify({ ok: true });
+        },
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(saved, [{
+        changes: { dashboard: { agent_denylist: ['Gemini', 'Codex'] } },
+        update_hooks: false,
+    }]);
+});
+
+test('a failed denylist save is reported instead of swallowed silently', async (t) => {
+    const errors = [];
+    const originalError = console.error;
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ agent_denylist: [] }),
+        save_settings: async () => JSON.stringify({ ok: false, error: 'read-only' }),
+    });
+    console.error = (...args) => errors.push(args);
+    t.after(() => { console.error = originalError; });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(errors, [['Failed to add agent to denylist:', 'read-only']]);
+});
+
+test('a malformed config error is reported instead of saving an incomplete denylist', async (t) => {
+    const errors = [];
+    const originalError = console.error;
+    const saves = [];
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ error: 'invalid dashboard.json' }),
+        save_settings: async (payload) => { saves.push(JSON.parse(payload)); return JSON.stringify({ ok: true }); },
+    });
+    console.error = (...args) => errors.push(args);
+    t.after(() => { console.error = originalError; });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(errors, [['Failed to update agent denylist:', 'invalid dashboard.json']]);
+    assert.deepEqual(saves, []);
+});
+
+test('a read-only denylist is not saved to from the card menu', async (t) => {
+    const errors = [];
+    const originalError = console.error;
+    const saves = [];
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ agent_denylist: [], agent_denylist_editable: false }),
+        save_settings: async (payload) => { saves.push(JSON.parse(payload)); return JSON.stringify({ ok: true }); },
+    });
+    console.error = (...args) => errors.push(args);
+    t.after(() => { console.error = originalError; });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(saves, []);
+    assert.equal(errors.length, 1);
+});
+
+test('adding an already-denylisted agent does not save again', async (t) => {
+    let calls = 0;
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ agent_denylist: ['Codex'] }),
+        save_settings: async () => { calls++; return JSON.stringify({ ok: true }); },
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(calls, 0);
+});
+
+test('the card menu closes when its card is evicted to make room for a new one', async (t) => {
+    const { listeners } = await bootDashboard(t, { get_max_active_agents: async () => 1 });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
+
+    listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'two' });
+
+    assert.ok(!document.getElementById('card-menu-modal').hasAttribute('open'));
+});
+
+test('the card menu closes when its card is evicted by a lowered capacity', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 0 });
+
+    assert.ok(!document.getElementById('card-menu-modal').hasAttribute('open'));
+});
+
+test('a settings change carrying a denylist removes matching cards', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'two' });
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
+
+    assert.deepEqual(Object.keys(agents), ['["Claude","/home/user/project","two"]']);
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+});
+
+test('denylisting the agent behind an open history modal closes it', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
+
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
 });

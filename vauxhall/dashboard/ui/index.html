@@ -64,11 +64,30 @@
         </div>
     </dialog>
 
+    <dialog id="card-menu-modal" class="modal card-menu-modal" aria-labelledby="card-menu-title">
+        <div class="modal-content card-menu-content">
+            <div class="modal-header">
+                <h2 id="card-menu-title">Agent Options</h2>
+                <button type="button" id="card-menu-close" class="close-btn" title="Close" aria-label="Close agent options">&times;</button>
+            </div>
+            <div class="card-menu-actions">
+                <button type="button" id="card-menu-hide" class="secondary-btn">Hide until next event</button>
+                <button type="button" id="card-menu-denylist" class="secondary-btn">Add agent to denylist</button>
+            </div>
+        </div>
+    </dialog>
+
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
         <form id="settings-form" novalidate>
             <h2 id="settings-title">Settings</h2>
             <p id="settings-message" class="settings-message" role="status" aria-live="polite"></p>
             <div id="settings-fields"></div>
+            <fieldset id="settings-denylist-section" class="settings-section" hidden>
+                <legend>Denylisted Agents</legend>
+                <p class="settings-note">Telemetry from these agents is dropped and their cards are not shown.</p>
+                <p id="settings-denylist-readonly-note" class="settings-note" hidden>Read-only: a configuration file in the current directory takes precedence.</p>
+                <ul id="settings-denylist-list" class="denylist-list"></ul>
+            </fieldset>
             <div id="settings-hooks" class="settings-hooks" hidden>
                 <label>
                     <input type="checkbox" id="settings-update-hooks">

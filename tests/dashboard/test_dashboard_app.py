@@ -228,6 +228,60 @@ class TestDashboardComponents(unittest.TestCase):
         ):
             assert sentinel not in logs.output[0]
 
+    def test_on_telemetry_drops_denylisted_agent(self) -> None:
+        """Telemetry for a denylisted agent is dropped, not queued or forwarded."""
+        self.dashboard.ipc.is_ready = True
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["TestAgent"]
+        ):
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        self.dashboard.window.invoke.assert_not_called()
+        assert not self.dashboard.pending_updates
+
+    def test_on_telemetry_drops_denylisted_agent_while_not_ready(self) -> None:
+        """A denylisted agent's telemetry is not queued for a later drain."""
+        self.dashboard.ipc.is_ready = False
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["TestAgent"]
+        ):
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        assert not self.dashboard.pending_updates
+
+    def test_on_telemetry_allows_agents_not_on_the_denylist(self) -> None:
+        """Telemetry for an agent not on the denylist is forwarded as usual."""
+        self.dashboard.ipc.is_ready = True
+        valid_data = self.valid_telemetry()
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", ["OtherAgent"]
+        ):
+            self.dashboard.on_telemetry(valid_data)
+
+        self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
+
+    def test_on_telemetry_rechecks_denylist_before_dispatch(self) -> None:
+        """A denylist save landing between the two checks still drops the telemetry."""
+        self.dashboard.ipc.is_ready = True
+        denylist: list[str] = []
+
+        class RacingLock:
+            """Simulates a concurrent denylist save completing at the dispatch lock."""
+
+            def __enter__(self) -> None:
+                denylist.append("TestAgent")
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+        with patch(
+            "vauxhall.dashboard.app.settings.dashboard.agent_denylist", denylist
+        ):
+            self.dashboard._dispatch_lock = RacingLock()
+            self.dashboard.on_telemetry(self.valid_telemetry())
+
+        self.dashboard.window.invoke.assert_not_called()
+
     def test_ipc_copy_to_clipboard(self) -> None:
         """Test that the IPC bridge correctly calls pyperclip."""
         ipc = DashboardIPC()

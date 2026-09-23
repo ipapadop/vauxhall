@@ -64,9 +64,10 @@ function textSpan(className, value) {
  * @param {object} data - Initial telemetry data.
  * @param {any} pyloidIpc - Pyloid IPC bridge.
  * @param {Function} openHistoryCallback - Called with the history button when it is activated.
+ * @param {Function} [openMenuCallback] - Called with the menu button when it is activated.
  * @returns {HTMLElement} The created card.
  */
-export function createCard(data, pyloidIpc, openHistoryCallback) {
+export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallback) {
     const agent = String(data.agent ?? '');
     const workspace = String(data.workspace ?? '');
     const sessionId = String(data.session_id ?? '');
@@ -86,7 +87,10 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
                 <button type="button" class="agent-workspace" title="Copy workspace path"></button>
                 <div class="agent-session" title="Agent session identifier"></div>
             </div>
-            <div class="status-badge" title="Current agent state">Idle</div>
+            <div class="header-actions">
+                <div class="status-badge" title="Current agent state">Idle</div>
+                <button type="button" class="menu-icon" title="Agent options">⋮</button>
+            </div>
         </div>
 
         <div class="log-area" title="Real-time operations log (shows last 5 events)">Ready...</div>
@@ -117,6 +121,13 @@ export function createCard(data, pyloidIpc, openHistoryCallback) {
     historyButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openHistoryCallback(historyButton);
+    });
+
+    const menuButton = card.querySelector('.menu-icon');
+    menuButton.setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
+    menuButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMenuCallback?.(menuButton);
     });
 
     // Copy the raw workspace path; never build a shell command from it
@@ -309,7 +320,8 @@ export function filterGrid(query, agents) {
 
         const name = nameElement.textContent?.toLowerCase() || '';
         const workspace = workspaceElement.textContent?.toLowerCase() || '';
-        card.style.display = name.includes(query) || workspace.includes(query) ? 'flex' : 'none';
+        const matches = name.includes(query) || workspace.includes(query);
+        card.style.display = matches && card.dataset.hidden !== 'true' ? 'flex' : 'none';
     });
 }
 

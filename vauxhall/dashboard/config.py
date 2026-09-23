@@ -30,6 +30,7 @@ class UIConfig:
     max_payload_bytes: int = field(
         default=65536, metadata={"min": 1024, "max": 1048576}
     )
+    agent_denylist: list[str] = field(default_factory=list)
 
 
 @dataclass

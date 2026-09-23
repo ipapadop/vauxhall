@@ -220,13 +220,13 @@ export function renderSettingsForm(container, descriptor) {
 export function renderDenylist(list, section, denylist, onRemove) {
     setHidden(section, denylist.length === 0);
     list.replaceChildren();
-    denylist.forEach((agent) => {
+    denylist.forEach((agent, index) => {
         const item = element('li', 'denylist-item');
         item.appendChild(element('span', '', agent));
         const remove = element('button', 'secondary-btn', 'Remove');
         remove.setAttribute('type', 'button');
         remove.setAttribute('aria-label', `Remove ${agent} from the denylist`);
-        remove.addEventListener('click', () => onRemove(denylist.filter((name) => name !== agent)));
+        remove.addEventListener('click', () => onRemove(denylist.filter((_, i) => i !== index)));
         item.appendChild(remove);
         list.appendChild(item);
     });

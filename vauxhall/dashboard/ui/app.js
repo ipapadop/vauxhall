@@ -97,6 +97,10 @@ async function init() {
         if (!agentName || !window.ipc?.DashboardIPC) return;
         try {
             const descriptor = JSON.parse(await window.ipc.DashboardIPC.get_settings());
+            if (descriptor.error) {
+                console.error('Failed to update agent denylist:', descriptor.error);
+                return;
+            }
             const denylist = descriptor.agent_denylist ?? [];
             if (denylist.includes(agentName)) return;
             const result = await saveDenylist(window.ipc.DashboardIPC, [...denylist, agentName]);

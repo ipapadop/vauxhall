@@ -302,6 +302,19 @@ test('renderDenylist hides the section when empty and lists entries when not', (
     assert.deepEqual(removed, [['gemini']]);
 });
 
+test('renderDenylist removes only the clicked entry when names repeat', () => {
+    const document = setup('<fieldset id="section" hidden><ul id="list"></ul></fieldset>');
+    const section = document.getElementById('section');
+    const list = document.getElementById('list');
+
+    const removed = [];
+    renderDenylist(list, section, ['codex', 'codex'], (next) => removed.push(next));
+
+    const items = [...list.querySelectorAll('.denylist-item')];
+    items[0].querySelector('button').click();
+    assert.deepEqual(removed, [['codex']]);
+});
+
 test('dialog shows the denylist and removing an entry saves and reloads it', async () => {
     const document = setup(DIALOG);
     const requests = [];

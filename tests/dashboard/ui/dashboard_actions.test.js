@@ -403,6 +403,26 @@ test('a failed denylist save is reported instead of swallowed silently', async (
     assert.deepEqual(errors, [['Failed to add agent to denylist:', 'read-only']]);
 });
 
+test('a malformed config error is reported instead of saving an incomplete denylist', async (t) => {
+    const errors = [];
+    const originalError = console.error;
+    const saves = [];
+    const { listeners } = await bootDashboard(t, {
+        get_settings: async () => JSON.stringify({ error: 'invalid dashboard.json' }),
+        save_settings: async (payload) => { saves.push(JSON.parse(payload)); return JSON.stringify({ ok: true }); },
+    });
+    console.error = (...args) => errors.push(args);
+    t.after(() => { console.error = originalError; });
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    document.getElementById('card-menu-denylist').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(errors, [['Failed to update agent denylist:', 'invalid dashboard.json']]);
+    assert.deepEqual(saves, []);
+});
+
 test('adding an already-denylisted agent does not save again', async (t) => {
     let calls = 0;
     const { listeners } = await bootDashboard(t, {

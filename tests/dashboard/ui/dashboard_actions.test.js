@@ -579,6 +579,13 @@ test('no notification is sent for an event that does not newly enter attention',
     assert.deepEqual(notified, [['Codex needs attention', 'Prompt: continue?']]);
 });
 
+test('the fleet summary shows zero totals immediately, before any telemetry arrives', async (t) => {
+    const { document } = await bootDashboard(t);
+
+    const texts = [...document.getElementById('fleet-summary').children].map((badge) => badge.textContent);
+    assert.deepEqual(texts, ['0 agents', '0 need attention', '0 stale', '0 tokens']);
+});
+
 test('the fleet summary reflects arriving cards, attention state, and tokens', async (t) => {
     const { document, listeners } = await bootDashboard(t);
 

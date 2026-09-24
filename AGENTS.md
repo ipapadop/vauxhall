@@ -22,9 +22,9 @@ agent's hooks), [configuration](docs/configuration.md),
   starts a new operation.
 - **Fleet summary**: A live region under the header shows the total card
   count, how many need attention (`Error` or a waiting state), how many are
-  stale, and the summed tokens across every card's last operation. It
-  re-renders after every telemetry update, staleness sweep, settings change,
-  and **Clear**/**Clear Stale**.
+  stale, and the summed tokens across every card's last operation. It shows
+  zero totals on load and re-renders after every telemetry update, staleness
+  sweep, settings change, and **Clear**/**Clear Stale**.
 - **Attention first**: A toolbar checkbox ranks cards needing attention
   (`Error` or a waiting state) before the rest, on top of whatever sort is
   chosen; it re-sorts on every telemetry update while checked.

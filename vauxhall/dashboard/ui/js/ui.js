@@ -35,11 +35,14 @@ const textOf = (card, selector) => card.querySelector(selector)?.textContent || 
  */
 const tokensOf = (card) => parseInt(card.querySelector('.metric-badge.tokens')?.dataset.value || '0');
 /**
- * Returns whether a card's status badge is in a state that needs a human.
+ * Returns whether a card is in a state that needs a human. Reads the
+ * 'error'/'waiting' state classes rather than the status badge text, since
+ * checkStaleness overwrites the badge to "STALE" but leaves those classes
+ * alone — a card blocked long enough to go stale still needs attention.
  * @param {HTMLElement} card - The agent card.
  * @returns {boolean} Whether the card needs attention.
  */
-const isAttentionCard = (card) => ATTENTION_STATES.has(textOf(card, '.status-badge'));
+const isAttentionCard = (card) => card.classList.contains('error') || card.classList.contains('waiting');
 /**
  * Formats a token count, abbreviating counts over 1000.
  * @param {number} count - The token count.
@@ -242,10 +245,7 @@ export function updateCard(card, data) {
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
 
-    // The 'error'/'waiting' classes, unlike the status badge text, survive
-    // going stale (checkStaleness only overwrites the badge to "STALE"), so
-    // they're what tells a still-blocked stale card from one newly blocked.
-    const wasAttention = card.classList.contains('error') || card.classList.contains('waiting');
+    const wasAttention = isAttentionCard(card);
     if (statusBadge) statusBadge.textContent = data.state;
     const enteredAttention = ATTENTION_STATES.has(data.state) && !wasAttention;
 

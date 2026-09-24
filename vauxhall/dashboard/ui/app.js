@@ -35,6 +35,7 @@ async function init() {
     const historyFilter = document.getElementById('modal-state-filter');
     const summaryContainer = document.getElementById('fleet-summary');
     const refreshSummary = () => renderSummary(summaryContainer, agents);
+    refreshSummary();
 
     // Theme and view preferences. Saving starts once the Python bridge is available,
     // and preferences changed before the saved ones load are not overwritten.

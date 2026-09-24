@@ -170,6 +170,18 @@ test('attention first defaults to off', (t) => {
     assert.deepEqual(order(), ['Apple', 'Zeta']);
 });
 
+test('attention first still ranks a card that went stale while blocked above the rest', (t) => {
+    setupGrid(t);
+    const stale = addCard({ agent: 'Blocked', state: 'Waiting for Input' });
+    stale.classList.add('stale');
+    stale.querySelector('.status-badge').textContent = 'STALE';
+    addCard({ agent: 'Apple', state: 'Idle' });
+
+    sortGrid('name', grid, true);
+
+    assert.deepEqual(order(), ['Blocked', 'Apple']);
+});
+
 test('an unknown sort criterion leaves the order unchanged', (t) => {
     setupGrid(t);
     addCard({ agent: 'Gemini' });
@@ -280,6 +292,15 @@ test('summarizeAgents tallies total, attention, stale, and token counts', (t) =>
     summaryAgents.c.classList.add('stale');
 
     assert.deepEqual(summarizeAgents(summaryAgents), { total: 3, attention: 1, stale: 1, tokens: 2500 });
+});
+
+test('summarizeAgents keeps a card that went stale while blocked in the attention count', (t) => {
+    setupGrid(t);
+    const stale = addCard({ agent: 'Blocked', state: 'Error' });
+    stale.classList.add('stale');
+    stale.querySelector('.status-badge').textContent = 'STALE';
+
+    assert.deepEqual(summarizeAgents({ a: stale }), { total: 1, attention: 1, stale: 1, tokens: 0 });
 });
 
 test('renderSummary shows the fleet totals as badges', (t) => {

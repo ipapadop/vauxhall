@@ -94,11 +94,19 @@ prompt and command capture. Today you can:
 
 ## Retention
 
-- **Dashboard**: Telemetry is held in memory only, for at most
+- **Dashboard**: Telemetry content is held in memory only, for at most
   `max_active_agents` cards with 20 events each, and is gone when a card is
   evicted or cleared or the dashboard exits. The dashboard doesn't write
-  telemetry to disk. Its logs contain agent names, topics, and connection
-  details, never payload values.
+  prompts, messages, commands, tool arguments, errors, tokens, duration, or
+  activity history to disk. Its logs contain agent names, topics, and
+  connection details, never payload values.
+- **Card identities**: To redraw the grid on the next start, the dashboard
+  saves each card's `agent`, `workspace`, `session_id`, last known `state`,
+  `env`, and last-seen time to `~/.config/vauxhall/dashboard_cards.json`.
+  This is a subset of what every event already contains (see above); no
+  event content is included. **Clear** and **Clear Stale** remove the
+  matching cards from this file too. See
+  [configuration.md](configuration.md#remembered-view).
 - **Broker**: Hooks publish at QoS 1 without the retain flag, and the dashboard
   connects with a clean session, so the broker doesn't keep telemetry for
   later subscribers. Check your broker's own logging and persistence

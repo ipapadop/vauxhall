@@ -95,6 +95,17 @@ agent's hooks), [configuration](docs/configuration.md),
   saved. Changes are batched and sent to `DashboardIPC.save_ui_state()` 500 ms
   after the last one, or immediately on `pagehide`; a `false` result is
   logged. Theme changes also update the localStorage cache.
+- **Remembered cards**: After `max_active_agents` loads and before live
+  telemetry starts, the frontend restores card shells from
+  `DashboardIPC.get_saved_cards()`: agent, workspace, session ID, last known
+  state, env, and last-seen time, with no prompt, message, command, error,
+  token, or history content. A restored card shows no activity log until its
+  agent reports again; a matching live event updates it in place instead of
+  creating a duplicate. Restored cards are capped to `max_active_agents` and
+  re-checked for staleness immediately. Card state is sent to
+  `DashboardIPC.save_cards()` 500 ms after a card is added, updated, or
+  removed, or immediately on `pagehide`; **Clear** and **Clear Stale** also
+  trigger a save so removed cards don't reappear on the next start.
 
 ## Dashboard Internals
 
@@ -143,6 +154,15 @@ agent's hooks), [configuration](docs/configuration.md),
   exits, it saves the size and position from Pyloid's public `get_size`,
   `get_position`, and `is_maximized`. A maximized window keeps its previous
   normal size, and a save failure is logged without blocking shutdown.
+- **Card state**: `vauxhall.dashboard.card_state` reads and writes
+  `~/.config/vauxhall/dashboard_cards.json` as `{"cards": [...]}`. Each entry
+  keeps only `agent`, `workspace`, `session_id`, `state` (one of
+  `vauxhall.core.telemetry.SUPPORTED_STATES`), `env`, and `last_seen`; an
+  invalid entry is dropped rather than rejecting the whole file, entries are
+  deduplicated by identity keeping the newest `last_seen`, and the list is
+  capped to a defensive maximum. `save_cards` replaces the file atomically
+  with the frontend's full current snapshot; there is no merge, so no lock is
+  needed beyond the atomic write itself.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are

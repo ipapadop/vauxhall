@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden } from './js/state.js';
+import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden, snapshotAgents } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
@@ -119,10 +119,30 @@ async function init() {
         }
     });
 
+    // Persists card identity and last known state (never prompt, message,
+    // command, error, token, or history content) so the grid can be redrawn
+    // on the next start. Debounced like preferences, flushed on pagehide.
+    let cardSaveTimer = null;
+    const flushCardSave = () => {
+        clearTimeout(cardSaveTimer);
+        cardSaveTimer = null;
+        if (!window.ipc?.DashboardIPC?.save_cards) return;
+        Promise.resolve(window.ipc.DashboardIPC.save_cards(JSON.stringify(snapshotAgents(agents))))
+            .then(saved => { if (saved === false) console.error('Failed to save card state'); })
+            .catch(err => console.error('Failed to save card state:', err));
+    };
+    const scheduleCardSave = () => {
+        if (!window.ipc?.DashboardIPC?.save_cards) return;
+        clearTimeout(cardSaveTimer);
+        cardSaveTimer = setTimeout(flushCardSave, 500);
+    };
+    window.addEventListener?.('pagehide', flushCardSave);
+
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
         refreshSummary();
+        scheduleCardSave();
     });
 
     document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
@@ -133,6 +153,7 @@ async function init() {
             }
         }
         refreshSummary();
+        scheduleCardSave();
     });
 
     searchInput?.addEventListener('input', (e) => filterGrid(e.target.value.toLowerCase(), agents));
@@ -194,6 +215,38 @@ async function init() {
             }
         }
 
+        // Restore card shells from the previous run before live telemetry
+        // starts, so an incoming event for a restored session updates it in
+        // place instead of creating a duplicate card.
+        if (window.ipc?.DashboardIPC?.get_saved_cards) {
+            try {
+                const saved = JSON.parse(await window.ipc.DashboardIPC.get_saved_cards());
+                for (const shell of Array.isArray(saved) ? saved : []) {
+                    const key = agentKey(shell);
+                    if (agents[key]) continue;
+                    const card = createCard(shell, window.ipc, (opener) => {
+                        currentHistoryKey = key;
+                        historyOpener = opener;
+                        openHistoryModal(key, agents);
+                    }, (opener) => {
+                        currentMenuKey = key;
+                        menuOpener = opener;
+                        openDialog(cardMenuModal);
+                    });
+                    updateCard(card, shell);
+                    card.dataset.lastSeen = String(shell.last_seen || 0);
+                    agents[key] = card;
+                    grid.appendChild(card);
+                }
+                evictAgents(maxActiveAgents);
+                checkStaleness(agents, staleThresholdMs);
+                if (grid.children.length) sortGrid(sortSelect?.value, grid, attentionFirstToggle?.checked);
+                refreshSummary();
+            } catch (err) {
+                console.error("Failed to restore saved cards:", err);
+            }
+        }
+
         initIPC({
             onAgentUpdate: (data) => {
                 const key = agentKey(data);
@@ -233,6 +286,7 @@ async function init() {
                 if (searchInput?.value) filterGrid(searchInput.value.toLowerCase(), agents);
                 if (sortSelect?.value) sortGrid(sortSelect.value, grid, attentionFirstToggle?.checked);
                 refreshSummary();
+                scheduleCardSave();
             },
             onStatusUpdate: (msg) => {
                 if (status) status.innerText = msg;
@@ -255,6 +309,7 @@ async function init() {
 
                 checkStaleness(agents, staleThresholdMs);
                 refreshSummary();
+                scheduleCardSave();
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";

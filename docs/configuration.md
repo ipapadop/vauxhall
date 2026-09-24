@@ -148,6 +148,15 @@ need to edit it.
 Unknown keys and invalid values are ignored. An unreadable or corrupt file is
 logged and treated as empty.
 
+Separately, `~/.config/vauxhall/dashboard_cards.json` keeps each card's
+identity (agent, workspace, session ID, last known state, env, and last-seen
+time) so the grid is redrawn on the next start; a restored card shows no
+activity log until its agent reports again. Saved half a second after a card
+is added, updated, or removed, or right away when the dashboard closes.
+**Clear** and **Clear Stale** remove the matching cards from this file too.
+No prompt, message, command, error, token, or history content is ever
+written here; see [privacy.md](privacy.md#retention).
+
 ## Files Vauxhall writes
 
 | Path | Written by | Contents |
@@ -155,9 +164,11 @@ logged and treated as empty.
 | `~/.config/vauxhall/vauxhall_dashboard.json` | Settings dialog | Changed dashboard settings |
 | `~/.config/vauxhall/vauxhall_hooks.json` | Settings dialog, when **Also update hooks configuration** is checked | Changed hook MQTT settings |
 | `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
+| `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities: agent, workspace, session ID, last known state, env, last-seen time |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
 | `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the previous file |
 | `vauxhall-*` directories in the system temporary directory | Hooks | Tool start times and partial assistant messages; see [privacy.md](privacy.md#on-disk) |
 
-Telemetry itself is never written to disk by Vauxhall; see
-[privacy.md](privacy.md).
+Telemetry content (prompts, messages, commands, tool arguments, errors,
+tokens, duration, activity history) is never written to disk by Vauxhall;
+see [privacy.md](privacy.md).

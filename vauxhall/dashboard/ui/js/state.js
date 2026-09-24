@@ -24,6 +24,28 @@ export function agentKey(data) {
 }
 
 /**
+ * Snapshots each card's identity and last known state for persistence.
+ * Never includes prompt, message, command, error, token, or history content.
+ * @param {object} agents - The agents state object.
+ * @returns {Array<object>} One entry per card: agent, workspace, session_id,
+ *   state, last_seen, and env when known.
+ */
+export function snapshotAgents(agents) {
+    return Object.values(agents).map(card => {
+        const entry = {
+            agent: card.querySelector('.agent-name')?.textContent || '',
+            workspace: card.querySelector('.agent-workspace')?.textContent || '',
+            session_id: card.querySelector('.agent-session')?.title || '',
+            state: card.dataset.state || 'Idle',
+            last_seen: Number(card.dataset.lastSeen || 0),
+        };
+        const env = card.querySelector('.env-badge')?.textContent;
+        if (env) entry.env = env;
+        return entry;
+    });
+}
+
+/**
  * Removes the least recently seen cards until at most `maxAgents` remain.
  * @param {number} maxAgents - Maximum number of cards to retain.
  * @returns {string[]} The evicted card keys, oldest first.

@@ -13,6 +13,7 @@ from pyloid.ipc import Bridge, PyloidIPC
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.dashboard.card_state import load_saved_cards, save_cards
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.settings_editor import describe_settings
 from vauxhall.dashboard.ui_state import (
@@ -52,6 +53,22 @@ def _json_object(payload: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return value if isinstance(value, dict) else None
+
+
+def _json_array(payload: str) -> list[Any] | None:
+    """Parse a bridge payload that must be a JSON array.
+
+    Args:
+        payload: The JSON text received from the frontend.
+
+    Returns:
+        The parsed array, or ``None`` when the payload is not a JSON array.
+    """
+    try:
+        value = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, list) else None
 
 
 class DashboardIPC(PyloidIPC):
@@ -201,6 +218,39 @@ class DashboardIPC(PyloidIPC):
             update_ui_state(frontend_preferences(changes))
         except OSError:
             logger.exception("Could not save dashboard preferences")
+            return False
+        return True
+
+    @Bridge(result=str)
+    def get_saved_cards(self) -> str:
+        """Return the card identities saved from the previous run.
+
+        Returns:
+            str: JSON array of saved cards, each with ``agent``, ``workspace``,
+                ``session_id``, ``state``, ``last_seen``, and optionally ``env``.
+        """
+        return json.dumps(load_saved_cards())
+
+    @Bridge(str, result=bool)
+    def save_cards(self, payload: str) -> bool:
+        """Save the current card identities sent by the frontend.
+
+        Invalid entries are dropped rather than rejecting the whole request,
+        so one malformed card doesn't lose the rest.
+
+        Args:
+            payload: JSON array of the frontend's current cards.
+
+        Returns:
+            bool: True if the request was valid and the state file was written.
+        """
+        cards = _json_array(payload)
+        if cards is None:
+            return False
+        try:
+            save_cards(cards)
+        except OSError:
+            logger.exception("Could not save dashboard card state")
             return False
         return True
 

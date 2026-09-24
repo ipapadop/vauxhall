@@ -247,6 +247,9 @@ export function updateCard(card, data) {
 
     const wasAttention = isAttentionCard(card);
     if (statusBadge) statusBadge.textContent = data.state;
+    // Kept separately from the badge so a persisted snapshot reflects the
+    // real last state even after checkStaleness overwrites the badge text.
+    card.dataset.state = data.state;
     const enteredAttention = ATTENTION_STATES.has(data.state) && !wasAttention;
 
     // Update color-coded state classes

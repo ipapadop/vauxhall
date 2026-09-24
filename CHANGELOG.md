@@ -23,7 +23,9 @@ The first release, planned as 0.1.0. It is alpha software; see
   cards needing attention above the chosen sort; and an opt-in **Notify me**
   toggle shows a desktop notification when a card starts needing attention.
   It remembers its theme, sort order, history filter, these two toggles, and
-  window geometry.
+  window geometry, and restores each card's identity and last known state
+  across restarts, never prompt, message, command, error, token, or history
+  content.
 - A per-card menu to hide a card until its agent's next event, or add the
   agent to a denylist saved in the dashboard configuration; denylisted
   agents' telemetry is dropped and their cards removed, until the denylist

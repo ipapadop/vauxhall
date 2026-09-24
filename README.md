@@ -294,7 +294,10 @@ directory; see [docs/privacy.md](docs/privacy.md#on-disk).
 The hooks publish your prompts, shell commands, assistant messages, tool names,
 and workspace paths, and Gemini CLI's hook publishes the complete input of
 every tool call. Anyone who can connect to the broker can read all of it.
-Tool output is never published. The dashboard keeps telemetry in memory only.
+Tool output is never published. The dashboard keeps telemetry content in
+memory only; it saves each card's identity and last known state, not its
+content, to disk so the grid survives a restart; see
+[docs/privacy.md](docs/privacy.md#retention).
 
 - Use the unauthenticated `localhost:1883` default for local development only.
 - Reach remote agents over SSH, as in

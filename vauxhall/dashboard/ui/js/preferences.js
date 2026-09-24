@@ -110,12 +110,14 @@ export function createPreferenceSaver(ipc) {
  * @param {string | null} view.cached - The theme cached in localStorage.
  * @param {Set<string>} view.changed - Preferences the user changed before loading finished.
  * @param {(theme: string) => void} view.applyTheme - Applies a theme.
- * @param {(sort: string) => void} view.applySort - Re-sorts the cards after a sort order is restored.
+ * @param {(sort: string, attentionFirst: boolean) => void} view.applySort - Re-sorts the cards after a sort order or the attention-first toggle is restored.
  * @param {(changes: object) => void} view.save - Saves preference changes.
  * @param {HTMLSelectElement | null} view.sortSelect - The card sort select.
  * @param {HTMLSelectElement | null} view.historyFilter - The history state filter select.
+ * @param {HTMLInputElement | null} [view.attentionFirstToggle] - The "Attention first" checkbox.
+ * @param {HTMLInputElement | null} [view.notifyToggle] - The "Notify me" checkbox.
  */
-export async function restorePreferences(ipc, { cached, changed, applyTheme, applySort, save, sortSelect, historyFilter }) {
+export async function restorePreferences(ipc, { cached, changed, applyTheme, applySort, save, sortSelect, historyFilter, attentionFirstToggle, notifyToggle }) {
     const preferences = await loadPreferences(ipc);
     const restore = (key) => Object.hasOwn(preferences, key) && !changed.has(key);
 
@@ -124,6 +126,12 @@ export async function restorePreferences(ipc, { cached, changed, applyTheme, app
     } else if (!isTheme(preferences.theme) && isTheme(cached) && !changed.has('theme')) {
         save({ theme: cached });
     }
-    if (restore('sort') && selectOption(sortSelect, preferences.sort)) applySort(preferences.sort);
+
+    const attentionFirstRestored = restore('attention_first') && Boolean(attentionFirstToggle);
+    if (attentionFirstRestored) attentionFirstToggle.checked = Boolean(preferences.attention_first);
+    const sortRestored = restore('sort') && selectOption(sortSelect, preferences.sort);
+    if (sortRestored || attentionFirstRestored) applySort(sortSelect?.value, Boolean(attentionFirstToggle?.checked));
+
     if (restore('history_filter')) selectOption(historyFilter, preferences.history_filter);
+    if (restore('notify') && notifyToggle) notifyToggle.checked = Boolean(preferences.notify);
 }

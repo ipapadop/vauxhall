@@ -12,6 +12,8 @@ import { closeDialog, openDialog } from './dialog.js';
 
 const WAITING_STATES = new Set(['Waiting', 'Waiting for Input', 'Input Required']);
 const STATUS_ORDER = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+// States that need a human: an active error, or a prompt/permission the agent is blocked on.
+const ATTENTION_STATES = new Set([...WAITING_STATES, 'Error']);
 
 /**
  * Returns whether a value is a finite number above zero.
@@ -32,6 +34,21 @@ const textOf = (card, selector) => card.querySelector(selector)?.textContent || 
  * @returns {number} The token count.
  */
 const tokensOf = (card) => parseInt(card.querySelector('.metric-badge.tokens')?.dataset.value || '0');
+/**
+ * Returns whether a card is in a state that needs a human. Reads the
+ * 'error'/'waiting' state classes rather than the status badge text, since
+ * checkStaleness overwrites the badge to "STALE" but leaves those classes
+ * alone — a card blocked long enough to go stale still needs attention.
+ * @param {HTMLElement} card - The agent card.
+ * @returns {boolean} Whether the card needs attention.
+ */
+const isAttentionCard = (card) => card.classList.contains('error') || card.classList.contains('waiting');
+/**
+ * Formats a token count, abbreviating counts over 1000.
+ * @param {number} count - The token count.
+ * @returns {string} The formatted count.
+ */
+const formatTokens = (count) => count > 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
 
 /**
  * Returns whether the viewer asked for reduced motion.
@@ -219,13 +236,18 @@ function appendDetails(container, data) {
  * Handles state styles, metrics, and the 5-event rolling log.
  * @param {HTMLElement} card - The agent card element.
  * @param {object} data - The telemetry data.
+ * @returns {{enteredAttention: boolean, message: string}} Whether this update
+ *   moved the card into an attention state (Error or Waiting) from one that
+ *   wasn't, and the event's log message.
  */
 export function updateCard(card, data) {
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
 
+    const wasAttention = isAttentionCard(card);
     if (statusBadge) statusBadge.textContent = data.state;
+    const enteredAttention = ATTENTION_STATES.has(data.state) && !wasAttention;
 
     // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');
@@ -251,8 +273,7 @@ export function updateCard(card, data) {
     if (metricsArea) {
         metricsArea.replaceChildren();
         if (card.latestTokens) {
-            const tokens = card.latestTokens > 1000 ? `${(card.latestTokens / 1000).toFixed(1)}k` : card.latestTokens;
-            const badge = textSpan('metric-badge tokens', tokens);
+            const badge = textSpan('metric-badge tokens', formatTokens(card.latestTokens));
             badge.dataset.value = String(card.latestTokens);
             badge.title = 'Tokens used in last operation';
             metricsArea.appendChild(badge);
@@ -266,7 +287,9 @@ export function updateCard(card, data) {
 
     // Update Rolling Activity Log (last 5 entries)
     const newLogMessage = getDetailsString(data);
-    if (!newLogMessage || newLogMessage === card.lastLogMessage || !logArea) return;
+    if (!newLogMessage || newLogMessage === card.lastLogMessage || !logArea) {
+        return { enteredAttention, message: newLogMessage || data.state };
+    }
     card.lastLogMessage = newLogMessage;
 
     const time = new Date().toLocaleTimeString([], {
@@ -296,6 +319,8 @@ export function updateCard(card, data) {
 
     // Keep view at the top (newest)
     logArea.scrollTop = 0;
+
+    return { enteredAttention, message: newLogMessage };
 }
 
 /**
@@ -329,8 +354,10 @@ export function filterGrid(query, agents) {
  * Sorts the agent grid.
  * @param {string} criteria - The sort criteria.
  * @param {HTMLElement} grid - The agent grid element.
+ * @param {boolean} [attentionFirst] - Whether to rank cards needing attention
+ *   (Error or Waiting) before the rest, regardless of `criteria`.
  */
-export function sortGrid(criteria, grid) {
+export function sortGrid(criteria, grid, attentionFirst = false) {
     const cardsArray = Array.from(grid.children);
 
     // FIRST: Record positions
@@ -341,7 +368,10 @@ export function sortGrid(criteria, grid) {
 
     // LAST: Re-sort DOM
     const compare = Object.hasOwn(CARD_COMPARATORS, criteria) ? CARD_COMPARATORS[criteria] : () => 0;
-    cardsArray.sort(compare).forEach(card => grid.appendChild(card));
+    const rank = attentionFirst
+        ? (a, b) => (Number(isAttentionCard(b)) - Number(isAttentionCard(a))) || compare(a, b)
+        : compare;
+    cardsArray.sort(rank).forEach(card => grid.appendChild(card));
 
     if (prefersReducedMotion()) return;
 
@@ -369,6 +399,45 @@ export function sortGrid(criteria, grid) {
             });
         });
     });
+}
+
+/**
+ * Tallies the fleet across every tracked card.
+ * @param {object} agents - The agents state object.
+ * @returns {{total: number, attention: number, stale: number, tokens: number}} The fleet totals.
+ */
+export function summarizeAgents(agents) {
+    let total = 0, attention = 0, stale = 0, tokens = 0;
+    for (const card of Object.values(agents)) {
+        total++;
+        if (card.classList.contains('stale')) stale++;
+        if (isAttentionCard(card)) attention++;
+        tokens += tokensOf(card);
+    }
+    return { total, attention, stale, tokens };
+}
+
+/**
+ * Renders the fleet summary badges (total, needs attention, stale, tokens).
+ * @param {HTMLElement | null} container - The summary bar element.
+ * @param {object} agents - The agents state object.
+ */
+export function renderSummary(container, agents) {
+    if (!container) return;
+    const { total, attention, stale, tokens } = summarizeAgents(agents);
+
+    const badge = (className, text, title) => {
+        const span = textSpan(className, text);
+        span.title = title;
+        return span;
+    };
+
+    container.replaceChildren(
+        badge('summary-badge', `${total} agent${total === 1 ? '' : 's'}`, 'Total agent cards'),
+        badge(`summary-badge${attention > 0 ? ' summary-attention' : ''}`, `${attention} need${attention === 1 ? 's' : ''} attention`, 'Cards in Error or Waiting state'),
+        badge('summary-badge', `${stale} stale`, 'Cards past the stale threshold'),
+        badge('summary-badge', `${formatTokens(tokens)} tokens`, 'Combined tokens across active operations'),
+    );
 }
 
 /**

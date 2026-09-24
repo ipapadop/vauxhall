@@ -18,8 +18,12 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 - Desktop dashboard (`vauxhall`) that shows each agent session as a card, with
   live state, an activity log, a history modal, search, sort, stale detection,
-  and a settings dialog. It remembers its theme, sort order, history filter,
-  and window geometry.
+  and a settings dialog. A fleet summary bar totals cards, cards needing
+  attention, stale cards, and tokens; an **Attention first** toggle ranks
+  cards needing attention above the chosen sort; and an opt-in **Notify me**
+  toggle shows a desktop notification when a card starts needing attention.
+  It remembers its theme, sort order, history filter, these two toggles, and
+  window geometry.
 - A per-card menu to hide a card until its agent's next event, or add the
   agent to a denylist saved in the dashboard configuration; denylisted
   agents' telemetry is dropped and their cards removed, until the denylist

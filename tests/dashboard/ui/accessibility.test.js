@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
@@ -175,6 +176,36 @@ test('a dialog with native support is closed through close()', () => {
     closeDialog(dialog);
 
     assert.equal(closed, 1);
+});
+
+/**
+ * Loads the real dashboard page, rather than a synthetic fragment, since
+ * these checks are about the static markup itself.
+ * @returns {Document} The parsed index.html document.
+ */
+function loadIndexPage() {
+    const html = readFileSync(new URL('../../../vauxhall/dashboard/ui/index.html', import.meta.url), 'utf8');
+    return parseHTML(html).document;
+}
+
+test('the fleet summary is a polite live region', () => {
+    const document = loadIndexPage();
+    const summary = document.getElementById('fleet-summary');
+
+    assert.equal(summary.getAttribute('role'), 'status');
+    assert.equal(summary.getAttribute('aria-live'), 'polite');
+});
+
+test('the attention-first and notify toggles are checkboxes named by a wrapping label', () => {
+    const document = loadIndexPage();
+
+    for (const id of ['attention-first-toggle', 'notify-toggle']) {
+        const checkbox = document.getElementById(id);
+        assert.equal(checkbox.getAttribute('type'), 'checkbox');
+        const label = checkbox.closest('label');
+        assert.ok(label, `${id} is not inside a label`);
+        assert.ok(label.textContent.trim().length > 0, `${id}'s label has no text`);
+    }
 });
 
 test('without native support the open attribute stands in and still reports closing', () => {

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { createCard, filterGrid, sortGrid, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { createCard, filterGrid, renderSummary, sortGrid, summarizeAgents, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 let document;
 let grid;
@@ -138,6 +138,50 @@ test('sorting by tokens uses the exact count, not the abbreviated badge text', (
     assert.deepEqual(order(), ['Biggest', 'Bigger']);
 });
 
+test('attention first ranks Error and Waiting cards before the rest, honoring the chosen sort within each group', (t) => {
+    setupGrid(t);
+    addCard({ agent: 'Zebra', state: 'Idle' });
+    addCard({ agent: 'Blocked', state: 'Waiting for Input' });
+    addCard({ agent: 'Apple', state: 'Idle' });
+    addCard({ agent: 'Failed', state: 'Error' });
+
+    sortGrid('name', grid, true);
+
+    assert.deepEqual(order(), ['Blocked', 'Failed', 'Apple', 'Zebra']);
+});
+
+test('attention first with no attention cards falls back to the chosen sort', (t) => {
+    setupGrid(t);
+    addCard({ agent: 'Gemini', state: 'Idle' });
+    addCard({ agent: 'Claude', state: 'Acting' });
+
+    sortGrid('name', grid, true);
+
+    assert.deepEqual(order(), ['Claude', 'Gemini']);
+});
+
+test('attention first defaults to off', (t) => {
+    setupGrid(t);
+    addCard({ agent: 'Apple', state: 'Idle' });
+    addCard({ agent: 'Zeta', state: 'Waiting for Input' });
+
+    sortGrid('name', grid);
+
+    assert.deepEqual(order(), ['Apple', 'Zeta']);
+});
+
+test('attention first still ranks a card that went stale while blocked above the rest', (t) => {
+    setupGrid(t);
+    const stale = addCard({ agent: 'Blocked', state: 'Waiting for Input' });
+    stale.classList.add('stale');
+    stale.querySelector('.status-badge').textContent = 'STALE';
+    addCard({ agent: 'Apple', state: 'Idle' });
+
+    sortGrid('name', grid, true);
+
+    assert.deepEqual(order(), ['Blocked', 'Apple']);
+});
+
 test('an unknown sort criterion leaves the order unchanged', (t) => {
     setupGrid(t);
     addCard({ agent: 'Gemini' });
@@ -236,4 +280,41 @@ test('search leaves a card without name or workspace elements alone', (t) => {
     filterGrid('anything', { bare });
 
     assert.equal(bare.style.display, 'flex');
+});
+
+test('summarizeAgents tallies total, attention, stale, and token counts', (t) => {
+    setupGrid(t);
+    const summaryAgents = {
+        a: addCard({ agent: 'Alpha', state: 'Idle', tokens: 500 }),
+        b: addCard({ agent: 'Beta', state: 'Waiting for Input', tokens: 2000 }),
+        c: addCard({ agent: 'Gamma', state: 'Acting' }),
+    };
+    summaryAgents.c.classList.add('stale');
+
+    assert.deepEqual(summarizeAgents(summaryAgents), { total: 3, attention: 1, stale: 1, tokens: 2500 });
+});
+
+test('summarizeAgents keeps a card that went stale while blocked in the attention count', (t) => {
+    setupGrid(t);
+    const stale = addCard({ agent: 'Blocked', state: 'Error' });
+    stale.classList.add('stale');
+    stale.querySelector('.status-badge').textContent = 'STALE';
+
+    assert.deepEqual(summarizeAgents({ a: stale }), { total: 1, attention: 1, stale: 1, tokens: 0 });
+});
+
+test('renderSummary shows the fleet totals as badges', (t) => {
+    setupGrid(t);
+    const summaryAgents = { a: addCard({ agent: 'Alpha', state: 'Error', tokens: 1500 }) };
+    const container = document.createElement('div');
+
+    renderSummary(container, summaryAgents);
+
+    const texts = [...container.children].map((badge) => badge.textContent);
+    assert.deepEqual(texts, ['1 agent', '1 needs attention', '0 stale', '1.5k tokens']);
+    assert.ok(container.children[1].className.includes('summary-attention'));
+});
+
+test('renderSummary does nothing without a container', () => {
+    renderSummary(null, {});
 });

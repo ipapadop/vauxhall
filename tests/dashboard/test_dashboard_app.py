@@ -71,6 +71,17 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard = DashboardApp(self.mock_app)
         self.dashboard.window = MagicMock()
 
+    def test_ipc_notify_shows_a_system_tray_notification(self) -> None:
+        """The IPC bridge's notify call reaches the Pyloid app's tray notification."""
+        assert (
+            self.dashboard.ipc.notify("Codex needs attention", "Prompt: continue?")
+            is True
+        )
+
+        self.mock_app.show_notification.assert_called_once_with(
+            "Codex needs attention", "Prompt: continue?"
+        )
+
     def test_on_telemetry_missing_fields(self) -> None:
         """Verify that telemetry missing required fields is dropped."""
         self.dashboard.ipc.is_ready = True

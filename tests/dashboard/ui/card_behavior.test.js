@@ -220,3 +220,50 @@ test('a stale card recovers when its agent reports again', () => {
     assert.equal(card.querySelector('.status-badge').textContent, 'Acting');
     assert.equal(card.querySelector('.last-seen-timer').textContent, 'just now');
 });
+
+test('moving from Idle into Waiting or Error reports it entered attention', () => {
+    const card = makeCard();
+    updateCard(card, { state: 'Acting', details: { tool: 'shell' } });
+
+    const waiting = updateCard(card, { state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    assert.equal(waiting.enteredAttention, true);
+    assert.equal(waiting.message, 'Prompt: ok?');
+
+    const stillWaiting = updateCard(card, { state: 'Input Required', details: { prompt: 'still?' } });
+    assert.equal(stillWaiting.enteredAttention, false);
+
+    updateCard(card, { state: 'Idle', details: { status: 'Ready' } });
+    const error = updateCard(card, { state: 'Error', details: { error: 'boom' } });
+    assert.equal(error.enteredAttention, true);
+    assert.equal(error.message, 'Error: boom');
+});
+
+test('a fresh card entering Waiting reports it entered attention', () => {
+    const card = makeCard();
+
+    const { enteredAttention } = updateCard(card, { state: 'Waiting for Input', details: { prompt: 'ok?' } });
+
+    assert.equal(enteredAttention, true);
+});
+
+test('an event with no log message still reports whether it entered attention', () => {
+    const card = makeCard();
+
+    const { enteredAttention, message } = updateCard(card, { state: 'Error', details: {} });
+
+    assert.equal(enteredAttention, true);
+    assert.equal(message, 'Error');
+});
+
+test('a card that goes stale while waiting does not re-report attention on its next event', () => {
+    const card = makeCard();
+    updateCard(card, { state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    // checkStaleness overwrites the badge text to "STALE" but leaves the
+    // 'waiting' class alone; a naive read of the badge would see "STALE" as
+    // not an attention state and wrongly report re-entering attention below.
+    card.querySelector('.status-badge').textContent = 'STALE';
+
+    const { enteredAttention } = updateCard(card, { state: 'Waiting for Input', details: { prompt: 'still?' } });
+
+    assert.equal(enteredAttention, false);
+});

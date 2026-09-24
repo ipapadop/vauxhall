@@ -61,3 +61,26 @@ def test_ipc_copy_to_clipboard_error(mock_copy: MagicMock) -> None:
     mock_copy.side_effect = Exception("clipboard error")
     ipc = DashboardIPC()
     assert ipc.copy_to_clipboard("test text") is False
+
+
+def test_ipc_notify_calls_the_registered_callback() -> None:
+    """A registered callback is called with the title and message."""
+    callback = MagicMock()
+    ipc = DashboardIPC(on_notify=callback)
+
+    assert ipc.notify("Codex needs attention", "Prompt: continue?") is True
+    callback.assert_called_once_with("Codex needs attention", "Prompt: continue?")
+
+
+def test_ipc_notify_without_a_callback_returns_false() -> None:
+    """Without a registered callback, notify reports failure."""
+    ipc = DashboardIPC()
+    assert ipc.notify("title", "message") is False
+
+
+def test_ipc_notify_handles_callback_errors() -> None:
+    """A callback that raises is reported as a failure, not propagated."""
+    callback = MagicMock(side_effect=Exception("tray unavailable"))
+    ipc = DashboardIPC(on_notify=callback)
+
+    assert ipc.notify("title", "message") is False

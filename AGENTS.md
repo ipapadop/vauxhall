@@ -1,12 +1,130 @@
 # Vauxhall Development Guide
 
-This file is for contributors and coding agents working on Vauxhall. User
-documentation lives in [README.md](README.md) and [docs/](docs/):
-[integrations](docs/integrations.md) (telemetry schema, states, and each
-agent's hooks), [configuration](docs/configuration.md),
+This file is for contributors and coding agents working on Vauxhall: the
+architecture, the dashboard's behavior and implementation, and the rules for
+developing and releasing it. User documentation lives in [README.md](README.md)
+and [docs/](docs/): [integrations](docs/integrations.md) (telemetry schema,
+states, and each agent's hooks), [configuration](docs/configuration.md),
 [privacy](docs/privacy.md), [remote deployment](docs/remote-deployment.md),
 [troubleshooting](docs/troubleshooting.md), and
-[releases](docs/releasing.md).
+[versioning](docs/releasing.md).
+
+## Architecture
+
+1. **Hooks (producers)**: Python modules run by agent hook events publish
+   telemetry to an MQTT broker.
+2. **Mosquitto (broker)**: Routes telemetry from hooks to the dashboard.
+3. **Dashboard (consumer)**: A Pyloid desktop app with a Python MQTT backend and
+   a vanilla JavaScript frontend.
+
+```mermaid
+flowchart LR
+    subgraph agents["Agent machine"]
+        cc["Claude Code"]
+        cx["Codex"]
+        gm["Gemini CLI"]
+        hook["Hook process<br>(.vauxhall-venv)"]
+        client["TelemetryClient"]
+        cc --> hook
+        cx --> hook
+        gm --> hook
+        hook --> client
+    end
+
+    broker["Mosquitto broker"]
+
+    subgraph dashboard["Dashboard (Pyloid desktop app)"]
+        sub["DashboardSubscriber"]
+        app["DashboardApp"]
+        ipc["DashboardIPC"]
+        ui["JavaScript UI<br>(card grid, history)"]
+        sub -- "valid telemetry" --> app
+        app -- "agent-update" --> ui
+        ui -- "settings, view state" --> ipc
+        ipc --> app
+    end
+
+    core["vauxhall.core<br>(schema validation, config, logging)"]
+
+    client -- "publish QoS 1<br>vauxhall/agents/{agent}/activity" --> broker
+    broker -- "subscribe<br>vauxhall/agents/+/activity" --> sub
+
+    core -.-> client
+    core -.-> sub
+```
+
+Both sides share `vauxhall.core`, so hooks and the dashboard validate the same
+schema and read configuration the same way.
+
+## Information Flow
+
+```mermaid
+sequenceDiagram
+    participant A as Agent
+    participant H as Hook process
+    participant B as Mosquitto
+    participant S as DashboardSubscriber
+    participant D as DashboardApp
+    participant U as JavaScript UI
+
+    A->>H: Hook event as JSON on stdin
+    H->>H: Map event to a state, details, and session ID
+    H->>B: Publish validated telemetry (QoS 1)
+    B-->>H: Acknowledgment (awaited up to 1 second)
+    H-->>A: Protocol JSON on stdout
+    B->>S: Deliver on vauxhall/agents/+/activity
+    S->>S: Drop oversized, malformed, or invalid messages
+    S->>D: Valid telemetry
+    D->>U: agent-update event
+    U->>U: Create or update the card and its history
+```
+
+1. **The agent runs a hook.** On each event the agent runs the registered
+   command from the workspace's `.vauxhall-venv` and writes the event to its
+   stdin.
+2. **The hook builds telemetry.** It maps the event to a state (`Acting`,
+   `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
+   `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and
+   resolves the session ID from the agent's own session ID, a hash of the
+   transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
+   skipped.
+3. **The client publishes it.** `TelemetryClient` validates the payload against
+   schema version 1, publishes it at QoS 1 to
+   `vauxhall/agents/<agent_name>/activity`, and waits up to one second for the
+   broker's acknowledgment. The hook always writes valid protocol JSON on
+   stdout, even when telemetry fails, so the agent is never blocked.
+4. **The broker routes it.** Mosquitto delivers the message to the dashboard,
+   which subscribes to `vauxhall/agents/+/activity`.
+5. **The subscriber filters it.** `DashboardSubscriber` drops messages larger
+   than `max_payload_bytes`, then those that fail JSON decoding or validation,
+   and logs each drop without payload values.
+6. **The backend dispatches it.** `DashboardApp` forwards the event to the
+   window. Until the frontend signals readiness, events are queued, keeping the
+   newest `pending_update_limit` of them; the queue is drained in order when the
+   frontend becomes ready.
+7. **The frontend renders it.** The UI keys the card by agent, workspace, and
+   session ID, creates it if needed (evicting the least recently seen card at
+   `max_active_agents`), then updates its state color, activity log, metric
+   badges, last-seen timer, and open history modal, and re-applies the current
+   search and sort.
+
+Information also flows the other way, from the UI to the backend over
+`DashboardIPC`: reading settings and view state, saving them, and copying a
+workspace path. Saved settings that change the broker restart the subscriber,
+and the backend pushes the new stale threshold and card limit back to the UI.
+
+## Project Structure
+
+- `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
+  the dashboard and hooks.
+- `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
+- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
+  Code, Codex, and Gemini CLI hooks and installers.
+- `docs/`: User documentation and the dashboard screenshot shown in the README.
+- `scripts/`: The agent simulator and a logging color check.
+- `scripts/release_notes.py`: The release workflow's tag and changelog check.
+- `tests/`: Python tests mirroring the `vauxhall/` package layout, with
+  frontend tests in `tests/dashboard/ui/`.
 
 ## Dashboard Behavior
 
@@ -216,6 +334,12 @@ malformed file, raises `ConfigurationError` without writing. See
 
 ## Development and Maintenance Rules
 
+**Setup**: Install [uv](https://docs.astral.sh/uv/) and run `uv sync --locked`.
+It creates `.venv` with the exact versions in `uv.lock`, the same environment
+CI uses. After changing dependencies in `pyproject.toml`, run `uv lock` and
+commit `uv.lock`. For the frontend, install Node.js 20.19 or newer and run
+`npm ci` once.
+
 All contributors, including AI agents, must:
 
 1. **Code style**: Before committing Python changes, run `ruff format .` and
@@ -228,6 +352,8 @@ All contributors, including AI agents, must:
      run the hook installers outside the source checkout, and check that the
      sdist contains every tracked file except `.github/` and `.gitignore`.
      A new top-level file that the tests or build need goes in `MANIFEST.in`.
+     After changing metadata, entry points, or bundled assets, also run
+     `python -m build` and `twine check dist/*` to reproduce that check locally.
    - `.venv/bin/pytest -m packaged` runs the packaged dashboard startup test,
      which is deselected by default because it downloads Qt. CI runs it on
      Linux, macOS, and Windows.
@@ -243,13 +369,13 @@ All contributors, including AI agents, must:
    - Raise a floor when coverage rises. Never lower one to make a change pass;
      write the missing test instead.
 4. **Documentation**: After every change, update the documents it affects so
-   they match the code: `README.md` (features, first run, architecture),
+   they match the code: `README.md` (features, first run),
    `docs/integrations.md` (schema, states, hooks), `docs/configuration.md`,
    `docs/privacy.md` (anything that changes what is published or stored), and
-   `AGENTS.md` (dashboard behavior and internals). Add a line for every
-   user-visible change under `## [Unreleased]` in `CHANGELOG.md`; see
-   [docs/releasing.md](docs/releasing.md) for the versioning policy and the
-   release process.
+   `AGENTS.md` (architecture, dashboard behavior, and internals). Add a line
+   for every user-visible change under `## [Unreleased]` in `CHANGELOG.md`; see
+   [docs/releasing.md](docs/releasing.md) for the versioning policy and
+   [Releasing](#releasing) below for the release process.
 5. **Accessibility**: Dashboard changes must keep the contract under
    [Dashboard Behavior](#dashboard-behavior). Reviews reject a change that
    breaks any of these, so check them before opening one:
@@ -274,3 +400,99 @@ All contributors, including AI agents, must:
    squash or rewrite it as cleanup. Every file must carry the maintainer's
    GitHub no-reply address, the same one the package metadata and the commit
    metadata use.
+
+## Releasing
+
+See [docs/releasing.md](docs/releasing.md) for the versioning policy this
+process implements.
+
+### Changelog
+
+[CHANGELOG.md](CHANGELOG.md) follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Every pull request
+with a user-visible change adds a line under `## [Unreleased]`, in the
+**Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**, or
+**Security** group. Links in an entry must be absolute URLs, such as
+`https://github.com/ipapadop/vauxhall/blob/main/docs/privacy.md`, because the
+entry becomes the GitHub release notes, where relative links don't resolve.
+
+### Making a release
+
+1. On a branch, set `version` in `pyproject.toml`, run `uv lock`, and rename
+   `## [Unreleased]` in the changelog to `## [<version>] - <YYYY-MM-DD>`. Add
+   a new, empty `## [Unreleased]` above it. In the entry, record the Claude
+   Code, Codex, and Gemini CLI versions you checked the hooks with, following
+   the [first run](README.md#first-run) with each. Merge the pull request.
+2. Tag the merge commit on `main` and push the tag:
+
+   ```bash
+   git switch main && git pull
+   git tag -a v0.1.0 -m "Vauxhall 0.1.0"
+   git push origin v0.1.0
+   ```
+
+3. The [release workflow](.github/workflows/release.yml) then:
+   1. runs the lint workflow and the whole CI workflow: Ruff, the Python
+      suite on every supported Python and operating system, the coverage
+      floors, the frontend suite, both test suites from the unpacked sdist,
+      and the packaged dashboard on Linux, macOS, and Windows;
+   2. checks that the tagged commit is on `main`, that the tag is `v` followed
+      by the package version, and that the changelog has a dated, non-empty
+      entry for it (`scripts/release_notes.py`);
+   3. builds the sdist, and the wheel from that sdist, each in an isolated
+      build environment, with timestamps taken from the tagged commit;
+   4. runs `twine check --strict`, installs the wheel into a clean
+      environment, and runs `vauxhall-hook-install --help` from it;
+   5. creates a draft GitHub release with the wheel, the sdist, and a
+      `SHA256SUMS` file, using the changelog entry as its notes, and then
+      publishes it.
+
+   If any step fails, nothing is published. A transient failure can be
+   re-run from the Actions page; the last job reuses a draft release that an
+   earlier attempt left behind. To change what is released instead, delete
+   that draft if there is one (`gh release delete v0.1.0`), delete the tag
+   (`git push --delete origin v0.1.0`; with the tag ruleset below, only an
+   admin can), fix the problem, and tag again.
+
+To check a download, run `sha256sum -c SHA256SUMS` in the directory that holds
+the release files.
+
+### Repository settings
+
+Two settings protect published releases. They are configured on GitHub, not
+in the repository:
+
+- **Immutable releases** (*Settings → General → Releases*). Once a release is
+  published, its files and tag can't be changed. The workflow attaches every
+  file before publishing for this reason.
+- **A tag ruleset** that blocks moving or deleting `v*` tags. Rulesets need
+  a public repository or GitHub Pro (see issue #17). Once available, create it
+  with:
+
+  ```bash
+  gh api repos/ipapadop/vauxhall/rulesets --method POST --input - <<'EOF'
+  {
+    "name": "Release tags",
+    "target": "tag",
+    "enforcement": "active",
+    "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+    "rules": [{"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
+    "bypass_actors": [
+      {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}
+    ]
+  }
+  EOF
+  ```
+
+  Role `5` is the repository admin role. The rules block updating and
+  deleting release tags for everyone else. Creating a tag isn't restricted:
+  only people with write access can push tags at all.
+
+### Not done yet: PyPI
+
+Releases go to GitHub only. Publishing to PyPI is planned as a separate job
+in the same workflow. It will use Trusted Publishing (OIDC) instead of an API
+token, run in a protected `pypi` environment that needs a maintainer's
+approval, and be rehearsed on TestPyPI before the first production upload.
+Until then, install from a GitHub release or tag, as shown in the
+[README](README.md#installation).

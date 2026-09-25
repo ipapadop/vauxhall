@@ -326,8 +326,10 @@ Report vulnerabilities through the repository's
   be swapped. See [docs/integrations.md](docs/integrations.md).
 - **LOCAL/REMOTE badge**: hooks don't send `env`, so the badge is guessed from
   the workspace path, and remote workspaces under `/home` show LOCAL.
-- **Nothing is stored**: a card's history holds 20 events and is lost when the
-  dashboard exits.
+- **Card content isn't stored**: a card's activity log and history are lost
+  when the dashboard exits; only its identity and last known state persist
+  across restarts, never prompt, message, command, error, token, or history
+  content. See [docs/privacy.md](docs/privacy.md#retention).
 - **Dashboard platforms** are limited to those PySide6 6.9.2 supports, and Qt
   is a large download.
 
@@ -340,155 +342,14 @@ Report vulnerabilities through the repository's
 | [docs/privacy.md](docs/privacy.md) | Every field collected, retention, and broker exposure |
 | [docs/remote-deployment.md](docs/remote-deployment.md) | Monitoring agents on other machines over SSH |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Broker, dashboard, hook, and trust problems |
-| [docs/releasing.md](docs/releasing.md) | Versioning and compatibility policy, and the release process |
+| [docs/releasing.md](docs/releasing.md) | Versioning and compatibility policy |
 | [CHANGELOG.md](CHANGELOG.md) | Changes in each release |
-| [AGENTS.md](AGENTS.md) | Dashboard behavior contract and rules for contributors |
+| [AGENTS.md](AGENTS.md) | Architecture, project structure, the dashboard's behavior contract and internals, and the rules for developing and releasing Vauxhall |
 
-## Architecture
+## Contributing
 
-1. **Hooks (producers)**: Python modules run by agent hook events publish
-   telemetry to an MQTT broker.
-2. **Mosquitto (broker)**: Routes telemetry from hooks to the dashboard.
-3. **Dashboard (consumer)**: A Pyloid desktop app with a Python MQTT backend and
-   a vanilla JavaScript frontend.
-
-```mermaid
-flowchart LR
-    subgraph agents["Agent machine"]
-        cc["Claude Code"]
-        cx["Codex"]
-        gm["Gemini CLI"]
-        hook["Hook process<br>(.vauxhall-venv)"]
-        client["TelemetryClient"]
-        cc --> hook
-        cx --> hook
-        gm --> hook
-        hook --> client
-    end
-
-    broker["Mosquitto broker"]
-
-    subgraph dashboard["Dashboard (Pyloid desktop app)"]
-        sub["DashboardSubscriber"]
-        app["DashboardApp"]
-        ipc["DashboardIPC"]
-        ui["JavaScript UI<br>(card grid, history)"]
-        sub -- "valid telemetry" --> app
-        app -- "agent-update" --> ui
-        ui -- "settings, view state" --> ipc
-        ipc --> app
-    end
-
-    core["vauxhall.core<br>(schema validation, config, logging)"]
-
-    client -- "publish QoS 1<br>vauxhall/agents/{agent}/activity" --> broker
-    broker -- "subscribe<br>vauxhall/agents/+/activity" --> sub
-
-    core -.-> client
-    core -.-> sub
-```
-
-Both sides share `vauxhall.core`, so hooks and the dashboard validate the same
-schema and read configuration the same way.
-
-## Information Flow
-
-```mermaid
-sequenceDiagram
-    participant A as Agent
-    participant H as Hook process
-    participant B as Mosquitto
-    participant S as DashboardSubscriber
-    participant D as DashboardApp
-    participant U as JavaScript UI
-
-    A->>H: Hook event as JSON on stdin
-    H->>H: Map event to a state, details, and session ID
-    H->>B: Publish validated telemetry (QoS 1)
-    B-->>H: Acknowledgment (awaited up to 1 second)
-    H-->>A: Protocol JSON on stdout
-    B->>S: Deliver on vauxhall/agents/+/activity
-    S->>S: Drop oversized, malformed, or invalid messages
-    S->>D: Valid telemetry
-    D->>U: agent-update event
-    U->>U: Create or update the card and its history
-```
-
-1. **The agent runs a hook.** On each event the agent runs the registered
-   command from the workspace's `.vauxhall-venv` and writes the event to its
-   stdin.
-2. **The hook builds telemetry.** It maps the event to a state (`Acting`,
-   `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
-   `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and
-   resolves the session ID from the agent's own session ID, a hash of the
-   transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
-   skipped.
-3. **The client publishes it.** `TelemetryClient` validates the payload against
-   schema version 1, publishes it at QoS 1 to
-   `vauxhall/agents/<agent_name>/activity`, and waits up to one second for the
-   broker's acknowledgment. The hook always writes valid protocol JSON on
-   stdout, even when telemetry fails, so the agent is never blocked.
-4. **The broker routes it.** Mosquitto delivers the message to the dashboard,
-   which subscribes to `vauxhall/agents/+/activity`.
-5. **The subscriber filters it.** `DashboardSubscriber` drops messages larger
-   than `max_payload_bytes`, then those that fail JSON decoding or validation,
-   and logs each drop without payload values.
-6. **The backend dispatches it.** `DashboardApp` forwards the event to the
-   window. Until the frontend signals readiness, events are queued, keeping the
-   newest `pending_update_limit` of them; the queue is drained in order when the
-   frontend becomes ready.
-7. **The frontend renders it.** The UI keys the card by agent, workspace, and
-   session ID, creates it if needed (evicting the least recently seen card at
-   `max_active_agents`), then updates its state color, activity log, metric
-   badges, last-seen timer, and open history modal, and re-applies the current
-   search and sort.
-
-Information also flows the other way, from the UI to the backend over
-`DashboardIPC`: reading settings and view state, saving them, and copying a
-workspace path. Saved settings that change the broker restart the subscriber,
-and the backend pushes the new stale threshold and card limit back to the UI.
-
-## Project Structure
-
-- `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
-  the dashboard and hooks.
-- `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
-- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
-  Code, Codex, and Gemini CLI hooks and installers.
-- `docs/`: User documentation and the dashboard screenshot shown above.
-- `scripts/`: The agent simulator and a logging color check.
-- `scripts/release_notes.py`: The release workflow's tag and changelog check.
-- `tests/`: Python tests mirroring the `vauxhall/` package layout, with
-  frontend tests in `tests/dashboard/ui/`.
-
-## Development
-
-Follow the [development rules](AGENTS.md#development-and-maintenance-rules):
-
-- **Setup**: Install [uv](https://docs.astral.sh/uv/) and run
-  `uv sync --locked`. It creates `.venv` with the exact versions in `uv.lock`,
-  the same environment CI uses. After changing dependencies in
-  `pyproject.toml`, run `uv lock` and commit `uv.lock`.
-- **Python**: Run `ruff format .` and `ruff check .` with the pinned Ruff
-  version, then `.venv/bin/pytest`. The packaged dashboard startup test is
-  deselected by default because it downloads Qt; run it with
-  `.venv/bin/pytest -m packaged`.
-- **Frontend**: With Node.js 20.19 or newer, run `npm ci` once, then
-  `npm test`.
-- **Accessibility**: Dashboard changes must keep the
-  [accessibility contract](AGENTS.md#dashboard-behavior): real buttons, accessible names,
-  `<dialog>` modals, live regions, and reduced-motion support, covered by
-  `tests/dashboard/ui/accessibility.test.js`.
-- **Coverage**: `.venv/bin/pytest --cov` and, on Node.js 22.8 or newer,
-  `npm run test:coverage` check the floors CI enforces. Raise a floor when
-  coverage rises rather than lowering it to make a change pass.
-- **Packaging**: After changing metadata, entry points, or bundled assets, run
-  `python -m build` and `twine check dist/*`. The sdist is a complete source
-  artifact: a new top-level file the tests or build need goes in
-  `MANIFEST.in`.
-- **Changelog and releases**: Add user-visible changes under
-  `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). Pushing a `v*` tag runs
-  the release workflow; see [docs/releasing.md](docs/releasing.md).
+See [AGENTS.md](AGENTS.md) for the architecture, project structure, and the
+rules for developing, testing, and releasing Vauxhall.
 
 ## License
 

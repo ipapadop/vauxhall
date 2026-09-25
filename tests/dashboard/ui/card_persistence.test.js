@@ -135,6 +135,27 @@ test('a restored card long past the stale threshold shows STALE but still needs 
     assert.equal(card.classList.contains('stale'), true);
 });
 
+test('restore applies the configured stale threshold immediately, not the default', async (t) => {
+    const { document } = await bootDashboard(t, {
+        get_stale_threshold: async () => 10,
+        get_saved_cards: async () => JSON.stringify([{ ...SHELL, last_seen: Date.now() - 20000 }]),
+    });
+
+    // The periodic staleness sweep is stubbed out in this harness, so this
+    // only passes if restore itself checks staleness against the real
+    // threshold rather than the 120s default.
+    assert.equal(document.querySelector('.status-badge').textContent, 'STALE');
+});
+
+test('the history button on a restored, never-updated card opens an empty history', async (t) => {
+    const { document } = await bootDashboard(t, { get_saved_cards: async () => JSON.stringify([SHELL]) });
+
+    document.querySelector('.history-icon').click();
+
+    assert.ok(document.getElementById('history-modal').hasAttribute('open'));
+    assert.equal(document.querySelectorAll('.history-item').length, 0);
+});
+
 test('a live event for a restored identity updates the card instead of duplicating it', async (t) => {
     const { document, listeners } = await bootDashboard(t, {
         get_saved_cards: async () => JSON.stringify([SHELL]),

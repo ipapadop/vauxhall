@@ -14,7 +14,7 @@ import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
-import { cacheTheme, cachedTheme, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
+import { cacheTheme, cachedTheme, createDebounce, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
 
 /**
  * Builds the dashboard, restores preferences, and starts the telemetry feed.
@@ -122,21 +122,16 @@ async function init() {
     // Persists card identity and last known state (never prompt, message,
     // command, error, token, or history content) so the grid can be redrawn
     // on the next start. Debounced like preferences, flushed on pagehide.
-    let cardSaveTimer = null;
-    const flushCardSave = () => {
-        clearTimeout(cardSaveTimer);
-        cardSaveTimer = null;
+    const cardSave = createDebounce(() => {
         if (!window.ipc?.DashboardIPC?.save_cards) return;
         Promise.resolve(window.ipc.DashboardIPC.save_cards(JSON.stringify(snapshotAgents(agents))))
             .then(saved => { if (saved === false) console.error('Failed to save card state'); })
             .catch(err => console.error('Failed to save card state:', err));
-    };
+    }, 500);
     const scheduleCardSave = () => {
-        if (!window.ipc?.DashboardIPC?.save_cards) return;
-        clearTimeout(cardSaveTimer);
-        cardSaveTimer = setTimeout(flushCardSave, 500);
+        if (window.ipc?.DashboardIPC?.save_cards) cardSave.schedule();
     };
-    window.addEventListener?.('pagehide', flushCardSave);
+    window.addEventListener?.('pagehide', cardSave.flush);
 
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
@@ -213,15 +208,26 @@ async function init() {
             } catch (err) {
                 console.error("Failed to fetch maximum active agents:", err);
             }
+            try {
+                staleThresholdMs = (await window.ipc.DashboardIPC.get_stale_threshold()) * 1000;
+                console.log(`Stale threshold set to ${staleThresholdMs}ms`);
+            } catch (err) {
+                console.error("Failed to fetch stale threshold:", err);
+            }
         }
 
         // Restore card shells from the previous run before live telemetry
         // starts, so an incoming event for a restored session updates it in
-        // place instead of creating a duplicate card.
+        // place instead of creating a duplicate card. Capped and sorted by
+        // last-seen before any DOM work, so a saved list larger than the
+        // configured limit doesn't build cards only to evict them.
         if (window.ipc?.DashboardIPC?.get_saved_cards) {
             try {
                 const saved = JSON.parse(await window.ipc.DashboardIPC.get_saved_cards());
-                for (const shell of Array.isArray(saved) ? saved : []) {
+                const shells = (Array.isArray(saved) ? saved : [])
+                    .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0))
+                    .slice(0, Math.max(maxActiveAgents, 0));
+                for (const shell of shells) {
                     const key = agentKey(shell);
                     if (agents[key]) continue;
                     const card = createCard(shell, window.ipc, (opener) => {
@@ -233,12 +239,15 @@ async function init() {
                         menuOpener = opener;
                         openDialog(cardMenuModal);
                     });
+                    // No history content is persisted; an empty array (rather
+                    // than leaving this undefined) lets the history modal
+                    // open showing "no events yet" instead of silently no-op'ing.
+                    card.history = [];
                     updateCard(card, shell);
                     card.dataset.lastSeen = String(shell.last_seen || 0);
                     agents[key] = card;
                     grid.appendChild(card);
                 }
-                evictAgents(maxActiveAgents);
                 checkStaleness(agents, staleThresholdMs);
                 if (grid.children.length) sortGrid(sortSelect?.value, grid, attentionFirstToggle?.checked);
                 refreshSummary();
@@ -313,14 +322,6 @@ async function init() {
             },
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";
-
-                // Fetch stale threshold from settings
-                window.ipc?.DashboardIPC?.get_stale_threshold().then(seconds => {
-                    staleThresholdMs = seconds * 1000;
-                    console.log(`Stale threshold set to ${staleThresholdMs}ms`);
-                }).catch(err => {
-                    console.error("Failed to fetch stale threshold:", err);
-                });
             },
             onError: (err) => {
                 console.error("IPC Error:", err);

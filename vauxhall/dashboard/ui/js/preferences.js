@@ -73,17 +73,39 @@ export async function loadPreferences(ipc) {
 }
 
 /**
+ * Creates a timer that runs an action a pause after the last schedule() call,
+ * or immediately via flush(). Shared by anything that batches frontend state
+ * before sending it through the Python bridge.
+ * @param {() => void} action - The action to run.
+ * @param {number} [delayMs] - The pause before running.
+ * @returns {{schedule: () => void, flush: () => void}} Schedules, or forces, a run.
+ */
+export function createDebounce(action, delayMs = SAVE_DELAY_MS) {
+    let timer = null;
+
+    const flush = () => {
+        clearTimeout(timer);
+        timer = null;
+        action();
+    };
+
+    const schedule = () => {
+        clearTimeout(timer);
+        timer = setTimeout(flush, delayMs);
+    };
+
+    return { schedule, flush };
+}
+
+/**
  * Creates a saver that batches preference changes and sends them after a pause.
  * @param {object} ipc - The DashboardIPC bridge.
  * @returns {{save: (changes: object) => void, flush: () => void}} Queues changes, or sends queued changes now.
  */
 export function createPreferenceSaver(ipc) {
     let pending = {};
-    let timer = null;
 
-    const flush = () => {
-        clearTimeout(timer);
-        timer = null;
+    const send = () => {
         if (!ipc?.save_ui_state || !Object.keys(pending).length) return;
         const payload = pending;
         pending = {};
@@ -92,14 +114,15 @@ export function createPreferenceSaver(ipc) {
             .catch(err => console.error('Failed to save preferences:', err));
     };
 
+    const debounce = createDebounce(send);
+
     const save = (changes) => {
         if (!ipc?.save_ui_state) return;
         Object.assign(pending, changes);
-        clearTimeout(timer);
-        timer = setTimeout(flush, SAVE_DELAY_MS);
+        debounce.schedule();
     };
 
-    return { save, flush };
+    return { save, flush: debounce.flush };
 }
 
 /**

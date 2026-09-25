@@ -225,11 +225,16 @@ class DashboardIPC(PyloidIPC):
     def get_saved_cards(self) -> str:
         """Return the card identities saved from the previous run.
 
+        Cards for a currently denylisted agent are left out, the same as live
+        telemetry for that agent.
+
         Returns:
             str: JSON array of saved cards, each with ``agent``, ``workspace``,
                 ``session_id``, ``state``, ``last_seen``, and optionally ``env``.
         """
-        return json.dumps(load_saved_cards())
+        denylist = settings.dashboard.agent_denylist
+        cards = [card for card in load_saved_cards() if card["agent"] not in denylist]
+        return json.dumps(cards)
 
     @Bridge(str, result=bool)
     def save_cards(self, payload: str) -> bool:

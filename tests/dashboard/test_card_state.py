@@ -17,6 +17,7 @@ from vauxhall.dashboard.card_state import (
     load_saved_cards,
     save_cards,
 )
+from vauxhall.dashboard.config import UIConfig, dashboard_settings
 from vauxhall.dashboard.ipc import DashboardIPC
 
 pytestmark = pytest.mark.usefixtures("isolated_cwd")
@@ -178,6 +179,19 @@ def test_ipc_get_saved_cards_returns_saved_cards() -> None:
     save_cards([CARD])
 
     assert json.loads(DashboardIPC().get_saved_cards()) == [CARD]
+
+
+def test_ipc_get_saved_cards_omits_denylisted_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A card for a currently denylisted agent is left out, like live telemetry."""
+    other = {**CARD, "agent": "Codex", "session_id": "other"}
+    save_cards([CARD, other])
+    monkeypatch.setattr(
+        dashboard_settings, "dashboard", UIConfig(agent_denylist=[CARD["agent"]])
+    )
+
+    assert json.loads(DashboardIPC().get_saved_cards()) == [other]
 
 
 def test_ipc_save_cards_round_trips() -> None:

@@ -133,9 +133,15 @@ async function init() {
     };
     window.addEventListener?.('pagehide', cardSave.flush);
 
+    // Set when Clear runs while the startup restore (below) is still awaiting
+    // get_saved_cards(), so that in-flight response doesn't repopulate the
+    // grid the user just emptied.
+    let restoreCancelled = false;
+
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
+        restoreCancelled = true;
         refreshSummary();
         scheduleCardSave();
     });
@@ -224,33 +230,38 @@ async function init() {
         if (window.ipc?.DashboardIPC?.get_saved_cards) {
             try {
                 const saved = JSON.parse(await window.ipc.DashboardIPC.get_saved_cards());
-                const shells = (Array.isArray(saved) ? saved : [])
-                    .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0))
-                    .slice(0, Math.max(maxActiveAgents, 0));
-                for (const shell of shells) {
-                    const key = agentKey(shell);
-                    if (agents[key]) continue;
-                    const card = createCard(shell, window.ipc, (opener) => {
-                        currentHistoryKey = key;
-                        historyOpener = opener;
-                        openHistoryModal(key, agents);
-                    }, (opener) => {
-                        currentMenuKey = key;
-                        menuOpener = opener;
-                        openDialog(cardMenuModal);
-                    });
-                    // No history content is persisted; an empty array (rather
-                    // than leaving this undefined) lets the history modal
-                    // open showing "no events yet" instead of silently no-op'ing.
-                    card.history = [];
-                    updateCard(card, shell);
-                    card.dataset.lastSeen = String(shell.last_seen || 0);
-                    agents[key] = card;
-                    grid.appendChild(card);
+                // A Clear click while the call above was in flight already
+                // emptied the grid; don't let this response undo it.
+                if (!restoreCancelled) {
+                    const shells = (Array.isArray(saved) ? saved : [])
+                        .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0))
+                        .slice(0, Math.max(maxActiveAgents, 0));
+                    for (const shell of shells) {
+                        const key = agentKey(shell);
+                        if (agents[key]) continue;
+                        const card = createCard(shell, window.ipc, (opener) => {
+                            currentHistoryKey = key;
+                            historyOpener = opener;
+                            openHistoryModal(key, agents);
+                        }, (opener) => {
+                            currentMenuKey = key;
+                            menuOpener = opener;
+                            openDialog(cardMenuModal);
+                        });
+                        // No history content is persisted; an empty array
+                        // (rather than leaving this undefined) lets the
+                        // history modal open showing "no events yet" instead
+                        // of silently no-op'ing.
+                        card.history = [];
+                        updateCard(card, shell);
+                        card.dataset.lastSeen = String(shell.last_seen || 0);
+                        agents[key] = card;
+                        grid.appendChild(card);
+                    }
+                    checkStaleness(agents, staleThresholdMs);
+                    if (grid.children.length) sortGrid(sortSelect?.value, grid, attentionFirstToggle?.checked);
+                    refreshSummary();
                 }
-                checkStaleness(agents, staleThresholdMs);
-                if (grid.children.length) sortGrid(sortSelect?.value, grid, attentionFirstToggle?.checked);
-                refreshSummary();
             } catch (err) {
                 console.error("Failed to restore saved cards:", err);
             }

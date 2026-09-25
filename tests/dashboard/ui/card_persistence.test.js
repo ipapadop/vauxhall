@@ -226,6 +226,21 @@ test('a telemetry event schedules a debounced card save with identity only, neve
     assert.equal(JSON.stringify(payloads[0]).includes('secret'), false);
 });
 
+test('clicking Clear while saved cards are still loading is not undone once they arrive', async (t) => {
+    let resolveSavedCards;
+    const { document } = await bootDashboard(t, {
+        get_saved_cards: () => new Promise((resolve) => { resolveSavedCards = resolve; }),
+    });
+
+    document.getElementById('clear-btn').click();
+    resolveSavedCards(JSON.stringify([SHELL]));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.querySelectorAll('.agent-card').length, 0);
+    assert.deepEqual(Object.keys(agents), []);
+});
+
 test('clearing the grid schedules a save that empties the persisted list', async (t) => {
     const payloads = [];
     const { document, listeners } = await bootDashboard(t, {

@@ -95,6 +95,20 @@ agent's hooks), [configuration](docs/configuration.md),
   saved. Changes are batched and sent to `DashboardIPC.save_ui_state()` 500 ms
   after the last one, or immediately on `pagehide`; a `false` result is
   logged. Theme changes also update the localStorage cache.
+- **Remembered cards**: After `max_active_agents` and the real
+  `stale_threshold` load, and before live telemetry starts, the frontend
+  restores card shells from `DashboardIPC.get_saved_cards()`: agent,
+  workspace, session ID, last known state, env, and last-seen time, with no
+  prompt, message, command, error, token, or history content. A card for a
+  currently denylisted agent is left out, like live telemetry. Restored
+  cards are sorted by last-seen and capped to `max_active_agents` before any
+  are built, are given an empty history (so the 🕒 button opens showing no
+  events instead of silently doing nothing), and are checked for staleness
+  immediately against the real threshold. A matching live event updates a
+  restored card in place instead of creating a duplicate. Card state is sent
+  to `DashboardIPC.save_cards()` 500 ms after a card is added, updated, or
+  removed, or immediately on `pagehide`; **Clear** and **Clear Stale** also
+  trigger a save so removed cards don't reappear on the next start.
 
 ## Dashboard Internals
 
@@ -143,6 +157,17 @@ agent's hooks), [configuration](docs/configuration.md),
   exits, it saves the size and position from Pyloid's public `get_size`,
   `get_position`, and `is_maximized`. A maximized window keeps its previous
   normal size, and a save failure is logged without blocking shutdown.
+- **Card state**: `vauxhall.dashboard.card_state` reads and writes
+  `~/.config/vauxhall/dashboard_cards.json` as `{"cards": [...]}`. Each entry
+  keeps only `agent`, `workspace`, `session_id`, `state` (one of
+  `vauxhall.core.telemetry.SUPPORTED_STATES`), `env`, and `last_seen`; an
+  invalid entry is dropped rather than rejecting the whole file, entries are
+  deduplicated by identity keeping the newest `last_seen`, and the list is
+  capped to a defensive maximum. `save_cards` replaces the file atomically
+  with the frontend's full current snapshot; there is no merge, so no lock is
+  needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`
+  leaves out any card whose agent is in the current `agent_denylist`, the
+  same as live telemetry.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are

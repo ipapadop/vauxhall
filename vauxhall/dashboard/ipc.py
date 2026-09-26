@@ -295,11 +295,14 @@ class DashboardIPC(PyloidIPC):
                 and an ``error``.
         """
         request = _json_object(payload) or {}
-        agent, session_id, text = (
-            request.get(key) for key in ("agent", "session_id", "text")
-        )
-        if self.on_send_prompt is None or not all(
-            isinstance(value, str) and value for value in (agent, session_id, text)
+        agent = request.get("agent")
+        session_id = request.get("session_id")
+        text = request.get("text")
+        if (
+            self.on_send_prompt is None
+            or not (isinstance(agent, str) and agent)
+            or not (isinstance(session_id, str) and session_id)
+            or not (isinstance(text, str) and text)
         ):
             return json.dumps({"ok": False, "error": "Invalid prompt request"})
 

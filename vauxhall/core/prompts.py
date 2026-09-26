@@ -4,7 +4,7 @@
 """Shared protocol for sending prompts from the dashboard to agent sessions."""
 
 import json
-from typing import Any, Final
+from typing import Any, Final, TypeGuard
 from urllib.parse import quote, unquote
 
 PROMPT_SCHEMA_VERSION: Final = 1
@@ -81,7 +81,7 @@ def prompt_text_error(text: object) -> str | None:
     return None
 
 
-def _is_message_id(value: object) -> bool:
+def _is_message_id(value: object) -> TypeGuard[str]:
     """Return whether a value is a usable message identifier.
 
     Args:
@@ -138,7 +138,9 @@ def parse_prompt(payload: bytes) -> tuple[str, str] | None:
     ):
         return None
     message_id, text = data.get("id"), data.get("text")
-    if not _is_message_id(message_id) or prompt_text_error(text) is not None:
+    if not _is_message_id(message_id) or not isinstance(text, str):
+        return None
+    if prompt_text_error(text) is not None:
         return None
     return message_id, text
 

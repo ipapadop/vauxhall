@@ -769,3 +769,32 @@ test('the prompt dialog shows no warning for an agent that is not waiting', asyn
 
     assert.equal(document.getElementById('prompt-warning').textContent, '');
 });
+
+test('clearing the dashboard closes the prompt dialog of the removed card', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    document.getElementById('clear-btn').click();
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});
+
+test('clearing stale cards closes the prompt dialog only when its card was removed', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
+    agents['["Codex","/home/user/project","two"]'].dataset.lastSeen = String(Date.now() - 300000);
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100 });
+
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('clear-stale-btn').click();
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+
+    document.getElementById('prompt-close').click();
+    agents[ONE].dataset.lastSeen = String(Date.now() - 300000);
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100 });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('clear-stale-btn').click();
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});

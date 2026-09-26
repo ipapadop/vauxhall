@@ -146,7 +146,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   both messages. Prompt text is 1..4,096 characters with no control
   characters except newline and tab, because a raw escape could end the
   terminal's bracketed paste early and turn the rest into keystrokes. Both the
-  dashboard and the relay validate it. Messages over 16 KiB are dropped.
+  dashboard and the relay validate it. Messages over 32 KiB are dropped, a
+  limit every valid prompt fits under even at four UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
   0700 directory) holding `pane`, `socket`, and `server_pid`. It is written
@@ -180,7 +181,9 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   the state in the card's `.prompt-status` live region: waiting for the relay,
   delivered, not delivered with a reason, or, after 10 seconds, no
   acknowledgment. An acknowledgment that beats the bridge's reply is kept
-  briefly and matched afterwards. The dialog closes when its card is evicted,
+  briefly and matched afterwards. Only a card's latest prompt updates its
+  status, so an older prompt's timeout or late acknowledgment can't overwrite
+  the newer outcome. The dialog closes when its card is evicted,
   cleared, or denylisted.
 - **Security**: Without MQTT authentication and ACLs (issue #3), anyone who
   can publish to the broker can send prompts, and a prompt can make an agent

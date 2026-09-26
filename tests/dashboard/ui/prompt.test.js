@@ -147,3 +147,29 @@ test('a bridge failure is reported without the exception details', async (t) => 
     assert.deepEqual(result, { ok: false, error: 'The prompt could not be sent' });
     assert.equal(errors.length, 1);
 });
+
+test('an older prompt timing out does not overwrite the newer prompt outcome', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const card = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'old-1' }).ipc, card, 'first');
+    t.mock.timers.tick(ACK_TIMEOUT_MS / 2);
+    await sendPrompt(bridge({ ok: true, id: 'new-1' }).ipc, card, 'second');
+    handleAck({ id: 'new-1', status: 'delivered' });
+
+    t.mock.timers.tick(ACK_TIMEOUT_MS);
+
+    assert.equal(status(card), 'Prompt delivered');
+});
+
+test('a late acknowledgment of an older prompt does not replace the newer prompt state', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const card = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'old-2' }).ipc, card, 'first');
+    await sendPrompt(bridge({ ok: true, id: 'new-2' }).ipc, card, 'second');
+
+    handleAck({ id: 'old-2', status: 'failed', reason: 'pane-unavailable' });
+
+    assert.equal(status(card), 'Prompt sent, waiting for the relay…');
+    handleAck({ id: 'new-2', status: 'delivered' });
+    assert.equal(status(card), 'Prompt delivered');
+});

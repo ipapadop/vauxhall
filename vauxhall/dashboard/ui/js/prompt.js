@@ -22,11 +22,15 @@ const pending = new Map();
 const unmatched = new Map();
 
 /**
- * Shows the delivery state of the last prompt on a card's live region.
+ * Shows the delivery state of a prompt on a card's live region, unless a newer
+ * prompt from the same card has replaced it, so an older prompt's timeout or
+ * late acknowledgment never overwrites the latest one's outcome.
  * @param {HTMLElement} card - The agent card.
+ * @param {string} id - The message id of the prompt the state is about.
  * @param {string} text - The state to show.
  */
-function setCardStatus(card, text) {
+function setCardStatus(card, id, text) {
+    if (card.latestPromptId !== id) return;
     const element = card.querySelector('.prompt-status');
     if (element) element.textContent = text;
 }
@@ -63,17 +67,18 @@ export async function sendPrompt(dashboardIpc, card, text) {
     }
     if (!result.ok) return { ok: false, error: result.error || 'The prompt could not be sent' };
 
+    card.latestPromptId = result.id;
     const early = unmatched.get(result.id);
     if (early) {
         unmatched.delete(result.id);
-        setCardStatus(card, describeAck(early));
+        setCardStatus(card, result.id, describeAck(early));
         return { ok: true };
     }
 
-    setCardStatus(card, 'Prompt sent, waiting for the relay…');
+    setCardStatus(card, result.id, 'Prompt sent, waiting for the relay…');
     const timer = setTimeout(() => {
         pending.delete(result.id);
-        setCardStatus(card, 'No relay acknowledged the prompt');
+        setCardStatus(card, result.id, 'No relay acknowledged the prompt');
     }, ACK_TIMEOUT_MS);
     pending.set(result.id, { card, timer });
     return { ok: true };
@@ -93,5 +98,5 @@ export function handleAck(ack) {
     }
     clearTimeout(entry.timer);
     pending.delete(ack.id);
-    setCardStatus(entry.card, describeAck(ack));
+    setCardStatus(entry.card, ack.id, describeAck(ack));
 }

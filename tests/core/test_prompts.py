@@ -65,6 +65,7 @@ def test_prompt_text_accepts_ordinary_text(text: str) -> None:
         "before\x1b[201~after",
         "delete\x7f",
         "c1\x9b",
+        "lone\ud800surrogate",
     ],
 )
 def test_prompt_text_rejects_unsafe_text(text: object) -> None:
@@ -84,6 +85,20 @@ def test_prompt_round_trips() -> None:
     payload = format_prompt("abc", "run the tests\nplease")
 
     assert parse_prompt(payload.encode()) == ("abc", "run the tests\nplease")
+
+
+@pytest.mark.parametrize("character", ["é", "日", "😀", '"', "a\n"])
+def test_longest_prompt_fits_in_a_message(character: str) -> None:
+    """A prompt at the character limit is never larger than the relay accepts.
+
+    Args:
+        character: The character the prompt repeats, chosen for its encoded size.
+    """
+    text = (character * MAX_PROMPT_LENGTH)[:MAX_PROMPT_LENGTH]
+    payload = format_prompt("a" * 64, text).encode()
+
+    assert len(payload) <= MAX_MESSAGE_BYTES
+    assert parse_prompt(payload) == ("a" * 64, text)
 
 
 def test_format_prompt_rejects_invalid_input() -> None:

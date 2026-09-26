@@ -128,7 +128,7 @@ async function init() {
     const promptSend = document.getElementById('prompt-send');
     let currentPromptKey = null;
     let promptOpener = null;
-    const closePrompt = () => closeDialog(promptModal);
+    const closePrompt = () => { if (promptModal) closeDialog(promptModal); };
     promptModal?.addEventListener('close', () => {
         currentPromptKey = null;
         (promptOpener?.isConnected ? promptOpener : grid).focus?.();
@@ -204,6 +204,7 @@ async function init() {
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
+        closePrompt();
         restoreCancelled = true;
         refreshSummary();
         scheduleCardSave();
@@ -214,6 +215,7 @@ async function init() {
             if (card.classList.contains('stale')) {
                 card.remove();
                 removeAgent(key);
+                if (key === currentPromptKey) closePrompt();
             }
         }
         refreshSummary();

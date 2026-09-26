@@ -9,7 +9,9 @@ from urllib.parse import quote, unquote
 
 PROMPT_SCHEMA_VERSION: Final = 1
 MAX_PROMPT_LENGTH: Final = 4096
-MAX_MESSAGE_BYTES: Final = 16384
+# A prompt of MAX_PROMPT_LENGTH characters takes at most 4 bytes each as UTF-8,
+# or 2 when JSON escapes it, so every valid prompt fits with room for the rest.
+MAX_MESSAGE_BYTES: Final = 32768
 PROMPT_KIND: Final = "prompt"
 ACK_KIND: Final = "ack"
 PROMPT_TOPIC_FILTER: Final = "vauxhall/agents/+/sessions/+/prompt"
@@ -78,6 +80,10 @@ def prompt_text_error(text: object) -> str | None:
         for char in text
     ):
         return "Prompt must not contain control characters"
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return "Prompt must be valid text"
     return None
 
 
@@ -111,8 +117,10 @@ def format_prompt(message_id: str, text: str) -> str:
         raise ValueError(message)
     if (error := prompt_text_error(text)) is not None:
         raise ValueError(error)
+    # Escaping non-ASCII text would take six bytes per character.
     return json.dumps(
-        {"schema_version": PROMPT_SCHEMA_VERSION, "id": message_id, "text": text}
+        {"schema_version": PROMPT_SCHEMA_VERSION, "id": message_id, "text": text},
+        ensure_ascii=False,
     )
 
 

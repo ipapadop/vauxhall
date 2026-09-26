@@ -12,6 +12,7 @@ import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, remo
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
+import { handleAck, sendPrompt } from './js/prompt.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
 import { cacheTheme, cachedTheme, createDebounce, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
@@ -119,6 +120,68 @@ async function init() {
         }
     });
 
+    // Tracks which agent card the prompt dialog is sending to.
+    const promptModal = document.getElementById('prompt-modal');
+    const promptForm = document.getElementById('prompt-form');
+    const promptText = document.getElementById('prompt-text');
+    const promptError = document.getElementById('prompt-error');
+    const promptSend = document.getElementById('prompt-send');
+    let currentPromptKey = null;
+    let promptOpener = null;
+    const closePrompt = () => closeDialog(promptModal);
+    promptModal?.addEventListener('close', () => {
+        currentPromptKey = null;
+        (promptOpener?.isConnected ? promptOpener : grid).focus?.();
+        promptOpener = null;
+    });
+    document.getElementById('prompt-close')?.addEventListener('click', closePrompt);
+    document.getElementById('prompt-cancel')?.addEventListener('click', closePrompt);
+    promptForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const card = agents[currentPromptKey];
+        if (!card || !window.ipc?.DashboardIPC) return;
+        promptError.textContent = '';
+        promptSend.disabled = true;
+        try {
+            const result = await sendPrompt(window.ipc.DashboardIPC, card, promptText.value);
+            if (result.ok) {
+                promptText.value = '';
+                closePrompt();
+            } else {
+                promptError.textContent = result.error;
+            }
+        } finally {
+            promptSend.disabled = false;
+        }
+    });
+    const openPrompt = (key, opener) => {
+        const card = agents[key];
+        if (!card) return;
+        currentPromptKey = key;
+        promptOpener = opener;
+        promptError.textContent = '';
+        // Text typed while the agent shows a question or permission dialog
+        // answers that dialog, so say so before the user sends anything.
+        document.getElementById('prompt-warning').textContent = card.classList.contains('waiting')
+            ? 'This agent is waiting for input. What you send will answer its current question or permission request.'
+            : '';
+        document.getElementById('prompt-target').textContent =
+            `${card.querySelector('.agent-name')?.textContent} in ${card.querySelector('.agent-workspace')?.textContent}`;
+        openDialog(promptModal);
+        promptText.focus?.();
+    };
+
+    // Builds a card whose history, options, and prompt buttons act on its key.
+    const newCard = (key, data) => createCard(data, window.ipc, (opener) => {
+        currentHistoryKey = key; // Lock modal to this agent
+        historyOpener = opener;
+        openHistoryModal(key, agents);
+    }, (opener) => {
+        currentMenuKey = key;
+        menuOpener = opener;
+        openDialog(cardMenuModal);
+    }, (opener) => openPrompt(key, opener));
+
     // Persists card identity and last known state (never prompt, message,
     // command, error, token, or history content) so the grid can be redrawn
     // on the next start. Debounced like preferences, flushed on pagehide.
@@ -180,6 +243,7 @@ async function init() {
     window.onclick = (event) => {
         if (event.target === modal) closeModal();
         if (event.target === cardMenuModal) closeMenu();
+        if (event.target === promptModal) closePrompt();
     };
 
     // Initialize IPC with Python backend
@@ -239,15 +303,7 @@ async function init() {
                     for (const shell of shells) {
                         const key = agentKey(shell);
                         if (agents[key]) continue;
-                        const card = createCard(shell, window.ipc, (opener) => {
-                            currentHistoryKey = key;
-                            historyOpener = opener;
-                            openHistoryModal(key, agents);
-                        }, (opener) => {
-                            currentMenuKey = key;
-                            menuOpener = opener;
-                            openDialog(cardMenuModal);
-                        });
+                        const card = newCard(key, shell);
                         // No history content is persisted; an empty array
                         // (rather than leaving this undefined) lets the
                         // history modal open showing "no events yet" instead
@@ -276,15 +332,8 @@ async function init() {
                     const evicted = ensureAgentCapacity(maxActiveAgents);
                     if (evicted.includes(currentHistoryKey)) closeModal();
                     if (evicted.includes(currentMenuKey)) closeMenu();
-                    card = createCard(data, window.ipc, (opener) => {
-                        currentHistoryKey = key; // Lock modal to this agent
-                        historyOpener = opener;
-                        openHistoryModal(key, agents);
-                    }, (opener) => {
-                        currentMenuKey = key;
-                        menuOpener = opener;
-                        openDialog(cardMenuModal);
-                    });
+                    if (evicted.includes(currentPromptKey)) closePrompt();
+                    card = newCard(key, data);
                     agents[key] = card;
                     grid.appendChild(card);
                 } else if (isHidden(card)) {
@@ -317,6 +366,7 @@ async function init() {
                 const evicted = evictAgents(maxActiveAgents);
                 if (evicted.includes(currentHistoryKey)) closeModal();
                 if (evicted.includes(currentMenuKey)) closeMenu();
+                if (evicted.includes(currentPromptKey)) closePrompt();
 
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {
@@ -325,12 +375,14 @@ async function init() {
                     removeAgent(key);
                     if (key === currentHistoryKey) closeModal();
                     if (key === currentMenuKey) closeMenu();
+                    if (key === currentPromptKey) closePrompt();
                 }
 
                 checkStaleness(agents, staleThresholdMs);
                 refreshSummary();
                 scheduleCardSave();
             },
+            onPromptAck: handleAck,
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";
             },

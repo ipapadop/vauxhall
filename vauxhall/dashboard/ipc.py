@@ -79,6 +79,7 @@ class DashboardIPC(PyloidIPC):
         on_ready_callback: Callable[[], Any] | None = None,
         on_save_settings: Callable[..., dict[str, Any]] | None = None,
         on_notify: Callable[[str, str], Any] | None = None,
+        on_send_prompt: Callable[[str, str, str], dict[str, Any]] | None = None,
     ) -> None:
         """Initialize the IPC bridge.
 
@@ -88,12 +89,15 @@ class DashboardIPC(PyloidIPC):
                 called with the changes and an ``update_hooks`` keyword.
             on_notify: Optional function that shows a desktop notification,
                 called with a title and a message.
+            on_send_prompt: Optional function that publishes a prompt, called
+                with the agent, session identity, and text.
         """
         super().__init__()
         self.is_ready = False
         self.on_ready_callback = on_ready_callback
         self.on_save_settings = on_save_settings
         self.on_notify = on_notify
+        self.on_send_prompt = on_send_prompt
 
     @Bridge(result=bool)
     def ping(self) -> bool:
@@ -277,6 +281,34 @@ class DashboardIPC(PyloidIPC):
             return False
         else:
             return True
+
+    @Bridge(str, result=str)
+    def send_prompt(self, payload: str) -> str:
+        """Send a prompt to an agent session's relay.
+
+        Args:
+            payload: JSON object with the card's ``agent`` and ``session_id``
+                and the prompt ``text``.
+
+        Returns:
+            str: JSON with ``ok`` and the acknowledgment ``id``, or ``ok`` false
+                and an ``error``.
+        """
+        request = _json_object(payload) or {}
+        agent, session_id, text = (
+            request.get(key) for key in ("agent", "session_id", "text")
+        )
+        if self.on_send_prompt is None or not all(
+            isinstance(value, str) and value for value in (agent, session_id, text)
+        ):
+            return json.dumps({"ok": False, "error": "Invalid prompt request"})
+
+        try:
+            result = self.on_send_prompt(agent, session_id, text)
+        except Exception:
+            logger.exception("Failed to send prompt")
+            return json.dumps({"ok": False, "error": "The prompt could not be sent"})
+        return json.dumps(result)
 
     @Bridge(str, str, result=bool)
     def notify(self, title: str, message: str) -> bool:

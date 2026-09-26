@@ -324,6 +324,7 @@ header {
     font-size: 0.75em;
 }
 
+.prompt-icon,
 .history-icon,
 .menu-icon {
     cursor: pointer;
@@ -338,9 +339,20 @@ header {
     padding: 0;
 }
 
+.prompt-icon:hover,
 .history-icon:hover,
 .menu-icon:hover {
     opacity: 1;
+}
+
+.footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.prompt-status:empty {
+    display: none;
 }
 
 /* Modal Styles */
@@ -500,6 +512,38 @@ header {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+.prompt-content {
+    width: min(520px, 90vw);
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    resize: none;
+    gap: 8px;
+}
+
+.prompt-content textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: inherit;
+    background: var(--badge-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.prompt-error,
+.prompt-warning {
+    color: var(--error-color);
+    margin: 0;
+}
+
+.prompt-error:empty,
+.prompt-warning:empty {
+    display: none;
 }
 
 .denylist-list {

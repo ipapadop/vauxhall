@@ -5,7 +5,7 @@
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -200,3 +200,77 @@ def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
 
     assert message is None
     assert not list(elsewhere.iterdir())
+
+
+def test_publish_telemetry_records_the_pane_at_session_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session that starts in tmux becomes reachable for dashboard prompts.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    from vauxhall.hooks.panes import PaneTarget, load_pane  # noqa: PLC0415
+
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    monkeypatch.delenv("TMUX", raising=False)
+    client = MagicMock()
+    client.__enter__.return_value = client
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionStart", "session_id": "one", "source": "startup"},
+        "Codex",
+        {"SessionStart": common.session_start_telemetry},
+        create_client=lambda: client,
+    )
+
+    assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
+
+
+def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:
+    """A session that ended can no longer be sent prompts."""
+    from vauxhall.hooks.panes import load_pane, record_pane  # noqa: PLC0415
+
+    record_pane("codex", "native:one", {"TMUX_PANE": "%5"})
+    client = MagicMock()
+    client.__enter__.return_value = client
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionEnd", "session_id": "one"},
+        "Codex",
+        {"SessionEnd": lambda _: ("Idle", {"status": "session ended"})},
+        create_client=lambda: client,
+    )
+
+    assert load_pane("codex", "native:one") is None
+
+
+def test_pane_record_failure_never_disturbs_the_hook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unwritable record is logged and telemetry still goes out.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+
+    def unwritable(*_: object) -> None:
+        """Fail like a read-only home directory.
+
+        Raises:
+            PermissionError: Always.
+        """
+        raise PermissionError
+
+    monkeypatch.setattr(common, "record_pane", unwritable)
+    client = MagicMock()
+    client.__enter__.return_value = client
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionStart", "session_id": "one"},
+        "Codex",
+        {"SessionStart": common.session_start_telemetry},
+        create_client=lambda: client,
+    )
+
+    client.send.assert_called_once()

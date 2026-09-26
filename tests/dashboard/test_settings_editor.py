@@ -350,7 +350,11 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
     assert result["restart_required"] == []
     old_subscriber.stop.assert_called_once_with()
     subscriber_type.assert_called_once_with(
-        dashboard.on_telemetry, dashboard.on_status, "broker", 1883
+        dashboard.on_telemetry,
+        dashboard.on_status,
+        "broker",
+        1883,
+        ack_callback=dashboard.on_ack,
     )
     subscriber_type.return_value.start.assert_called_once_with()
     assert dashboard.mqtt is subscriber_type.return_value

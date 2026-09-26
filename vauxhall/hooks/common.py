@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.hooks.identity import resolve_session_id
+from vauxhall.hooks.panes import forget_pane, record_pane
 
 if TYPE_CHECKING:
     from vauxhall.hooks.client import TelemetryClient
@@ -497,6 +498,26 @@ def create_telemetry_client() -> "TelemetryClient":
     return client
 
 
+def track_pane(hook_type: object, agent: str, session_id: str) -> None:
+    """Keep the local tmux pane record of a session in step with its lifecycle.
+
+    The record lets ``vauxhall-relay`` deliver dashboard prompts. A failure is
+    logged and ignored, so it can never disturb the agent or the telemetry.
+
+    Args:
+        hook_type: The hook event name.
+        agent: The agent name.
+        session_id: The session identity.
+    """
+    try:
+        if hook_type == "SessionStart":
+            record_pane(agent, session_id)
+        elif hook_type == "SessionEnd":
+            forget_pane(agent, session_id)
+    except OSError:
+        logger.debug("Could not update the tmux pane record for %s", agent)
+
+
 def publish_telemetry(
     input_data: dict[str, Any],
     agent: str,
@@ -527,6 +548,7 @@ def publish_telemetry(
         logger.warning("Skipping telemetry: no stable session identity is available")
         return
 
+    track_pane(hook_type, agent, session_id)
     events: list[Telemetry] = [
         ("Thinking", {"message": message}) for message in messages or []
     ]

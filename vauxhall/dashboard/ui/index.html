@@ -86,6 +86,28 @@
         </div>
     </dialog>
 
+    <dialog id="prompt-modal" class="modal card-menu-modal" aria-labelledby="prompt-title">
+        <form id="prompt-form" class="modal-content prompt-content" novalidate>
+            <div class="modal-header">
+                <h2 id="prompt-title">Send Prompt</h2>
+                <button type="button" id="prompt-close" class="close-btn" title="Close" aria-label="Close prompt dialog">&times;</button>
+            </div>
+            <p id="prompt-target" class="settings-note"></p>
+            <p id="prompt-warning" class="prompt-warning" role="status"></p>
+            <label for="prompt-text">Prompt</label>
+            <textarea id="prompt-text" rows="6" maxlength="4096"></textarea>
+            <p class="settings-note">
+                Typed into the session's tmux pane by <code>vauxhall-relay</code> on the agent
+                machine. The session must run in tmux.
+            </p>
+            <p id="prompt-error" class="prompt-error" role="alert"></p>
+            <div class="settings-actions">
+                <button type="button" id="prompt-cancel" class="secondary-btn">Cancel</button>
+                <button type="submit" id="prompt-send" class="secondary-btn primary-btn">Send</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
         <form id="settings-form" novalidate>
             <h2 id="settings-title">Settings</h2>

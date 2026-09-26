@@ -49,6 +49,7 @@ Security = "https://github.com/ipapadop/vauxhall/security/advisories"
 [project.scripts]
 vauxhall = "vauxhall.dashboard.app:main"
 vauxhall-hook-install = "vauxhall.hooks.cli:main"
+vauxhall-relay = "vauxhall.hooks.relay:main"
 
 [project.optional-dependencies]
 dashboard = [

@@ -4,7 +4,8 @@ This file is for contributors and coding agents working on Vauxhall: the
 architecture, the dashboard's behavior and implementation, and the rules for
 developing and releasing it. User documentation lives in [README.md](README.md)
 and [docs/](docs/): [integrations](docs/integrations.md) (telemetry schema,
-states, and each agent's hooks), [configuration](docs/configuration.md),
+states, and each agent's hooks), [sending prompts](docs/sending-prompts.md),
+[configuration](docs/configuration.md),
 [privacy](docs/privacy.md), [remote deployment](docs/remote-deployment.md),
 [troubleshooting](docs/troubleshooting.md), and
 [versioning](docs/releasing.md).
@@ -55,6 +56,10 @@ flowchart LR
 
 Both sides share `vauxhall.core`, so hooks and the dashboard validate the same
 schema and read configuration the same way.
+
+A fourth piece runs the other way: `vauxhall-relay`, a long-lived process on
+each agent machine, receives prompts the dashboard publishes and types them
+into the session's tmux pane (see [Prompt Delivery](#prompt-delivery)).
 
 ## Information Flow
 
@@ -113,13 +118,83 @@ Information also flows the other way, from the UI to the backend over
 workspace path. Saved settings that change the broker restart the subscriber,
 and the backend pushes the new stale threshold and card limit back to the UI.
 
+## Prompt Delivery
+
+```mermaid
+sequenceDiagram
+    participant U as Dashboard UI
+    participant D as DashboardApp
+    participant B as Mosquitto
+    participant R as vauxhall-relay
+    participant T as tmux pane
+
+    Note over R,T: SessionStart hook recorded session to pane
+    U->>D: send_prompt(agent, session_id, text)
+    D->>B: prompt (QoS 1, not retained)
+    B->>R: sessions/{session}/prompt
+    R->>T: paste-buffer -p, then Enter
+    R->>B: ack (delivered or failed)
+    B->>D: sessions/{session}/ack
+    D->>U: prompt-ack event
+```
+
+See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
+
+- **Protocol**: `vauxhall.core.prompts` builds the per-session topics
+  (`vauxhall/agents/<agent>/sessions/<session>/prompt` and `/ack`; agent
+  lower-cased, session percent-encoded) and encodes, validates, and parses
+  both messages. Prompt text is 1..4,096 characters with no control
+  characters except newline and tab, because a raw escape could end the
+  terminal's bracketed paste early and turn the rest into keystrokes. Both the
+  dashboard and the relay validate it. Messages over 16 KiB are dropped.
+- **Pane record**: `vauxhall.hooks.panes` writes
+  `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
+  0700 directory) holding `pane`, `socket`, and `server_pid`. It is written
+  by `common.track_pane`, called from `publish_telemetry` on `SessionStart`
+  and deleted on `SessionEnd`; a `SessionStart` outside tmux removes any old
+  record, records older than 30 days are swept, and failures are logged and
+  ignored. It is never published.
+- **Relay**: `vauxhall.hooks.relay` (`vauxhall-relay`) subscribes at QoS 1 to
+  `vauxhall/agents/+/sessions/+/prompt` with the hooks' broker settings. It
+  ignores prompts for sessions without a local pane record, so one relay per
+  machine can share a broker, and remembers the last 256 message IDs to
+  ignore a QoS 1 redelivery. Delivery checks that the pane's tmux server PID
+  still matches the record (pane IDs restart from `%0` after tmux restarts),
+  then runs `load-buffer` from standard input, `paste-buffer -p -d` into the
+  pane, and, after 0.2 seconds, `send-keys Enter`. Text never appears on a
+  command line. It acknowledges `delivered` or `failed` (`pane-unavailable`
+  or `delivery-failed`) without waiting for the broker, since it runs in the
+  network loop's callback. It logs no prompt text.
+- **Dashboard**: `DashboardSubscriber.send_prompt` publishes at QoS 1 with
+  `retain=False` (a retained prompt would be retyped on every relay
+  reconnect) and refuses when the broker isn't connected rather than queueing.
+  It also subscribes to `vauxhall/agents/+/sessions/+/ack` and forwards valid
+  acknowledgments to `DashboardApp.on_ack`, which sends a `prompt-ack` event
+  to a ready frontend. `DashboardIPC.send_prompt` takes a JSON object with
+  `agent`, `session_id`, and `text` and returns `{"ok", "id"}` or
+  `{"ok": false, "error"}`.
+- **Frontend**: A card's ✉️ button (`.prompt-icon`, named by agent, workspace,
+  and session) opens the `prompt-modal` `<dialog>` through `dialog.js`, with a
+  warning when the card is waiting for input, since the text would answer its
+  question or permission request. `js/prompt.js` sends the request and shows
+  the state in the card's `.prompt-status` live region: waiting for the relay,
+  delivered, not delivered with a reason, or, after 10 seconds, no
+  acknowledgment. An acknowledgment that beats the bridge's reply is kept
+  briefly and matched afterwards. The dialog closes when its card is evicted,
+  cleared, or denylisted.
+- **Security**: Without MQTT authentication and ACLs (issue #3), anyone who
+  can publish to the broker can send prompts, and a prompt can make an agent
+  run commands. There is no setting that disables the feature; without a
+  relay nothing acts on prompts.
+
 ## Project Structure
 
 - `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
   the dashboard and hooks.
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
-- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
-  Code, Codex, and Gemini CLI hooks and installers.
+- `vauxhall/hooks/`: The telemetry client, shared hook helpers, the tmux pane
+  record and the prompt relay, and the Claude Code, Codex, and Gemini CLI
+  hooks and installers.
 - `docs/`: User documentation and the dashboard screenshot shown in the README.
 - `scripts/`: The agent simulator and a logging color check.
 - `scripts/release_notes.py`: The release workflow's tag and changelog check.
@@ -193,7 +268,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   form control; no `div` or `span` carries a click handler as its only way in.
   The card's workspace path, its 🕒 history icon, and its ⋮ menu icon are
   buttons, and the card's own click-to-copy handler sits on top of the
-  workspace button rather than replacing it. The history, agent menu, and
+  workspace button rather than replacing it. The history, agent menu, prompt, and
   settings modals are `<dialog>` elements opened with `showModal()`, so the
   browser contains focus and Escape closes them; closing returns focus to the
   control that opened it, or to the agent grid when that control's card was

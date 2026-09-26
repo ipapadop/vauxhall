@@ -30,6 +30,13 @@ The first release, planned as 0.1.0. It is alpha software; see
   agent to a denylist saved in the dashboard configuration; denylisted
   agents' telemetry is dropped and their cards removed, until the denylist
   entry is removed from the settings dialog.
+- Sending prompts from the dashboard to running Claude Code, Codex, and Gemini
+  CLI sessions: a ✉️ button on each card publishes the prompt, and
+  `vauxhall-relay`, run on the agent machine, types it into the session's
+  tmux pane and reports delivery back to the card. The hooks record each
+  session's tmux pane locally at `SessionStart`. Without MQTT authentication
+  (issue #3), anyone who can publish to the broker can send prompts; see
+  https://github.com/ipapadop/vauxhall/blob/main/docs/sending-prompts.md.
 - Hooks for Claude Code, Codex, and Gemini CLI, installed with
   `vauxhall-hook-install claude codex gemini` into an isolated `.vauxhall-venv`.
 - `TelemetryClient` and telemetry schema version 1 for other agents.

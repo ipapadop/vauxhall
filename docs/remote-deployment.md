@@ -92,10 +92,18 @@ EOF
 `delivered` means the dashboard's broker acknowledged the message, and a
 **Tunnel test** card appears on the dashboard.
 
+## Sending prompts to remote agents
+
+Run `vauxhall-relay` on the agent machine, through the same tunnel; it reads
+the hooks' broker settings, so `localhost:1883` reaches the dashboard's broker.
+See [sending-prompts.md](sending-prompts.md). Anyone who can reach the tunnel's
+port on the agent machine can send prompts too.
+
 ## What the tunnel doesn't protect
 
 - On the agent machine, the forwarded port is on loopback, so other accounts on
-  that machine can connect to it and read or publish telemetry. Use the tunnel
+  that machine can connect to it and read or publish telemetry, including
+  prompts for your agents. Use the tunnel
   only on machines you don't share, or where you trust every account.
 - The same applies to the broker's loopback port on the dashboard machine.
 - The dashboard labels workspaces under `/home` as LOCAL even when they are on

@@ -45,6 +45,17 @@ const PAGE = `
             <button type="button" id="card-menu-hide">Hide until next event</button>
             <button type="button" id="card-menu-denylist">Add agent to denylist</button>
         </dialog>
+        <dialog id="prompt-modal">
+            <form id="prompt-form">
+                <button type="button" id="prompt-close"></button>
+                <div id="prompt-target"></div>
+                <p id="prompt-warning"></p>
+                <textarea id="prompt-text"></textarea>
+                <p id="prompt-error"></p>
+                <button type="button" id="prompt-cancel"></button>
+                <button type="submit" id="prompt-send"></button>
+            </form>
+        </dialog>
     </body></html>
 `;
 
@@ -605,4 +616,156 @@ test('clearing the dashboard resets the fleet summary', async (t) => {
 
     const texts = [...document.getElementById('fleet-summary').children].map((badge) => badge.textContent);
     assert.deepEqual(texts, ['0 agents', '0 need attention', '0 stale', '0 tokens']);
+});
+
+const ONE = '["Codex","/home/user/project","one"]';
+
+/**
+ * Submits the prompt form the way pressing Send would, and lets the send finish.
+ * @param {Document} document - The dashboard document.
+ */
+async function submitPrompt(document) {
+    document.getElementById('prompt-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('the prompt button opens the dialog for its card', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-target').textContent, 'Codex in /home/user/project');
+});
+
+test('sending a prompt posts the card identity and text, then closes the dialog', async (t) => {
+    const requests = [];
+    const { document, listeners } = await bootDashboard(t, {
+        send_prompt: async (payload) => {
+            requests.push(JSON.parse(payload));
+            return JSON.stringify({ ok: true, id: 'id-1' });
+        },
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'run the tests';
+
+    await submitPrompt(document);
+
+    assert.deepEqual(requests, [{ agent: 'Codex', session_id: 'one', text: 'run the tests' }]);
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-text').value, '');
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt sent, waiting for the relay…');
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+});
+
+test('a relay acknowledgment updates the card that sent the prompt', async (t) => {
+    const { document, listeners } = await bootDashboard(t, {
+        send_prompt: async () => JSON.stringify({ ok: true, id: 'id-ack' }),
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'hello';
+    await submitPrompt(document);
+
+    listeners['prompt-ack']({ id: 'id-ack', status: 'delivered' });
+
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt delivered');
+});
+
+test('a rejected prompt keeps the dialog open with the reason and the text', async (t) => {
+    const { document, listeners } = await bootDashboard(t, {
+        send_prompt: async () => JSON.stringify({ ok: false, error: 'Not connected to the broker' }),
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'keep me';
+
+    await submitPrompt(document);
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
+    assert.equal(document.getElementById('prompt-text').value, 'keep me');
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+});
+
+test('cancelling the prompt dialog sends nothing and returns focus to its button', async (t) => {
+    let sent = 0;
+    const { document, listeners } = await bootDashboard(t, {
+        send_prompt: async () => { sent++; return JSON.stringify({ ok: true, id: 'x' }); },
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    const button = agents[ONE].querySelector('.prompt-icon');
+    let focused = 0;
+    button.focus = () => { focused++; };
+    button.click();
+
+    document.getElementById('prompt-cancel').click();
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(sent, 0);
+    assert.equal(focused, 1);
+});
+
+test('the close button dismisses the prompt dialog', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    document.getElementById('prompt-close').click();
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});
+
+test('the prompt dialog closes when its card is evicted by a smaller card limit', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 0 });
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});
+
+test('the prompt dialog closes when its agent is denylisted', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});
+
+test('a new card arriving at capacity closes the prompt dialog of the evicted card', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 1 });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
+
+    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
+});
+
+test('the prompt dialog warns when the agent is waiting for input', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input' });
+
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    assert.match(document.getElementById('prompt-warning').textContent, /waiting for input/);
+});
+
+test('the prompt dialog shows no warning for an agent that is not waiting', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-close').click();
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Idle' });
+
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    assert.equal(document.getElementById('prompt-warning').textContent, '');
 });

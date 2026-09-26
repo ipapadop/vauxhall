@@ -61,7 +61,7 @@ def test_prompt_text_accepts_ordinary_text(text: str) -> None:
     [
         None,
         "   \n",
-        "x" * (MAX_PROMPT_LENGTH + 1),
+        pytest.param("x" * (MAX_PROMPT_LENGTH + 1), id="too-long"),
         "before\x1b[201~after",
         "delete\x7f",
         "c1\x9b",
@@ -117,9 +117,12 @@ def test_format_prompt_rejects_invalid_input() -> None:
         json.dumps({"id": "a", "text": "x"}).encode(),
         json.dumps({"schema_version": 1, "id": "", "text": "x"}).encode(),
         json.dumps({"schema_version": 1, "id": "a", "text": "\x1b"}).encode(),
-        json.dumps(
-            {"schema_version": 1, "id": "a", "text": "x" * MAX_MESSAGE_BYTES}
-        ).encode(),
+        pytest.param(
+            json.dumps(
+                {"schema_version": 1, "id": "a", "text": "x" * MAX_MESSAGE_BYTES}
+            ).encode(),
+            id="oversized",
+        ),
     ],
 )
 def test_parse_prompt_rejects_invalid_messages(payload: bytes) -> None:
@@ -164,7 +167,7 @@ def test_format_ack_rejects_invalid_input() -> None:
         json.dumps(
             {"schema_version": 1, "id": "a", "status": "failed", "reason": "x"}
         ).encode(),
-        b" " * (MAX_MESSAGE_BYTES + 1),
+        pytest.param(b" " * (MAX_MESSAGE_BYTES + 1), id="oversized"),
     ],
 )
 def test_parse_ack_rejects_invalid_messages(payload: bytes) -> None:

@@ -113,6 +113,24 @@ telemetry. Rejection logs never include payload values. The dashboard and
 | `Error` | 🔴 Red | A tool or the agent failed |
 | `Idle` | None | Finished or on standby |
 
+## Prompt Delivery
+
+The built-in hooks also make a session reachable for
+[prompts sent from the dashboard](sending-prompts.md). On `SessionStart` they
+record the tmux pane the session runs in (`$TMUX_PANE`, plus the server socket
+and process ID from `$TMUX`) under `~/.config/vauxhall/panes/`, and on
+`SessionEnd` they delete it. This is a local file only, not telemetry, and a
+failure to write it never affects the hook or its output.
+
+An agent that isn't one of the built-in ones can take part by implementing
+the other side: subscribe to
+`vauxhall/agents/<agent>/sessions/<session_id>/prompt`, type the `text` of each
+`{"schema_version": 1, "id": ..., "text": ...}` message into the session, and
+publish `{"schema_version": 1, "id": ..., "status": "delivered"}` (or
+`"failed"` with a `reason` of `pane-unavailable` or `delivery-failed`) to the
+same topic ending in `/ack`. The agent name is lower-case, and the session ID
+is percent-encoded. `vauxhall.core.prompts` builds and validates these messages.
+
 ## Claude Code
 
 ### Event Mapping

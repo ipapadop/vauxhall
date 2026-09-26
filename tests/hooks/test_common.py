@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from vauxhall.hooks import common
+from vauxhall.hooks.panes import PaneTarget, load_pane, record_pane
 
 IDENTITY = ["session-123", "call-123"]
 
@@ -200,3 +201,94 @@ def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
 
     assert message is None
     assert not list(elsewhere.iterdir())
+
+
+class RecordingClient:
+    """Stands in for the telemetry client, recording what is sent."""
+
+    def __init__(self) -> None:
+        """Create a client that has sent nothing."""
+        self.sent: list[dict[str, object]] = []
+
+    def __enter__(self) -> "RecordingClient":  # noqa: PYI034
+        """Enter the context manager.
+
+        Returns:
+            The client.
+        """
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        """Exit the context manager."""
+
+    def send(self, **event: object) -> bool:
+        """Record one event.
+
+        Args:
+            **event: The event fields.
+
+        Returns:
+            Always ``True``.
+        """
+        self.sent.append(event)
+        return True
+
+
+def test_publish_telemetry_records_the_pane_at_session_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session that starts in tmux becomes reachable for dashboard prompts.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    monkeypatch.delenv("TMUX", raising=False)
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionStart", "session_id": "one", "source": "startup"},
+        "Codex",
+        {"SessionStart": common.session_start_telemetry},
+        create_client=RecordingClient,  # type: ignore[arg-type]
+    )
+
+    assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
+
+
+def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:
+    """A session that ended can no longer be sent prompts."""
+    record_pane("codex", "native:one", {"TMUX_PANE": "%5"})
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionEnd", "session_id": "one"},
+        "Codex",
+        {"SessionEnd": lambda _: ("Idle", {"status": "session ended"})},
+        create_client=RecordingClient,  # type: ignore[arg-type]
+    )
+
+    assert load_pane("codex", "native:one") is None
+
+
+def test_pane_record_failure_never_disturbs_the_hook(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unwritable record is ignored and telemetry still goes out.
+
+    Args:
+        isolated_home: The temporary home directory.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    # A file where the records directory belongs makes writing fail for real.
+    (isolated_home / ".config" / "vauxhall").mkdir(parents=True)
+    (isolated_home / ".config" / "vauxhall" / "panes").write_text("", encoding="utf-8")
+    client = RecordingClient()
+
+    common.publish_telemetry(
+        {"hook_event_name": "SessionStart", "session_id": "one"},
+        "Codex",
+        {"SessionStart": common.session_start_telemetry},
+        create_client=lambda: client,  # type: ignore[arg-type,return-value]
+    )
+
+    assert len(client.sent) == 1

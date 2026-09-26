@@ -115,6 +115,11 @@ dropped; the agent is never blocked. See the known gaps for each agent in
 [integrations.md](integrations.md), for example that Claude Code has no
 interrupt event.
 
+## Sending prompts
+
+See [sending-prompts.md](sending-prompts.md#troubleshooting) for cards that
+show `No relay acknowledged the prompt` or a tmux failure.
+
 ## Trust and permission prompts
 
 - **Claude Code** reads hooks from `.claude/settings.local.json` at startup.

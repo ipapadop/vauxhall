@@ -36,7 +36,7 @@ class ColoredFormatter(logging.Formatter):
         _FORMATTERS[_color] = logging.Formatter(
             f"%(asctime)s [{_color}%(levelname)s{RESET}] %(name)s: %(message)s"
         )
-    del _color
+    del _color  # pyright: ignore[reportPossiblyUnboundVariable]
 
     def format(self, record: logging.LogRecord) -> str:
         """Format a log record with a colored level name.

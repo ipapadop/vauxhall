@@ -82,9 +82,10 @@ function textSpan(className, value) {
  * @param {any} pyloidIpc - Pyloid IPC bridge.
  * @param {Function} openHistoryCallback - Called with the history button when it is activated.
  * @param {Function} [openMenuCallback] - Called with the menu button when it is activated.
+ * @param {Function} [openPromptCallback] - Called with the prompt button when it is activated.
  * @returns {HTMLElement} The created card.
  */
-export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallback) {
+export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallback, openPromptCallback) {
     const agent = String(data.agent ?? '');
     const workspace = String(data.workspace ?? '');
     const sessionId = String(data.session_id ?? '');
@@ -115,8 +116,12 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
             <div class="footer-meta">
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
                 <div class="metric-badges" title="Recent operation metrics"></div>
+                <span class="prompt-status" role="status" aria-live="polite" title="Delivery of the last prompt sent"></span>
             </div>
-            <button type="button" class="history-icon" title="View historical operations">🕒</button>
+            <div class="footer-actions">
+                <button type="button" class="prompt-icon" title="Send a prompt to this session">✉️</button>
+                <button type="button" class="history-icon" title="View historical operations">🕒</button>
+            </div>
         </div>
     `;
 
@@ -138,6 +143,13 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
     historyButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openHistoryCallback(historyButton);
+    });
+
+    const promptButton = card.querySelector('.prompt-icon');
+    promptButton.setAttribute('aria-label', `Send a prompt to ${agent} in ${workspace}, session ${sessionId}`);
+    promptButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openPromptCallback?.(promptButton);
     });
 
     const menuButton = card.querySelector('.menu-icon');

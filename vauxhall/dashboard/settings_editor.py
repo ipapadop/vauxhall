@@ -7,7 +7,7 @@ import re
 from dataclasses import asdict, fields
 from typing import Any
 
-from vauxhall.core.config import ConfigurationError
+from vauxhall.core.config import ConfigurationError, MQTTConfig
 from vauxhall.core.config_store import field_sources, user_config_path
 from vauxhall.dashboard.config import DashboardConfig
 
@@ -182,7 +182,7 @@ def changed_fields(old: DashboardConfig, new: DashboardConfig) -> list[str]:
 
 
 def hook_changes_for(
-    changes: dict[str, dict[str, object]], current_mqtt: object
+    changes: dict[str, dict[str, object]], current_mqtt: MQTTConfig
 ) -> dict[str, dict[str, object]]:
     """Return the editable MQTT values that differ from the ones the hooks use.
 

@@ -62,6 +62,7 @@ class DashboardApp:
             on_ready_callback=self._on_frontend_ready,
             on_save_settings=self.save_settings,
             on_notify=self._notify,
+            on_send_prompt=self.send_prompt,
         )
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
@@ -157,6 +158,44 @@ class DashboardApp:
             message: The notification body.
         """
         self.app.show_notification(title, message)
+
+    def send_prompt(self, agent: str, session_id: str, text: str) -> dict[str, Any]:
+        """Publish a prompt for one agent session.
+
+        Args:
+            agent: The agent name of the session's card.
+            session_id: The session identity of the card.
+            text: The prompt to send.
+
+        Returns:
+            dict[str, Any]: ``ok`` with the acknowledgment ``id`` on success,
+                otherwise ``ok`` false with an ``error`` to show.
+        """
+        subscriber = self.mqtt
+        if subscriber is None:
+            return {"ok": False, "error": "Not connected to the broker"}
+        try:
+            return {"ok": True, "id": subscriber.send_prompt(agent, session_id, text)}
+        except (ValueError, ConnectionError) as error:
+            logger.warning("Prompt not sent: %s", error)
+            return {"ok": False, "error": str(error)}
+
+    def on_ack(self, ack: dict[str, str]) -> None:
+        """Forward a relay's acknowledgment of a prompt to the frontend.
+
+        Args:
+            ack: The validated acknowledgment, with ``id``, ``status``, and
+                optionally ``reason``. It is dropped when the frontend isn't
+                ready, since no card can be waiting on it then.
+        """
+        try:
+            with self._updates_lock:
+                is_ready = self.ipc.is_ready
+            if is_ready:
+                with self._dispatch_lock:
+                    self.window.invoke("prompt-ack", ack)
+        except Exception:
+            logger.exception("Error in on_ack")
 
     def on_status(self, message: str) -> None:
         """Record an MQTT status and forward it when the frontend is ready.
@@ -278,7 +317,11 @@ class DashboardApp:
         assert self.mqtt is not None
         self.mqtt.stop()
         self.mqtt = DashboardSubscriber(
-            self.on_telemetry, self.on_status, settings.mqtt.host, settings.mqtt.port
+            self.on_telemetry,
+            self.on_status,
+            settings.mqtt.host,
+            settings.mqtt.port,
+            ack_callback=self.on_ack,
         )
         try:
             self.mqtt.start()
@@ -327,7 +370,9 @@ class DashboardApp:
         """Run the application."""
         saved_window = self._create_window()
 
-        self.mqtt = DashboardSubscriber(self.on_telemetry, self.on_status)
+        self.mqtt = DashboardSubscriber(
+            self.on_telemetry, self.on_status, ack_callback=self.on_ack
+        )
         try:
             self.mqtt.start()
 
@@ -358,7 +403,9 @@ def _use_utf8_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream is not None:
             with suppress(AttributeError, OSError, ValueError):
-                stream.reconfigure(encoding="utf-8", errors="replace")
+                stream.reconfigure(  # pyright: ignore[reportAttributeAccessIssue]
+                    encoding="utf-8", errors="replace"
+                )
 
 
 def main() -> None:

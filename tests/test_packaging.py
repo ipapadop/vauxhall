@@ -383,6 +383,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
     assert entry_points["console_scripts"] == {
         "vauxhall": "vauxhall.dashboard.app:main",
         "vauxhall-hook-install": "vauxhall.hooks.cli:main",
+        "vauxhall-relay": "vauxhall.hooks.relay:main",
     }
     assert 'pyloid>=0.27.2; extra == "dashboard"' in metadata.get_all("Requires-Dist")
 

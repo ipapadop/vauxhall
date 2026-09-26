@@ -56,6 +56,11 @@ session as a card in a grid.
   next event, or add the agent to a denylist saved in the dashboard
   configuration; a denylisted agent's telemetry is dropped and no card for it
   is shown, until it's removed from the settings dialog.
+- **Send prompts**: A card's ✉️ button sends a prompt to that session. A
+  relay (`vauxhall-relay`) on the agent machine types it into the session's
+  tmux pane and the card shows whether it was delivered. It works for Claude
+  Code, Codex, and Gemini CLI, but only for sessions running in tmux, and it
+  needs a trusted broker; see [docs/sending-prompts.md](docs/sending-prompts.md).
 - **Keyboard and screen reader support**: Every control is a real button or a
   labeled form control, the history and settings modals are native dialogs that
   close on Escape and return focus to the control that opened them, the
@@ -238,6 +243,13 @@ best effort because the record format can change and writes may lag hook events.
 See [docs/integrations.md](docs/integrations.md) for event mappings, manual
 configuration, the telemetry schema, and integrating other agents.
 
+### Sending prompts to agents
+
+Run `vauxhall-relay` from the hooks environment on each agent machine, start
+the agent in tmux, and use the ✉️ button on its card. Read the warning in
+[docs/sending-prompts.md](docs/sending-prompts.md) first: anyone who can
+publish to the broker can type into your agents.
+
 ### Monitoring agents on other machines
 
 Keep the broker on the dashboard machine's loopback interface and forward it
@@ -300,6 +312,9 @@ content, to disk so the grid survives a restart; see
 [docs/privacy.md](docs/privacy.md#retention).
 
 - Use the unauthenticated `localhost:1883` default for local development only.
+  Because the dashboard can send prompts to agents, anyone who can publish to
+  the broker can also drive them; see
+  [docs/sending-prompts.md](docs/sending-prompts.md).
 - Reach remote agents over SSH, as in
   [docs/remote-deployment.md](docs/remote-deployment.md); never expose the
   broker on a network.
@@ -315,6 +330,9 @@ Report vulnerabilities through the repository's
   compatibility; see the [versioning policy](docs/releasing.md#versioning-policy).
 - **No MQTT authentication or TLS** (issue #3). Remote agents need an SSH
   tunnel.
+- **Prompts need tmux and a trusted broker**: sending prompts works only for
+  sessions running in tmux, and without MQTT authentication or ACLs (issue #3)
+  anyone who can publish to the broker can send them.
 - **No per-field privacy controls**, and the Gemini CLI hook publishes whole
   tool inputs (issue #3).
 - **Not on PyPI yet**; install from GitHub.
@@ -339,6 +357,7 @@ Report vulnerabilities through the repository's
 | --- | --- |
 | [docs/integrations.md](docs/integrations.md) | Telemetry schema, states, each agent's event mapping and manual setup, and publishing from other agents |
 | [docs/configuration.md](docs/configuration.md) | Configuration files, environment variables, precedence, defaults, and the settings dialog |
+| [docs/sending-prompts.md](docs/sending-prompts.md) | Sending prompts from the dashboard to agents in tmux with `vauxhall-relay` |
 | [docs/privacy.md](docs/privacy.md) | Every field collected, retention, and broker exposure |
 | [docs/remote-deployment.md](docs/remote-deployment.md) | Monitoring agents on other machines over SSH |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Broker, dashboard, hook, and trust problems |

@@ -14,6 +14,9 @@ before sending telemetry anywhere other than your own machine.
 
 Anyone who can connect to the MQTT broker can subscribe to
 `vauxhall/agents/#` and read every message, and can publish fake telemetry.
+They can also publish prompts that `vauxhall-relay` types into your agents'
+tmux panes (see [sending-prompts.md](sending-prompts.md)), and a prompt can make
+an agent run commands.
 Vauxhall doesn't support MQTT authentication or TLS yet (issue #3), so the
 broker is the only access control:
 
@@ -92,6 +95,17 @@ prompt and command capture. Today you can:
   that agent to the broker, and any other subscriber still receives it. To
   stop sending it at all, use one of the options above instead.
 
+## Prompts sent from the dashboard
+
+The dashboard's ✉️ button publishes the text you type, exactly as typed, to
+`vauxhall/agents/<agent>/sessions/<session_id>/prompt`, and relays answer on
+`.../ack` with a message ID and a status, never text. Like telemetry, prompts
+are readable by anyone who can subscribe to the broker. They are published at
+QoS 1 without the retain flag, so the broker doesn't keep them. The dashboard
+doesn't store them, and `vauxhall-relay` logs only agent names, pane IDs, and
+outcomes. Once typed into a pane, the agent handles the text like any other
+prompt you enter. See [sending-prompts.md](sending-prompts.md).
+
 ## Retention
 
 - **Dashboard**: Telemetry content is held in memory only, for at most
@@ -120,6 +134,12 @@ prompt and command capture. Today you can:
   history it keeps) is retained.
 
 ### On disk
+
+The hooks also record, for each session started inside tmux, its tmux pane
+ID, tmux server socket path, and server process ID in
+`~/.config/vauxhall/panes/`, readable only by you. These are used only by
+`vauxhall-relay` on the same machine and are never published. They are deleted
+when the session ends, and any left behind are removed after 30 days.
 
 The hooks keep short-lived files in owner-only directories in the system
 temporary directory, named `vauxhall-<agent>-<uid>`,

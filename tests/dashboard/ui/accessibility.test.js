@@ -32,9 +32,10 @@ function cardWithClipboard() {
     const clipboard = [];
     const opened = [];
     const menuOpened = [];
+    const promptOpened = [];
     const ipc = { DashboardIPC: { copy_to_clipboard: async (path) => { clipboard.push(path); return true; } } };
-    const card = createCard({ ...IDENTITY }, ipc, (opener) => opened.push(opener), (opener) => menuOpened.push(opener));
-    return { card, clipboard, opened, menuOpened };
+    const card = createCard({ ...IDENTITY }, ipc, (opener) => opened.push(opener), (opener) => menuOpened.push(opener), (opener) => promptOpened.push(opener));
+    return { card, clipboard, opened, menuOpened, promptOpened };
 }
 
 test('the workspace, history, and menu controls are buttons with accessible names', () => {
@@ -54,6 +55,27 @@ test('the workspace, history, and menu controls are buttons with accessible name
     assert.equal(menu.tagName, 'BUTTON');
     assert.equal(menu.getAttribute('type'), 'button');
     assert.equal(menu.getAttribute('aria-label'), 'Options for Codex in /home/user/project, session session-1');
+});
+
+test('the prompt button is a named button that reports itself as the control to focus again', () => {
+    setupPage();
+    const { card, promptOpened } = cardWithClipboard();
+    const prompt = card.querySelector('.prompt-icon');
+
+    assert.equal(prompt.tagName, 'BUTTON');
+    assert.equal(prompt.getAttribute('type'), 'button');
+    assert.equal(prompt.getAttribute('aria-label'), 'Send a prompt to Codex in /home/user/project, session session-1');
+    prompt.click();
+    assert.deepEqual(promptOpened, [prompt]);
+});
+
+test('the prompt delivery state is a polite live region', () => {
+    setupPage();
+    const { card } = cardWithClipboard();
+    const status = card.querySelector('.prompt-status');
+
+    assert.equal(status.getAttribute('role'), 'status');
+    assert.equal(status.getAttribute('aria-live'), 'polite');
 });
 
 test('activating the menu button reports it as the control to focus again', () => {

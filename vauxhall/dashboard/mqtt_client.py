@@ -4,12 +4,22 @@
 """MQTT client for the Vauxhall Dashboard."""
 
 import json
+import uuid
 from collections.abc import Callable
 from typing import Any
 
 import paho.mqtt.client as mqtt
 
 from vauxhall.core.logging import get_logger
+from vauxhall.core.prompts import (
+    ACK_KIND,
+    ACK_TOPIC_FILTER,
+    PROMPT_KIND,
+    format_prompt,
+    parse_ack,
+    parse_session_topic,
+    session_topic,
+)
 from vauxhall.core.telemetry import validate_telemetry
 from vauxhall.dashboard.config import dashboard_settings as settings
 
@@ -17,7 +27,11 @@ logger = get_logger(__name__)
 
 
 class DashboardSubscriber:
-    """Subscribes to agent telemetry topics and forwards data to a callback."""
+    """Subscribes to agent telemetry topics and forwards data to a callback.
+
+    It also publishes prompts for agent sessions and forwards their
+    acknowledgments.
+    """
 
     def __init__(
         self,
@@ -25,6 +39,7 @@ class DashboardSubscriber:
         status_callback: Callable[[str], None],
         host: str | None = None,
         port: int | None = None,
+        ack_callback: Callable[[dict[str, str]], None] | None = None,
     ) -> None:
         """Initialize the subscriber.
 
@@ -33,9 +48,12 @@ class DashboardSubscriber:
             status_callback: Function to call with connection status updates.
             host: MQTT broker host. Defaults to settings.mqtt.host.
             port: MQTT broker port. Defaults to settings.mqtt.port.
+            ack_callback: Function to call with each prompt acknowledgment, a
+                dict with ``id``, ``status``, and optionally ``reason``.
         """
         self.callback = callback
         self.status_callback = status_callback
+        self.ack_callback = ack_callback
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self._on_message
         self.client.on_connect = self._on_connect
@@ -72,6 +90,7 @@ class DashboardSubscriber:
             self.status_callback("Connected to Agent Fleet")
             client.subscribe("vauxhall/agents/+/activity")
             client.subscribe("vauxhall/agents/+/status")
+            client.subscribe(ACK_TOPIC_FILTER, qos=1)
             logger.info("Subscribed to agent telemetry topics.")
         else:
             logger.error("Failed to connect to MQTT broker: %s", reason_code)
@@ -128,6 +147,12 @@ class DashboardSubscriber:
             )
             return
 
+        session_topic_parts = parse_session_topic(msg.topic)
+        if session_topic_parts is not None:
+            if session_topic_parts[2] == ACK_KIND:
+                self._on_ack(payload)
+            return
+
         try:
             data = json.loads(payload.decode())
         except Exception:
@@ -141,6 +166,48 @@ class DashboardSubscriber:
 
         logger.debug("Received MQTT message on topic: %s", msg.topic)
         self.callback(telemetry)
+
+    def _on_ack(self, payload: bytes) -> None:
+        """Validate a prompt acknowledgment and forward it to the callback.
+
+        Args:
+            payload: The raw acknowledgment, dropped when invalid.
+        """
+        ack = parse_ack(payload)
+        if ack is None:
+            logger.warning("Dropping invalid prompt acknowledgment")
+        elif self.ack_callback is not None:
+            self.ack_callback(ack)
+
+    def send_prompt(self, agent: str, session_id: str, text: str) -> str:
+        """Publish a prompt to one agent session at QoS 1, never retained.
+
+        A retained prompt would be typed again each time a relay reconnects.
+
+        Args:
+            agent: The agent name of the session's card.
+            session_id: The session identity of the card.
+            text: The prompt to send.
+
+        Returns:
+            The identifier its acknowledgment will carry.
+
+        Raises:
+            ValueError: If the text is not an acceptable prompt.
+            ConnectionError: If the broker did not accept the message.
+        """
+        message_id = uuid.uuid4().hex
+        payload = format_prompt(message_id, text)
+        if not self.client.is_connected():
+            message = "Not connected to the broker"
+            raise ConnectionError(message)
+        result = self.client.publish(
+            session_topic(agent, session_id, PROMPT_KIND), payload, qos=1, retain=False
+        )
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            message = "The broker did not accept the prompt"
+            raise ConnectionError(message)
+        return message_id
 
     def start(self) -> None:
         """Connect to the broker and start the background loop."""

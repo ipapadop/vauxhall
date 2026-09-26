@@ -185,10 +185,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   status, so an older prompt's timeout or late acknowledgment can't overwrite
   the newer outcome. The dialog closes when its card is evicted,
   cleared, or denylisted.
-- **Security**: Without MQTT authentication and ACLs (issue #3), anyone who
-  can publish to the broker can send prompts, and a prompt can make an agent
-  run commands. There is no setting that disables the feature; without a
-  relay nothing acts on prompts.
+- **Security**: Anyone who can publish to the broker can send prompts, and a
+  prompt can make an agent run commands, unless the broker's ACL restricts
+  who may publish to `sessions/+/prompt` (see
+  [remote-deployment.md](docs/remote-deployment.md#networked-brokers)). There
+  is no setting that disables the feature; without a relay nothing acts on
+  prompts.
 
 ## Project Structure
 
@@ -396,8 +398,23 @@ field and environment variable.
 Invalid explicit values abort dashboard startup or hook telemetry with an error
 naming the source (environment variable or absolute file path), the field, the
 value, and the expected constraint. Hooks print that error to stderr and still
-write one JSON object to stdout. MQTT authentication and TLS are out of scope
-until issue #3.
+write one JSON object to stdout.
+
+MQTT credentials and TLS are `MQTTConfig` fields (`username`, `tls`,
+`ca_certs`, `certfile`, `keyfile`, `password_file`), applied to every client by
+`vauxhall.core.mqtt.configure_client`. Paths must be absolute. The loader, not
+the constructor, calls `MQTTConfig.validate` for the cross-field rules, because
+one of them reads the environment. TLS always verifies the certificate chain
+and host name, with no option to turn that off, and a client certificate key
+can't be encrypted, because a hook can't prompt for a passphrase. The password
+is deliberately not a field: `MQTTConfig.password()` reads
+`VAUXHALL_MQTT_PASSWORD`, else `password_file`, so no code that walks the
+fields (`asdict`, `field_sources`, the settings dialog, `save_user_config`)
+can expose or write it. The hooks' clients configure lazily in `_connect`, so a
+failed setup ends the attempt instead of falling back to plaintext. "Update
+hooks" in the settings dialog copies only `HOOKS_SYNCED_MQTT` (`host`, `port`,
+`keepalive`, `tls`, `ca_certs`), never an identity; `describe_settings` marks
+each field with `hooks_synced` so the frontend skips the others.
 
 To change configuration from code, use `vauxhall.core.config_store` rather than
 writing JSON directly. `save_user_config` writes only

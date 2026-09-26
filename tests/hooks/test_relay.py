@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from vauxhall.core.config import MQTTConfig
 from vauxhall.core.prompts import (
     ACK_KIND,
     PROMPT_KIND,
@@ -301,7 +302,7 @@ def prompt_relay(deliveries: Deliveries) -> relay.PromptRelay:
     Returns:
         The relay.
     """
-    prompt_relay = relay.PromptRelay("broker", 1883, 60, deliver=deliveries)
+    prompt_relay = relay.PromptRelay(MQTTConfig(host="broker"), deliver=deliveries)
     prompt_relay.client = FakeClient()  # type: ignore[assignment]
     return prompt_relay
 

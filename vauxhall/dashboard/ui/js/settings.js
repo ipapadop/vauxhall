@@ -265,7 +265,7 @@ export function collectHookChanges(container, descriptor) {
     const mqtt = {};
     for (const field of descriptor.fields) {
         const input = field.section === 'mqtt' && field.editable && container.querySelector(`#${inputId(field)}`);
-        if (!input) continue;
+        if (!input || !field.hooks_synced) continue;
         const value = readValue(input, field);
         const hooksValue = descriptor.hooks_mqtt ? descriptor.hooks_mqtt[field.name] : field.value;
         if (!validate(field, value) && value !== hooksValue) mqtt[field.name] = value;

@@ -51,6 +51,7 @@ function field(overrides = {}) {
         location: null,
         editable: true,
         apply: 'reconnect',
+        hooks_synced: true,
         ...overrides,
     };
 }
@@ -391,6 +392,24 @@ test('hook changes compare editable MQTT fields with the values the hooks use', 
     assert.deepEqual(collectHookChanges(container, settings), {});
 
     setInput(document, 'setting-mqtt-port', '0');
+    assert.deepEqual(collectHookChanges(container, settings), {});
+});
+
+test('hook changes leave out fields the hooks do not share', () => {
+    const document = setup();
+    const container = document.getElementById('fields');
+    const settings = {
+        ...descriptor(),
+        fields: [
+            ...descriptor().fields,
+            field({ key: 'mqtt.username', name: 'username', value: '', default: '', type: 'string', min: null, max: null, hooks_synced: false }),
+        ],
+        hooks_mqtt: { host: 'localhost', port: 1883, keepalive: 60 },
+    };
+    renderSettingsForm(container, settings);
+
+    setInput(document, 'setting-mqtt-username', 'dashboard');
+
     assert.deepEqual(collectHookChanges(container, settings), {});
 });
 

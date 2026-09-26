@@ -34,9 +34,15 @@ The first release, planned as 0.1.0. It is alpha software; see
   CLI sessions: a ✉️ button on each card publishes the prompt, and
   `vauxhall-relay`, run on the agent machine, types it into the session's
   tmux pane and reports delivery back to the card. The hooks record each
-  session's tmux pane locally at `SessionStart`. Without MQTT authentication
-  (issue #3), anyone who can publish to the broker can send prompts; see
+  session's tmux pane locally at `SessionStart`. Anyone who can publish to
+  the broker can send prompts unless its ACL restricts them; see
   https://github.com/ipapadop/vauxhall/blob/main/docs/sending-prompts.md.
+- MQTT user name and password authentication, and TLS with certificate
+  verification and optional client certificates, for the dashboard, the hooks,
+  and `vauxhall-relay`. The password comes from `VAUXHALL_MQTT_PASSWORD` or a
+  `password_file`, never a configuration file. See
+  https://github.com/ipapadop/vauxhall/blob/main/docs/remote-deployment.md#networked-brokers
+  for a Mosquitto setup with an ACL that lets only the dashboard send prompts.
 - Hooks for Claude Code, Codex, and Gemini CLI, installed with
   `vauxhall-hook-install claude codex gemini` into an isolated `.vauxhall-venv`.
 - `TelemetryClient` and telemetry schema version 1 for other agents.

@@ -14,8 +14,8 @@ session as a card in a grid.
 
 > [!IMPORTANT]
 > Vauxhall is **alpha** software. Interfaces can change between minor
-> releases, the MQTT connection has no authentication or encryption yet, and
-> the hooks publish prompts and commands. Read
+> releases, the default MQTT connection has no authentication or encryption,
+> and the hooks publish prompts and commands. Read
 > [Known limitations](#known-limitations) and [docs/privacy.md](docs/privacy.md)
 > before using it with sensitive work.
 
@@ -328,11 +328,12 @@ Report vulnerabilities through the repository's
 
 - **Alpha**: while the version is `0.x`, a minor release can break
   compatibility; see the [versioning policy](docs/releasing.md#versioning-policy).
-- **No MQTT authentication or TLS** (issue #3). Remote agents need an SSH
-  tunnel.
+- **MQTT is unauthenticated by default.** Remote agents need an SSH tunnel or
+  a broker configured for TLS and passwords; see
+  [docs/remote-deployment.md](docs/remote-deployment.md).
 - **Prompts need tmux and a trusted broker**: sending prompts works only for
-  sessions running in tmux, and without MQTT authentication or ACLs (issue #3)
-  anyone who can publish to the broker can send them.
+  sessions running in tmux, and anyone who can publish to the broker can send
+  them unless its ACL restricts who may.
 - **No per-field privacy controls**, and the Gemini CLI hook publishes whole
   tool inputs (issue #3).
 - **Not on PyPI yet**; install from GitHub.

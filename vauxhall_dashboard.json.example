@@ -1,5 +1,15 @@
 {
-  "mqtt": { "host": "localhost", "port": 1883, "keepalive": 60 },
+  "mqtt": {
+    "host": "localhost",
+    "port": 1883,
+    "keepalive": 60,
+    "tls": false,
+    "ca_certs": "",
+    "username": "",
+    "password_file": "",
+    "certfile": "",
+    "keyfile": ""
+  },
   "logging": { "level": "INFO" },
   "dashboard": {
     "port": 8080,

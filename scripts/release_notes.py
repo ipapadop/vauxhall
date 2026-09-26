@@ -104,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The process exit status.
     """
+    assert __doc__ is not None
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("tag", help="the release tag, such as v0.1.0")
     parser.add_argument("--changelog", type=Path, default=Path("CHANGELOG.md"))

@@ -420,10 +420,14 @@ commit `uv.lock`. For the frontend, install Node.js 20.19 or newer and run
 
 All contributors, including AI agents, must:
 
-1. **Code style**: Before committing Python changes, run `ruff format .` and
-   `ruff check .` with the Ruff version pinned in `pyproject.toml`, and fix every
-   error (`ruff check --fix .` fixes many). Every Python file must start with the
-   project's SPDX copyright and license headers.
+1. **Code style**: Before committing Python changes, run `ruff format .`,
+   `ruff check .`, and `pyright` with the Ruff and Pyright versions pinned in
+   `pyproject.toml`'s `lint` group, and fix every error (`ruff check --fix .`
+   fixes many). Pyright checks `vauxhall/` and `scripts/`, not `tests/`, and
+   CI fails on any error. Fix a type error rather than suppress it; where a
+   suppression is unavoidable, use `# pyright: ignore[rule]` naming the rule.
+   Every Python file must start with the project's SPDX copyright and license
+   headers.
 2. **Testing**: All tests must pass before committing.
    - Run `.venv/bin/pytest`. The packaging tests build real wheels, check
      metadata and bundled UI assets, install the wheel into clean environments,
@@ -510,8 +514,8 @@ entry becomes the GitHub release notes, where relative links don't resolve.
    ```
 
 3. The [release workflow](.github/workflows/release.yml) then:
-   1. runs the lint workflow and the whole CI workflow: Ruff, the Python
-      suite on every supported Python and operating system, the coverage
+   1. runs the lint workflow and the whole CI workflow: Ruff, Pyright, the
+      Python suite on every supported Python and operating system, the coverage
       floors, the frontend suite, both test suites from the unpacked sdist,
       and the packaged dashboard on Linux, macOS, and Windows;
    2. checks that the tagged commit is on `main`, that the tag is `v` followed

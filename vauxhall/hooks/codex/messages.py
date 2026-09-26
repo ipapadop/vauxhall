@@ -91,9 +91,13 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
     transcript_path = input_data.get("transcript_path")
     session_id = input_data.get("session_id")
     turn_id = input_data.get("turn_id")
-    if not all(
-        isinstance(value, str) and value
-        for value in (transcript_path, session_id, turn_id)
+    if not (
+        isinstance(transcript_path, str)
+        and transcript_path
+        and isinstance(session_id, str)
+        and session_id
+        and isinstance(turn_id, str)
+        and turn_id
     ):
         return []
     try:

@@ -403,7 +403,9 @@ def _use_utf8_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream is not None:
             with suppress(AttributeError, OSError, ValueError):
-                stream.reconfigure(encoding="utf-8", errors="replace")
+                stream.reconfigure(  # pyright: ignore[reportAttributeAccessIssue]
+                    encoding="utf-8", errors="replace"
+                )
 
 
 def main() -> None:

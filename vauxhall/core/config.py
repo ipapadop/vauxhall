@@ -222,7 +222,7 @@ class ConfigResolver:
                     _field_default(f),
                     f.metadata,
                 )
-                for f in fields(cls)
+                for f in fields(cls)  # pyright: ignore[reportArgumentType]
             }
         )
 
@@ -232,7 +232,7 @@ class ConfigResolver:
         section: str,
         key: str,
         default: T,
-        metadata: Mapping[str, object],
+        metadata: Mapping[str, Any],
     ) -> T:
         """Resolve one setting, then coerce and validate it against its field.
 
@@ -318,7 +318,7 @@ class ConfigResolver:
             )
         if isinstance(default, int):
             try:
-                return int(value)
+                return int(value)  # type: ignore[return-value]
             except ValueError as error:
                 raise ConfigurationError.invalid_value(
                     source, section, key, value, "an integer"
@@ -329,7 +329,7 @@ class ConfigResolver:
             )
         return value  # type: ignore[return-value]
 
-    def _expected(self, metadata: Mapping[str, object], default: object) -> str:
+    def _expected(self, metadata: Mapping[str, Any], default: object) -> str:
         """Describe the type and field metadata accepted by a configuration value.
 
         Args:

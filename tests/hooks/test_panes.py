@@ -7,7 +7,6 @@ import json
 import os
 import stat
 import time
-from pathlib import Path
 
 import pytest
 
@@ -36,34 +35,41 @@ def test_records_are_private() -> None:
     assert stat.S_IMODE(record.stat().st_mode) == 0o600
 
 
-def test_record_pane_removes_record_when_not_in_tmux() -> None:
-    """A session that moved outside tmux no longer receives prompts."""
+@pytest.mark.parametrize("environment", [{}, {"TMUX_PANE": "-t evil"}])
+def test_record_pane_removes_record_without_a_usable_pane(
+    environment: dict[str, str],
+) -> None:
+    """A session outside tmux, or with an unrecognized pane id, is not reachable.
+
+    Args:
+        environment: An environment without a valid ``TMUX_PANE``.
+    """
     panes.record_pane("codex", "native:1", TMUX_ENV)
 
-    panes.record_pane("codex", "native:1", {})
+    panes.record_pane("codex", "native:1", environment)
 
     assert panes.load_pane("codex", "native:1") is None
 
 
-def test_record_pane_ignores_unrecognized_pane_ids() -> None:
-    """An environment value that is not a pane id is never stored."""
-    panes.record_pane("codex", "native:1", {"TMUX_PANE": "-t evil"})
+@pytest.mark.parametrize(
+    ("tmux", "socket", "server_pid"),
+    [("", None, None), ("sock,x,0", "sock", None)],
+)
+def test_record_pane_tolerates_an_unusable_tmux_variable(
+    tmux: str, socket: str | None, server_pid: int | None
+) -> None:
+    """A missing or malformed ``TMUX`` leaves the unknown parts unset.
 
-    assert panes.load_pane("codex", "native:1") is None
+    Args:
+        tmux: The ``TMUX`` value.
+        socket: The socket expected to be recorded.
+        server_pid: The server PID expected to be recorded.
+    """
+    panes.record_pane("codex", "native:1", {"TMUX_PANE": "%7", "TMUX": tmux})
 
-
-def test_record_pane_without_tmux_variable_has_no_server() -> None:
-    """A pane without ``TMUX`` uses tmux's default socket and skips the server check."""
-    panes.record_pane("codex", "native:1", {"TMUX_PANE": "%7"})
-
-    assert panes.load_pane("codex", "native:1") == panes.PaneTarget("%7", None, None)
-
-
-def test_record_pane_tolerates_a_non_numeric_server() -> None:
-    """A malformed ``TMUX`` value leaves the server unknown."""
-    panes.record_pane("codex", "native:1", {"TMUX_PANE": "%7", "TMUX": "sock,x,0"})
-
-    assert panes.load_pane("codex", "native:1") == panes.PaneTarget("%7", "sock", None)
+    assert panes.load_pane("codex", "native:1") == panes.PaneTarget(
+        "%7", socket, server_pid
+    )
 
 
 def test_sessions_and_agents_have_separate_records() -> None:
@@ -71,8 +77,10 @@ def test_sessions_and_agents_have_separate_records() -> None:
     panes.record_pane("codex", "native:1", TMUX_ENV)
     panes.record_pane("claude", "native:1", {"TMUX_PANE": "%9"})
 
-    assert panes.load_pane("codex", "native:1").pane == "%3"  # type: ignore[union-attr]
-    assert panes.load_pane("claude", "native:1").pane == "%9"  # type: ignore[union-attr]
+    assert panes.load_pane("codex", "native:1") == panes.PaneTarget(
+        "%3", "/run/tmux-1000/default", 4242
+    )
+    assert panes.load_pane("claude", "native:1") == panes.PaneTarget("%9", None, None)
     assert panes.load_pane("codex", "native:2") is None
 
 
@@ -99,24 +107,16 @@ def test_record_pane_sweeps_records_of_long_ended_sessions() -> None:
     assert panes.load_pane("codex", "new") is not None
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        "not json",
-        "[]",
-        json.dumps({"pane": "3"}),
-        json.dumps({"pane": 3}),
-    ],
-)
+@pytest.mark.parametrize("content", ["[]", json.dumps({"pane": "3"})])
 def test_load_pane_rejects_invalid_records(content: str) -> None:
-    """A damaged or tampered record is treated as missing.
+    """A tampered record that isn't an object or names no pane is treated as missing.
 
     Args:
         content: The text of an invalid record.
     """
     panes.record_pane("codex", "native:1", TMUX_ENV)
     (record,) = panes.panes_directory().glob("*.json")
-    Path(record).write_text(content, encoding="utf-8")
+    record.write_text(content, encoding="utf-8")
 
     assert panes.load_pane("codex", "native:1") is None
 

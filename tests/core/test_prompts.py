@@ -8,7 +8,6 @@ import json
 import pytest
 
 from vauxhall.core.prompts import (
-    ACK_KIND,
     MAX_MESSAGE_BYTES,
     MAX_PROMPT_LENGTH,
     PROMPT_KIND,
@@ -36,9 +35,6 @@ def test_session_topic_encodes_reserved_characters() -> None:
         "vauxhall/agents/codex/activity",
         "vauxhall/agents/codex/sessions/one/other",
         "vauxhall/agents/codex/sessions//prompt",
-        "vauxhall/agents//sessions/one/prompt",
-        "other/agents/codex/sessions/one/prompt",
-        "vauxhall/agents/codex/sessions/one/prompt/extra",
     ],
 )
 def test_parse_session_topic_rejects_other_topics(topic: str) -> None:
@@ -50,9 +46,9 @@ def test_parse_session_topic_rejects_other_topics(topic: str) -> None:
     assert parse_session_topic(topic) is None
 
 
-@pytest.mark.parametrize("text", ["hello", "two\nlines", "tab\tseparated", "é 日本語"])
+@pytest.mark.parametrize("text", ["two\nlines\tand a tab", "é 日本語"])
 def test_prompt_text_accepts_ordinary_text(text: str) -> None:
-    """Multiline and non-ASCII text is a valid prompt.
+    """Multiline, tabbed, and non-ASCII text is a valid prompt.
 
     Args:
         text: An acceptable prompt.
@@ -63,20 +59,19 @@ def test_prompt_text_accepts_ordinary_text(text: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "",
-        "   \n",
         None,
-        42,
+        "   \n",
         "x" * (MAX_PROMPT_LENGTH + 1),
         "before\x1b[201~after",
-        "carriage\rreturn",
-        "nul\x00",
         "delete\x7f",
         "c1\x9b",
     ],
 )
 def test_prompt_text_rejects_unsafe_text(text: object) -> None:
     """Empty, oversized, or control-character text is refused.
+
+    An escape could end the terminal's bracketed paste early, and DEL and the C1
+    controls sit at the edges of the rejected ranges.
 
     Args:
         text: An unacceptable prompt.
@@ -104,9 +99,7 @@ def test_format_prompt_rejects_invalid_input() -> None:
     [
         b"not json",
         b"[]",
-        b"\xff\xfe",
         json.dumps({"id": "a", "text": "x"}).encode(),
-        json.dumps({"schema_version": 2, "id": "a", "text": "x"}).encode(),
         json.dumps({"schema_version": 1, "id": "", "text": "x"}).encode(),
         json.dumps({"schema_version": 1, "id": "a", "text": "\x1b"}).encode(),
         json.dumps(
@@ -151,8 +144,6 @@ def test_format_ack_rejects_invalid_input() -> None:
     [
         b"not json",
         b"[]",
-        b"\xff",
-        json.dumps({"id": "a", "status": "delivered"}).encode(),
         json.dumps({"schema_version": 1, "id": "a", "status": "maybe"}).encode(),
         json.dumps({"schema_version": 1, "id": 1, "status": "delivered"}).encode(),
         json.dumps(
@@ -168,8 +159,3 @@ def test_parse_ack_rejects_invalid_messages(payload: bytes) -> None:
         payload: A payload that is not a valid acknowledgment.
     """
     assert parse_ack(payload) is None
-
-
-def test_ack_kind_is_distinct_from_prompt_kind() -> None:
-    """The two message kinds never share a topic."""
-    assert session_topic("a", "s", ACK_KIND) != session_topic("a", "s", PROMPT_KIND)

@@ -374,6 +374,53 @@ def test_dashboard_subscriber_reports_failed_tls_setup(
     assert statuses[-1].startswith("Connection failed:")
 
 
+def test_dashboard_subscriber_reports_a_password_file_it_cannot_decode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A password file that is not UTF-8 also shows a status, not a crash.
+
+    ``password()`` raises ``UnicodeDecodeError`` for this, which is not an
+    ``OSError``; ``configure_client`` must turn it into one so ``start()``'s
+    ``except OSError`` still catches it.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    password_file = tmp_path / "password"
+    password_file.write_bytes(b"\xff\xfe\x00bad")
+    statuses: list[str] = []
+    with FakeBroker() as broker:
+        config = MQTTConfig(
+            port=broker.port, username="dashboard", password_file=str(password_file)
+        )
+        monkeypatch.setattr(dashboard_settings, "mqtt", config)
+        subscriber = DashboardSubscriber(MagicMock(), statuses.append, port=broker.port)
+
+        subscriber.start()
+        subscriber.stop()
+
+        with pytest.raises(queue.Empty):
+            broker.next_attempt(timeout=0.3)
+
+    assert statuses[-1].startswith("Connection failed:")
+
+
+def test_relay_propagates_a_password_file_it_cannot_decode_as_oserror(
+    tmp_path: Path,
+) -> None:
+    """The relay's constructor sees an OSError, matching main()'s except clause.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    password_file = tmp_path / "password"
+    password_file.write_bytes(b"\xff\xfe\x00bad")
+
+    with pytest.raises(OSError, match="not valid UTF-8"):
+        PromptRelay(MQTTConfig(username="agent-host", password_file=str(password_file)))
+
+
 def test_relay_authenticates() -> None:
     """The relay connects with the credentials in the configuration it is given."""
     with FakeBroker() as broker:

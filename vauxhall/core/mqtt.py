@@ -30,9 +30,7 @@ def configure_client(client: mqtt.Client, config: MQTTConfig) -> None:
     if config.tls:
         context = ssl.create_default_context(cafile=config.ca_certs or None)
         if config.certfile:
-            # A callback that returns nothing makes an encrypted key fail
-            # instead of prompting for a passphrase in a non-interactive hook.
-            context.load_cert_chain(
-                config.certfile, config.keyfile, password=lambda: b""
-            )
+            # An empty password makes an encrypted key fail instead of
+            # prompting for a passphrase in a non-interactive hook.
+            context.load_cert_chain(config.certfile, config.keyfile, password=b"")
         client.tls_set_context(context)

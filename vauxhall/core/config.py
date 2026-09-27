@@ -125,12 +125,17 @@ class MQTTConfig:
             ``password_file`` without its trailing newline, else ``None``.
 
         Raises:
-            OSError: If ``password_file`` can no longer be read.
+            OSError: If ``password_file`` can no longer be read, or its
+                content is not valid UTF-8.
         """
         if password := os.environ.get(PASSWORD_ENV):
             return password
         if self.password_file:
-            content = Path(self.password_file).read_text(encoding="utf-8")
+            try:
+                content = Path(self.password_file).read_text(encoding="utf-8")
+            except UnicodeDecodeError as error:
+                message = f"{self.password_file} is not valid UTF-8"
+                raise OSError(message) from error
             return content.removesuffix("\n").removesuffix("\r")
         return None
 

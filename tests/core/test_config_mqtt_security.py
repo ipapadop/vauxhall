@@ -227,6 +227,22 @@ def test_password_file_loses_only_its_trailing_newline(tmp_path: Path) -> None:
     assert MQTTConfig(username="u", password_file=str(file)).password() == " p w "
 
 
+def test_password_file_with_invalid_utf8_raises_oserror(tmp_path: Path) -> None:
+    """A non-UTF-8 password file fails the same way as an unreadable one.
+
+    Every caller of ``password()`` catches only ``OSError``, so a decoding
+    failure must be reported as one too.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    file = tmp_path / "pw"
+    file.write_bytes(b"\xff\xfe\x00bad")
+
+    with pytest.raises(OSError, match="not valid UTF-8"):
+        MQTTConfig(username="u", password_file=str(file)).password()
+
+
 def test_environment_password_beats_password_file(
     monkeypatch: pytest.MonkeyPatch, secret_file: Path
 ) -> None:

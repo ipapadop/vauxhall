@@ -5,10 +5,10 @@ SPDX-License-Identifier: MIT
 
 # Monitoring Agents on Other Machines
 
-Vauxhall's MQTT connection has no authentication or encryption yet (issue #3),
-so the broker must never listen on a network interface. To watch agents on
-other machines, keep the broker on loopback and carry the connection over SSH,
-which authenticates both ends and encrypts the traffic.
+To watch agents on other machines, either keep the broker on loopback and
+carry the connection over SSH (below), or run a broker on the network that
+requires TLS and passwords, see [Networked brokers](#networked-brokers). An
+unauthenticated broker must never listen on a network interface.
 
 Read [privacy.md](privacy.md) first: everything the hooks publish crosses the
 tunnel and is readable by anyone who can reach the broker.
@@ -111,6 +111,93 @@ port on the agent machine can send prompts too.
 
 ## Networked brokers
 
-Running Mosquitto on a shared host or a public address needs username and
-password authentication and TLS in Vauxhall's client, which issue #3 adds.
-Until then, don't expose a broker that Vauxhall connects to.
+Vauxhall connects to a broker on a shared host or public address with TLS and
+a user name and password. TLS always verifies the broker's certificate chain
+and host name; there is no setting to skip that. Use one broker identity per
+role, and let the broker's ACL decide who may publish prompts, because a
+prompt can make an agent run commands.
+
+This example uses Mosquitto. The broker's certificate must name the host that
+Vauxhall connects to.
+
+```conf
+# mosquitto.conf
+listener 8883
+cafile /etc/mosquitto/certs/ca.pem
+certfile /etc/mosquitto/certs/server.pem
+keyfile /etc/mosquitto/certs/server.key
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+acl_file /etc/mosquitto/acl
+```
+
+```bash
+mosquitto_passwd -c /etc/mosquitto/passwd dashboard
+mosquitto_passwd /etc/mosquitto/passwd agent-host
+```
+
+```conf
+# /etc/mosquitto/acl
+user dashboard
+topic read vauxhall/agents/+/activity
+topic read vauxhall/agents/+/status
+topic read vauxhall/agents/+/sessions/+/ack
+topic write vauxhall/agents/+/sessions/+/prompt
+
+user agent-host
+topic write vauxhall/agents/+/activity
+topic write vauxhall/agents/+/sessions/+/ack
+topic read vauxhall/agents/+/sessions/+/prompt
+```
+
+With this ACL only the `dashboard` identity can send prompts, and `agent-host`
+can publish telemetry and read prompts but can't read other agents' telemetry.
+Give each agent machine its own identity if you want to revoke one without
+affecting the others.
+
+Store each password in a file that only your account can read, and point the
+client at it. Hooks are started by the agent, which may not pass your shell's
+environment on, so a file is more reliable than `VAUXHALL_MQTT_PASSWORD`:
+
+```bash
+install -m 600 /dev/null ~/.config/vauxhall/mqtt-password
+printf '%s\n' 'the-password' > ~/.config/vauxhall/mqtt-password
+```
+
+On the dashboard machine, `~/.config/vauxhall/vauxhall_dashboard.json`:
+
+```json
+{
+  "mqtt": {
+    "host": "broker.example.com",
+    "port": 8883,
+    "tls": true,
+    "ca_certs": "/home/me/.config/vauxhall/ca.pem",
+    "username": "dashboard",
+    "password_file": "/home/me/.config/vauxhall/mqtt-password"
+  }
+}
+```
+
+On each agent machine, the same in `vauxhall_hooks.json` with
+`"username": "agent-host"`. `vauxhall-relay` reads it too. Omit `ca_certs` when
+the broker's certificate is signed by a public authority in the system trust
+store.
+
+To authenticate with a client certificate instead of, or as well as, a
+password, set `certfile` and `keyfile` and have the broker require one
+(`require_certificate true` in Mosquitto). The key can't be protected by a
+passphrase, because hooks can't prompt for it; restrict its file permissions
+instead.
+
+Paths must be absolute, because hooks run in the agent's working directory. A
+path that is relative, doesn't exist, or can't be read stops the dashboard at
+startup, and makes hooks report the error on stderr. A certificate and key that
+don't match, or a key that is encrypted, show in the dashboard's status line as
+a failed connection and in the hooks' stderr.
+
+A wrong password or an untrusted certificate also shows in the dashboard's
+status line as a failed connection. Hooks drop their telemetry silently, as
+they do whenever the broker is unreachable; run the
+[tunnel check](#checking-the-tunnel) snippet, without the tunnel, to test a
+hooks configuration.

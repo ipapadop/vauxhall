@@ -18,8 +18,9 @@ from collections.abc import Callable
 
 import paho.mqtt.client as mqtt
 
-from vauxhall.core.config import ConfigurationError
+from vauxhall.core.config import ConfigurationError, MQTTConfig
 from vauxhall.core.logging import get_logger, setup_logging
+from vauxhall.core.mqtt import configure_client
 from vauxhall.core.prompts import (
     ACK_KIND,
     PROMPT_KIND,
@@ -125,27 +126,22 @@ class PromptRelay:
 
     def __init__(
         self,
-        host: str,
-        port: int,
-        keepalive: int,
+        config: MQTTConfig,
         deliver: Callable[[PaneTarget, str, str], str | None] = deliver_prompt,
     ) -> None:
         """Initialize the relay.
 
         Args:
-            host: The MQTT broker host.
-            port: The MQTT broker port.
-            keepalive: The MQTT keepalive in seconds.
+            config: The MQTT connection settings.
             deliver: Function that pastes a prompt into a pane, given the pane,
                 the message identifier, and the text.
         """
-        self.host = host
-        self.port = port
-        self.keepalive = keepalive
+        self.config = config
         self.deliver = deliver
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
+        configure_client(self.client, config)
         self._seen: OrderedDict[tuple[str, str, str], None] = OrderedDict()
 
     def _on_connect(
@@ -167,7 +163,7 @@ class PromptRelay:
         """
         if reason_code == 0:
             client.subscribe(PROMPT_TOPIC_FILTER, qos=1)
-            logger.info("Relay connected to %s:%d", self.host, self.port)
+            logger.info("Relay connected to %s:%d", self.config.host, self.config.port)
         else:
             logger.error("Relay could not connect to the broker: %s", reason_code)
 
@@ -232,7 +228,9 @@ class PromptRelay:
 
     def run(self) -> None:
         """Connect and relay prompts until interrupted."""
-        self.client.connect_async(self.host, self.port, keepalive=self.keepalive)
+        self.client.connect_async(
+            self.config.host, self.config.port, keepalive=self.config.keepalive
+        )
         try:
             self.client.loop_forever(retry_first_connection=True)
         except KeyboardInterrupt:
@@ -249,9 +247,11 @@ def main() -> None:
         raise SystemExit(str(error)) from error
 
     setup_logging(level=hook_settings.logging.level)
-    relay = PromptRelay(
-        hook_settings.mqtt.host, hook_settings.mqtt.port, hook_settings.mqtt.keepalive
-    )
+    try:
+        relay = PromptRelay(hook_settings.mqtt)
+    except OSError as error:
+        message = f"Could not set up the broker connection: {error}"
+        raise SystemExit(message) from error
     relay.run()
 
 

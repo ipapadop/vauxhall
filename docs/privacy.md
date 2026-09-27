@@ -16,17 +16,19 @@ Anyone who can connect to the MQTT broker can subscribe to
 `vauxhall/agents/#` and read every message, and can publish fake telemetry.
 They can also publish prompts that `vauxhall-relay` types into your agents'
 tmux panes (see [sending-prompts.md](sending-prompts.md)), and a prompt can make
-an agent run commands.
-Vauxhall doesn't support MQTT authentication or TLS yet (issue #3), so the
-broker is the only access control:
+an agent run commands. The broker is the access control:
 
 - The default, `localhost:1883` without authentication, is for **local
   development only**: the broker, dashboard, and agents on one machine, used
   by one person. Mosquitto 2 listens only on the loopback interface when
   started without a configuration file.
-- Never expose the broker on a network interface. To monitor agents on other
-  machines, forward the port over SSH as described in
+- Never expose an unauthenticated broker on a network interface. To monitor
+  agents on other machines, forward the port over SSH or run a broker that
+  requires TLS and passwords, as described in
   [remote-deployment.md](remote-deployment.md).
+- A password stops strangers, but every identity that has one can still read
+  and publish everything its ACL allows. Restrict who can publish prompts to
+  the dashboard's identity, as the example there does.
 - On a shared machine, other local accounts can connect to a loopback broker
   too.
 

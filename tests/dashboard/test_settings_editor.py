@@ -11,10 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vauxhall.core.config import LoggingConfig, MQTTConfig
+from vauxhall.core.config import PASSWORD_ENV, LoggingConfig, MQTTConfig
 from vauxhall.core.config_store import user_config_path
 from vauxhall.dashboard.app import DashboardApp
-from vauxhall.dashboard.config import UIConfig, dashboard_settings
+from vauxhall.dashboard.config import DashboardConfig, UIConfig, dashboard_settings
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.settings_editor import (
     DASHBOARD_FILE,
@@ -79,7 +79,7 @@ def test_describe_settings_lists_every_field() -> None:
     described = describe_settings(dashboard_settings)
     fields = {field["key"]: field for field in described["fields"]}
 
-    assert len(fields) == 13
+    assert len(fields) == 19
     assert fields["mqtt.port"] == {
         "key": "mqtt.port",
         "section": "mqtt",
@@ -95,8 +95,11 @@ def test_describe_settings_lists_every_field() -> None:
         "location": None,
         "editable": True,
         "apply": "reconnect",
+        "hooks_synced": True,
     }
     assert fields["mqtt.host"]["required"] is True
+    assert fields["mqtt.username"]["hooks_synced"] is False
+    assert fields["logging.level"]["hooks_synced"] is False
     assert fields["logging.level"]["choices"] == [
         "CRITICAL",
         "DEBUG",
@@ -119,6 +122,8 @@ def test_describe_settings_lists_every_field() -> None:
         "host": "localhost",
         "port": 1883,
         "keepalive": 60,
+        "tls": False,
+        "ca_certs": "",
     }
 
 
@@ -139,7 +144,7 @@ def test_describe_settings_reports_hooks_file_error() -> None:
 
     assert "not valid JSON" in described["hooks_error"]
     assert described["hooks_mqtt"] is None
-    assert len(described["fields"]) == 13
+    assert len(described["fields"]) == 19
 
 
 def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
@@ -463,6 +468,117 @@ def test_update_hooks_when_hooks_match_writes_nothing(
     assert not user_config_path(HOOKS_FILE).exists()
 
 
+def test_update_hooks_syncs_tls_but_not_credentials(
+    dashboard: DashboardApp, tmp_path: Path
+) -> None:
+    """The hooks learn where the broker is and whom to trust, not who the dashboard is.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+        tmp_path: Pytest temporary directory.
+    """
+    ca_file = tmp_path / "ca.pem"
+    ca_file.write_text("ca", encoding="utf-8")
+    secret = tmp_path / "secret"
+    secret.write_text("secret", encoding="utf-8")
+
+    result = dashboard.save_settings(
+        {
+            "mqtt": {
+                "tls": True,
+                "ca_certs": str(ca_file),
+                "username": "dashboard",
+                "password_file": str(secret),
+                "certfile": str(secret),
+                "keyfile": str(secret),
+            }
+        },
+        update_hooks=True,
+    )
+
+    assert result["ok"] is True
+    assert json.loads(user_config_path(HOOKS_FILE).read_text()) == {
+        "mqtt": {"tls": True, "ca_certs": str(ca_file)}
+    }
+    assert dashboard_settings.mqtt.username == "dashboard"
+
+
+def test_settings_open_when_the_password_comes_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The password variable never breaks the dialog's default-config lookups.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv(PASSWORD_ENV, "pw")
+    write_user_file(DASHBOARD_FILE, '{"mqtt": {"username": "dashboard"}}')
+    write_user_file(HOOKS_FILE, '{"mqtt": {"username": "agent-host"}}')
+
+    described = describe_settings(DashboardConfig.load())
+
+    assert described["hooks_error"] is None
+    assert {field["key"] for field in described["fields"]} >= {"mqtt.username"}
+
+
+def test_hooks_file_rejection_is_not_blamed_on_a_dashboard_field(
+    dashboard: DashboardApp, tmp_path: Path
+) -> None:
+    """Turning TLS off can break a hooks file that still has a certificate.
+
+    The error names a hooks field, so no dashboard field is highlighted.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+        tmp_path: Pytest temporary directory.
+    """
+    secret = tmp_path / "secret"
+    secret.write_text("secret", encoding="utf-8")
+    hooks = {"mqtt": {"tls": True, "certfile": str(secret), "keyfile": str(secret)}}
+    write_user_file(HOOKS_FILE, json.dumps(hooks))
+
+    result = dashboard.save_settings({"mqtt": {"port": 1884}}, update_hooks=True)
+
+    assert result["ok"] is False
+    assert result["file"] == "hooks"
+    assert result["field"] is None
+    assert "mqtt.certfile requires mqtt.tls" in result["error"]
+    assert not user_config_path(DASHBOARD_FILE).exists()
+
+
+def test_credential_change_alone_writes_nothing_to_hooks(
+    dashboard: DashboardApp,
+) -> None:
+    """Changing only the dashboard's identity leaves the hooks file alone.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    result = dashboard.save_settings(
+        {"mqtt": {"username": "dashboard"}}, update_hooks=True
+    )
+
+    assert result["hooks_updated"] is False
+    assert not user_config_path(HOOKS_FILE).exists()
+
+
+def test_credential_change_reconnects(dashboard: DashboardApp) -> None:
+    """A new identity takes effect by replacing the subscriber.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    old_subscriber = MagicMock()
+    dashboard.mqtt = old_subscriber
+
+    with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
+        result = dashboard.save_settings({"mqtt": {"username": "dashboard"}})
+
+    assert result["reconnecting"] is True
+    old_subscriber.stop.assert_called_once_with()
+    subscriber_type.return_value.start.assert_called_once_with()
+
+
 def test_invalid_hooks_file_blocks_both_saves(dashboard: DashboardApp) -> None:
     """If the hooks file cannot be read, the dashboard file is not written either.
 
@@ -514,7 +630,7 @@ def test_ipc_get_settings_returns_json() -> None:
     """The bridge returns the settings description as JSON."""
     described = json.loads(DashboardIPC().get_settings())
 
-    assert len(described["fields"]) == 13
+    assert len(described["fields"]) == 19
 
 
 def test_ipc_get_settings_reports_malformed_file() -> None:

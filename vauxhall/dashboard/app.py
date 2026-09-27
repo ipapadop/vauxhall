@@ -248,7 +248,8 @@ class DashboardApp:
                 return {
                     "ok": False,
                     "error": str(error),
-                    "field": error_field(str(error)),
+                    # The named field belongs to the hooks file, not the form.
+                    "field": error_field(str(error)) if file == "dashboard" else None,
                     "file": file,
                 }
 

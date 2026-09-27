@@ -11,6 +11,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 from vauxhall.core.logging import get_logger
+from vauxhall.core.mqtt import configure_client
 from vauxhall.core.prompts import (
     ACK_KIND,
     ACK_TOPIC_FILTER,
@@ -210,10 +211,20 @@ class DashboardSubscriber:
         return message_id
 
     def start(self) -> None:
-        """Connect to the broker and start the background loop."""
+        """Connect to the broker and start the background loop.
+
+        A failure to set up credentials or TLS is reported through the status
+        callback and leaves the subscriber stopped.
+        """
         logger.info("Connecting to MQTT broker at %s:%d...", self.host, self.port)
         self._stopping = False
         self.status_callback("Connecting...")
+        try:
+            configure_client(self.client, settings.mqtt)
+        except OSError as error:
+            logger.exception("Could not set up the broker connection")
+            self.status_callback(f"Connection failed: {error}")
+            return
         try:
             self.client.connect_async(
                 self.host, self.port, keepalive=settings.mqtt.keepalive

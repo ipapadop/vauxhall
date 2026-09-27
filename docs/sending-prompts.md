@@ -15,10 +15,10 @@ while the agent is idle.
 > [!WARNING]
 > **Anyone who can publish to the broker can type into your agents.** A prompt
 > can make an agent run shell commands, so an unauthenticated broker that
-> others can reach is remote code execution. Vauxhall has no MQTT
-> authentication or ACLs yet (issue #3), and there is no setting that turns
+> others can reach is remote code execution. There is no setting that turns
 > prompt sending off: it is off only while no relay runs. Use it only with the
-> loopback broker or the SSH tunnel described in
+> loopback broker, the SSH tunnel, or a broker with TLS, passwords, and an ACL
+> that lets only the dashboard publish prompts, all described in
 > [remote-deployment.md](remote-deployment.md), on machines where you trust
 > every account.
 

@@ -9,6 +9,7 @@ from typing import TypeVar
 import paho.mqtt.client as mqtt
 
 from vauxhall.core.logging import get_logger
+from vauxhall.core.mqtt import configure_client
 from vauxhall.core.telemetry import SCHEMA_VERSION, telemetry_validation_error
 from vauxhall.hooks.config import hook_settings as settings
 
@@ -79,6 +80,7 @@ class TelemetryClient:
         self.is_connected = False
         self._managed = False
         self._loop_running = False
+        self._configured = False
 
     def __enter__(self: _TelemetryClientT) -> _TelemetryClientT:  # noqa: PYI019
         """Enter the context manager, establishing a persistent connection.
@@ -107,6 +109,15 @@ class TelemetryClient:
 
     def _connect(self) -> None:
         """Connect to the broker and start the MQTT network loop."""
+        if not self._configured:
+            # A failure leaves the client unconfigured and stops the connection:
+            # it must never fall back to a plaintext or unauthenticated one.
+            try:
+                configure_client(self.client, settings.mqtt)
+            except OSError:
+                logger.exception("Could not set up the broker connection")
+                raise
+            self._configured = True
         self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
         self.is_connected = True
         self.client.loop_start()

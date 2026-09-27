@@ -35,6 +35,12 @@ which overrides the default. See `vauxhall_dashboard.json.example` and
 | `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
 | `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
 | `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535 |
+| `mqtt` | `tls` | `VAUXHALL_MQTT_TLS` | `false` | Boolean |
+| `mqtt` | `ca_certs` | `VAUXHALL_MQTT_CA_CERTS` | empty (system trust store) | Absolute path of a readable file; needs `tls` |
+| `mqtt` | `username` | `VAUXHALL_MQTT_USERNAME` | empty (none) | String |
+| `mqtt` | `password_file` | `VAUXHALL_MQTT_PASSWORD_FILE` | empty (none) | Absolute path of a readable file holding the password; needs `username` |
+| `mqtt` | `certfile` | `VAUXHALL_MQTT_CERTFILE` | empty (none) | Absolute path of a readable client certificate; needs `keyfile` and `tls` |
+| `mqtt` | `keyfile` | `VAUXHALL_MQTT_KEYFILE` | empty (none) | Absolute path of the client certificate's unencrypted key; needs `certfile` |
 | `logging` | `level` | `VAUXHALL_LOGGING_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
 | `dashboard` | `port` | `VAUXHALL_DASHBOARD_PORT` | `8080` | Integer 1–65535 |
 | `dashboard` | `debug` | `VAUXHALL_DASHBOARD_DEBUG` | `false` | Boolean (`true`/`false`, `1`/`0`, or `yes`/`no`) |
@@ -51,9 +57,20 @@ Invalid values (malformed JSON, non-object sections, wrong types, out-of-range
 values, or unparsable environment values) stop the dashboard at startup. The
 error names the environment variable or file path, the field, the value, and
 the expected constraint. Hooks print the error to stderr and still return valid
-protocol JSON. MQTT authentication and TLS are not supported yet (issue #3);
-see [remote-deployment.md](remote-deployment.md) for how to reach a remote
-broker safely until then.
+protocol JSON. See [remote-deployment.md](remote-deployment.md) for how to reach
+a remote broker safely.
+
+### MQTT credentials and TLS
+
+With `tls` on, the client verifies the broker's certificate chain and host
+name against `ca_certs`, or the system trust store when it is empty. There is
+no option to skip verification.
+
+The password is never a configuration field, so it can't be committed with a
+`vauxhall_hooks.json` or shown in the settings dialog. Set it with the
+`VAUXHALL_MQTT_PASSWORD` environment variable, or put it in the file named by
+`password_file`, whose trailing newline is ignored. The environment variable
+wins when both are set. Both need `username`.
 
 ### Other environment variables
 
@@ -97,15 +114,17 @@ Saved changes take effect as follows:
 | When | Fields |
 | --- | --- |
 | Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes`, `dashboard.agent_denylist` |
-| After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive` |
+| After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive`, `mqtt.tls`, `mqtt.ca_certs`, `mqtt.username`, `mqtt.password_file`, `mqtt.certfile`, `mqtt.keyfile` |
 | After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
 
 Lowering `max_active_agents` removes the least recently seen surplus cards
-right away. When the MQTT
-values in the dialog differ from the ones the hooks use, including after a
-reset, **Also update hooks configuration** saves the differing values to
+right away. When the broker's `host`, `port`, `keepalive`, `tls`, or `ca_certs` in the
+dialog differ from the ones the hooks use, including after a reset,
+**Also update hooks configuration** saves the differing values to
 `~/.config/vauxhall/vauxhall_hooks.json`, even if the dashboard's own values
-are unchanged. Both files are validated
+are unchanged. The user name, password file, and client certificate are never
+copied, because the dashboard and the hooks should use different broker
+identities. Both files are validated
 before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
 environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
 run on another machine. The option is unavailable, with the reason shown, when

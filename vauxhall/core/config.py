@@ -54,13 +54,90 @@ class ConfigurationError(ValueError):
         )
 
 
+PASSWORD_ENV = "VAUXHALL_MQTT_PASSWORD"  # noqa: S105
+
+
 @dataclass
 class MQTTConfig:
-    """MQTT client configuration."""
+    """MQTT client configuration.
+
+    The password is not a field: it comes from ``VAUXHALL_MQTT_PASSWORD`` or
+    ``password_file``, so it never reaches a config file, ``asdict``, or the
+    settings dialog. Empty strings mean unset.
+    """
 
     host: str = field(default="localhost", metadata={"non_empty": True})
     port: int = field(default=1883, metadata={"min": 1, "max": 65535})
     keepalive: int = field(default=60, metadata={"min": 0, "max": 65535})
+    tls: bool = False
+    ca_certs: str = field(default="", metadata={"readable_file": True})
+    username: str = ""
+    password_file: str = field(default="", metadata={"readable_file": True})
+    certfile: str = field(default="", metadata={"readable_file": True})
+    keyfile: str = field(default="", metadata={"readable_file": True})
+
+    def validate(self) -> None:
+        """Reject combinations of options that cannot work together.
+
+        The loader calls this, not the constructor: the password check reads
+        the environment, and default configurations are built without it.
+
+        Raises:
+            ConfigurationError: If a client certificate lacks its key or the
+                reverse, a CA or client certificate is set without TLS, or a
+                password is set without a username.
+        """
+        has_password = self.password_file or os.environ.get(PASSWORD_ENV)
+        problems = [
+            (
+                self.certfile and not self.keyfile,
+                "mqtt.keyfile is required when mqtt.certfile is set",
+            ),
+            (
+                self.keyfile and not self.certfile,
+                "mqtt.certfile is required when mqtt.keyfile is set",
+            ),
+            (
+                self.ca_certs and not self.tls,
+                "mqtt.ca_certs requires mqtt.tls to be true",
+            ),
+            (
+                self.certfile and not self.tls,
+                "mqtt.certfile requires mqtt.tls to be true",
+            ),
+            (
+                has_password and not self.username,
+                (
+                    f"mqtt.username is required when {PASSWORD_ENV}"
+                    " or mqtt.password_file is set"
+                ),
+            ),
+        ]
+        for failed, message in problems:
+            if failed:
+                raise ConfigurationError(message)
+
+    def password(self) -> str | None:
+        """Return the broker password.
+
+        Returns:
+            The value of ``VAUXHALL_MQTT_PASSWORD``, else the contents of
+            ``password_file`` without its trailing newline, else ``None``.
+
+        Raises:
+            OSError: If ``password_file`` can no longer be read, or its
+                content is not valid UTF-8.
+        """
+        if password := os.environ.get(PASSWORD_ENV):
+            return password
+        if self.password_file:
+            try:
+                content = Path(self.password_file).read_text(encoding="utf-8")
+            except UnicodeDecodeError as error:
+                message = f"{self.password_file} is not valid UTF-8"
+                raise OSError(message) from error
+            return content.removesuffix("\n").removesuffix("\r")
+        return None
 
 
 @dataclass
@@ -213,7 +290,7 @@ class ConfigResolver:
         Returns:
             T: An instance of the dataclass.
         """
-        return cls(
+        config = cls(
             **{
                 f.name: self._resolve(
                     f"{env_prefix}_{f.name.upper()}",
@@ -225,6 +302,9 @@ class ConfigResolver:
                 for f in fields(cls)  # pyright: ignore[reportArgumentType]
             }
         )
+        if validate := getattr(config, "validate", None):
+            validate()
+        return config
 
     def _resolve(
         self,
@@ -273,6 +353,20 @@ class ConfigResolver:
             raise ConfigurationError.invalid_value(
                 source, section, key, original_value, "a non-empty string"
             )
+
+        if metadata.get("readable_file") and value:
+            assert isinstance(value, str)
+            path = Path(value)
+            # Hooks run in each agent's workspace, so a relative path would
+            # resolve differently from one run to the next.
+            if not (path.is_absolute() and path.is_file() and os.access(path, os.R_OK)):
+                raise ConfigurationError.invalid_value(
+                    source,
+                    section,
+                    key,
+                    original_value,
+                    "the absolute path of a readable file",
+                )
 
         minimum = metadata.get("min")
         maximum = metadata.get("max")

@@ -19,12 +19,23 @@ APPLY_MODES = {
     "mqtt.host": "reconnect",
     "mqtt.port": "reconnect",
     "mqtt.keepalive": "reconnect",
+    "mqtt.tls": "reconnect",
+    "mqtt.ca_certs": "reconnect",
+    "mqtt.username": "reconnect",
+    "mqtt.password_file": "reconnect",
+    "mqtt.certfile": "reconnect",
+    "mqtt.keyfile": "reconnect",
     "logging.level": "live",
     "dashboard.stale_threshold": "live",
     "dashboard.max_active_agents": "live",
     "dashboard.max_payload_bytes": "live",
     "dashboard.agent_denylist": "live",
 }
+
+# Where the broker is and how to trust it. The credentials and client
+# certificate identify one client, and the dashboard and the hooks are
+# separate clients, so "update hooks" never copies them.
+HOOKS_SYNCED_MQTT = ("host", "port", "keepalive", "tls", "ca_certs")
 
 _FIELD_PATTERN = re.compile(r"\b(mqtt|logging|dashboard)\.([a-z_]+)\b")
 
@@ -72,6 +83,20 @@ def _field_type(default: object) -> str:
     return "string"
 
 
+def _synced_mqtt(config: MQTTConfig) -> dict[str, Any]:
+    """Return the MQTT values that "update hooks" copies.
+
+    Args:
+        config: The MQTT configuration to read.
+
+    Returns:
+        The values of the fields in ``HOOKS_SYNCED_MQTT``.
+    """
+    return {
+        key: value for key, value in asdict(config).items() if key in HOOKS_SYNCED_MQTT
+    }
+
+
 def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
     """Return the MQTT values the hooks use, or why the hooks file can't be updated.
 
@@ -83,7 +108,7 @@ def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
     try:
         hook_type = hook_config_type()
         sources = field_sources(HOOKS_FILE, hook_type)
-        hooks_mqtt = asdict(hook_type.load().mqtt)
+        hooks_mqtt = _synced_mqtt(hook_type.load().mqtt)
     except ConfigurationError as error:
         return None, str(error)
     # Hooks read a hooks file in the current directory instead of the per-user
@@ -146,6 +171,8 @@ def describe_settings(config: DashboardConfig) -> dict[str, Any]:
                     "location": source.location,
                     "editable": source.editable,
                     "apply": apply_mode(key),
+                    "hooks_synced": section.name == "mqtt"
+                    and field.name in HOOKS_SYNCED_MQTT,
                 }
             )
 
@@ -197,12 +224,14 @@ def hook_changes_for(
         ConfigurationError: If the dashboard or hooks configuration is malformed.
     """
     sources = field_sources(DASHBOARD_FILE, DashboardConfig)
-    hooks_mqtt = asdict(hook_config_type().load().mqtt)
+    hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
     form = {**asdict(current_mqtt), **changes.get("mqtt", {})}
     differing = {
         key: value
         for key, value in form.items()
-        if sources[f"mqtt.{key}"].editable and value != hooks_mqtt[key]
+        if key in hooks_mqtt
+        and sources[f"mqtt.{key}"].editable
+        and value != hooks_mqtt[key]
     }
     return {"mqtt": differing} if differing else {}
 

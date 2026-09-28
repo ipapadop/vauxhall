@@ -445,6 +445,13 @@ All contributors, including AI agents, must:
    suppression is unavoidable, use `# pyright: ignore[rule]` naming the rule.
    Every Python file must start with the project's SPDX copyright and license
    headers.
+   - Keep comments, docstrings, and documentation succinct. Use precise
+     language without filler words, repetition, or statements that merely
+     restate the code. Preserve details needed to explain behavior,
+     constraints, and rationale.
+   - Use Google-style Python docstrings with a concise summary, an `Args:`
+     section for parameters (except `self`/`cls`), and a `Returns:` section
+     when applicable.
 2. **Testing**: All tests must pass before committing.
    - Run `.venv/bin/pytest`. The packaging tests build real wheels, check
      metadata and bundled UI assets, install the wheel into clean environments,
@@ -458,6 +465,8 @@ All contributors, including AI agents, must:
      Linux, macOS, and Windows.
    - With Node.js 20.19 or newer, run `npm test` for the frontend.
    - Add unit tests for every new feature and bug fix.
+   - Avoid monkeypatching where possible. Prefer dependency injection and
+     explicit fakes. Use monkeypatching when these alternatives are impractical.
 3. **Coverage**: Both suites have a floor that CI enforces, so a change that
    leaves new code untested fails.
    - `.venv/bin/pytest --cov` checks the Python floor in

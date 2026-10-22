@@ -42,129 +42,6 @@ def test_ignored_notification_outputs_valid_json() -> None:
     assert completed.stderr == ""
 
 
-def test_non_object_input_outputs_valid_json() -> None:
-    """A valid JSON value with the wrong schema cannot break the hook protocol."""
-    completed = subprocess.run(
-        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
-        input="[]",
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0
-    assert completed.stdout == "{}\n"
-    assert completed.stderr == ""
-
-
-def test_gemini_hook_initializes_debug_logging_without_contaminating_stdout() -> None:
-    """Configured hook logs must go to stderr and preserve protocol stdout."""
-    hook_data = {
-        "hook_event_name": "BeforeAgent",
-        "session_id": "session-123",
-        "cwd": "/workspace",
-        "prompt": "Review the code",
-    }
-    environment = {
-        **os.environ,
-        "VAUXHALL_LOGGING_LEVEL": "DEBUG",
-        "VAUXHALL_MQTT_HOST": "127.0.0.1",
-        "VAUXHALL_MQTT_PORT": "1",
-    }
-
-    completed = subprocess.run(
-        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
-        input=json.dumps(hook_data),
-        text=True,
-        capture_output=True,
-        check=False,
-        env=environment,
-    )
-
-    assert completed.returncode == 0
-    assert completed.stdout == "{}\n"
-    assert "Failed to connect telemetry client" in completed.stderr
-
-
-def test_telemetry_initialization_failure_outputs_valid_json() -> None:
-    """Telemetry setup failures remain invisible to the calling Gemini process."""
-    hook_data = {
-        "session_id": "test-session",
-        "transcript_path": "/workspace/transcript.json",
-        "cwd": "/workspace",
-        "hook_event_name": "BeforeAgent",
-        "timestamp": "2026-09-04T12:00:00Z",
-        "prompt": "Review the code",
-    }
-    output = io.StringIO()
-
-    with (
-        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
-        patch("sys.stdout", new=output),
-        patch(
-            "vauxhall.hooks.common.create_telemetry_client",
-            side_effect=RuntimeError,
-        ),
-    ):
-        main()
-
-    assert output.getvalue() == "{}\n"
-
-
-@pytest.mark.parametrize(
-    ("environment_value", "file_payload", "expected_source", "expected_value"),
-    [
-        ("invalid", None, "VAUXHALL_MQTT_PORT", "'invalid'"),
-        (None, {"mqtt": []}, "vauxhall_hooks.json", "[]"),
-    ],
-)
-def test_gemini_hook_reports_invalid_configuration_without_breaking_protocol(
-    tmp_path: Path,
-    environment_value: str | None,
-    file_payload: object | None,
-    expected_source: str,
-    expected_value: str,
-) -> None:
-    """Invalid hook configuration remains actionable without corrupting stdout.
-
-    Args:
-        tmp_path: Pytest temporary directory.
-        environment_value: The case's environment variable value.
-        file_payload: The case's file contents.
-        expected_source: The source the case expects.
-        expected_value: The value the case expects.
-    """
-    if file_payload is not None:
-        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith("VAUXHALL_")
-    }
-    if environment_value is not None:
-        environment["VAUXHALL_MQTT_PORT"] = environment_value
-    project_root = str(Path(__file__).resolve().parents[3])
-    environment["PYTHONPATH"] = os.pathsep.join(
-        filter(None, (project_root, environment.get("PYTHONPATH")))
-    )
-
-    completed = subprocess.run(
-        [sys.executable, "-m", "vauxhall.hooks.gemini.telemetry_hook"],
-        input="{}",
-        text=True,
-        capture_output=True,
-        check=False,
-        cwd=tmp_path,
-        env=environment,
-    )
-
-    assert completed.returncode == 0
-    assert completed.stdout == "{}\n"
-    assert expected_source in completed.stderr
-    assert expected_value in completed.stderr
-    assert "Traceback" not in completed.stderr
-
-
 @pytest.mark.parametrize(
     ("response", "state", "status", "error"),
     [
@@ -239,27 +116,6 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
         "session_id": "native:session-123",
     }
     assert "secret" not in json.dumps(client.send.call_args.kwargs)
-
-
-def test_gemini_connect_timeout_fits_hook_budget() -> None:
-    """Gemini's hook connects with the same short timeout as the other agents."""
-    hook_data = {
-        "hook_event_name": "AfterAgent",
-        "session_id": "session-123",
-        "cwd": "/workspace",
-    }
-
-    with (
-        patch("vauxhall.hooks.client.TelemetryClient") as client_class,
-        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
-        patch("sys.stdout", new=io.StringIO()),
-    ):
-        client = client_class.return_value
-        client.__enter__.return_value = client
-        main()
-
-    client.send.assert_called_once()
-    assert client.client.connect_timeout == 1.0
 
 
 @pytest.mark.parametrize(
@@ -551,20 +407,6 @@ def test_unknown_tool_before_tool() -> None:
         kwargs = mock_instance.send.call_args.kwargs
         assert "tool" not in kwargs
         assert kwargs["state"] == "Acting"
-
-
-def test_gemini_hook_skips_event_without_stable_session_identity() -> None:
-    """Telemetry must be skipped when the hook has no stable identity source."""
-    hook_data = {"hook_event_name": "BeforeAgent", "cwd": "/workspace"}
-    with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
-        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
-        patch("sys.stdout", new=io.StringIO()),
-        patch.dict("os.environ", {}, clear=True),
-    ):
-        main()
-
-    mock_client_factory.assert_not_called()
 
 
 def test_tool_durations_are_isolated_by_tool_input(

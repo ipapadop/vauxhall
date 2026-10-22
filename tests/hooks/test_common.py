@@ -3,7 +3,12 @@
 
 """Tests for the runtime helpers shared by the built-in hooks."""
 
+import importlib
+import json
 import os
+import subprocess
+import sys
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +18,18 @@ from vauxhall.hooks import common
 from vauxhall.hooks.panes import PaneTarget, load_pane, record_pane
 
 IDENTITY = ["session-123", "call-123"]
+HOOKS = [
+    pytest.param("vauxhall.hooks.claude.telemetry_hook", id="claude"),
+    pytest.param("vauxhall.hooks.codex.telemetry_hook", id="codex"),
+    pytest.param("vauxhall.hooks.gemini.telemetry_hook", id="gemini"),
+]
+SESSION_START = {
+    "hook_event_name": "SessionStart",
+    "source": "startup",
+    "session_id": "session-123",
+    "cwd": "/workspace",
+}
+UNREACHABLE_BROKER = {"VAUXHALL_MQTT_HOST": "127.0.0.1", "VAUXHALL_MQTT_PORT": "1"}
 
 
 def test_claim_skips_start_claimed_by_another_hook(tmp_path: Path) -> None:
@@ -292,3 +309,194 @@ def test_pane_record_failure_never_disturbs_the_hook(
     )
 
     assert len(client.sent) == 1
+
+
+def _run_main(hook: str, stdin: str) -> str:
+    """Run a hook's ``main`` in process and return what it wrote to stdout.
+
+    Args:
+        hook: The hook module.
+        stdin: The hook's standard input.
+
+    Returns:
+        The hook's standard output.
+    """
+    output = StringIO()
+    with patch("sys.stdin", StringIO(stdin)), patch("sys.stdout", output):
+        importlib.import_module(hook).main()
+    return output.getvalue()
+
+
+def _run_process(
+    hook: str, stdin: str, environment: dict[str, str] | None = None, **options: object
+) -> subprocess.CompletedProcess[str]:
+    """Run a hook module as its own process, the way an agent does.
+
+    Args:
+        hook: The hook module.
+        stdin: The hook's standard input.
+        environment: Variables added to the inherited environment.
+        **options: Further ``subprocess.run`` options.
+
+    Returns:
+        The completed process.
+    """
+    return subprocess.run(
+        [sys.executable, "-m", hook],
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, **UNREACHABLE_BROKER, **(environment or {})},
+        **options,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+@pytest.mark.parametrize("stdin", ["not json", "[]"])
+def test_hook_answers_input_it_cannot_use(hook: str, stdin: str) -> None:
+    """Input that is not a JSON object still gets one JSON object back.
+
+    Args:
+        hook: The hook module.
+        stdin: The case's standard input.
+    """
+    completed = _run_process(hook, stdin)
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_keeps_debug_logs_off_stdout(hook: str) -> None:
+    """Debug logging goes to stderr, so stdout stays a valid hook response.
+
+    Args:
+        hook: The hook module.
+    """
+    completed = _run_process(
+        hook, json.dumps(SESSION_START), {"VAUXHALL_LOGGING_LEVEL": "DEBUG"}
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert "Failed to connect telemetry client" in completed.stderr
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_survives_telemetry_import_failure(hook: str) -> None:
+    """A broken telemetry client import still produces the hook response.
+
+    Args:
+        hook: The hook module.
+    """
+    command = (
+        "import importlib, sys; "
+        "sys.modules['vauxhall.hooks.client'] = None; "
+        f"importlib.import_module({hook!r}).main()"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", command],
+        input=json.dumps(SESSION_START),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+@pytest.mark.parametrize(
+    ("environment_value", "file_payload", "expected"),
+    [
+        ("invalid", None, ("VAUXHALL_MQTT_PORT", "'invalid'")),
+        (None, {"mqtt": []}, ("vauxhall_hooks.json", "[]")),
+    ],
+)
+def test_hook_reports_invalid_configuration_without_breaking_protocol(
+    tmp_path: Path,
+    hook: str,
+    environment_value: str | None,
+    file_payload: object | None,
+    expected: tuple[str, str],
+) -> None:
+    """Invalid hook configuration is named on stderr and stdout stays valid.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        hook: The hook module.
+        environment_value: The case's environment variable value.
+        file_payload: The case's file contents.
+        expected: The source and the value the error must name.
+    """
+    if file_payload is not None:
+        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("VAUXHALL_")
+    }
+    if environment_value is not None:
+        environment["VAUXHALL_MQTT_PORT"] = environment_value
+    project_root = str(Path(__file__).resolve().parents[2])
+    environment["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (project_root, environment.get("PYTHONPATH")))
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-m", hook],
+        input="{}",
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert all(text in completed.stderr for text in expected)
+    assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_answers_when_telemetry_setup_fails(hook: str) -> None:
+    """A telemetry client that cannot be created is invisible to the agent.
+
+    Args:
+        hook: The hook module.
+    """
+    with patch.object(common, "create_telemetry_client", side_effect=RuntimeError):
+        assert _run_main(hook, json.dumps(SESSION_START)) == "{}\n"
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_skips_event_without_stable_session_identity(hook: str) -> None:
+    """Without a session identity, no telemetry client is created.
+
+    Args:
+        hook: The hook module.
+    """
+    event = {key: value for key, value in SESSION_START.items() if key != "session_id"}
+    with patch.object(common, "create_telemetry_client") as client_factory:
+        assert _run_main(hook, json.dumps(event)) == "{}\n"
+
+    client_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_connect_timeout_fits_hook_budget(hook: str) -> None:
+    """Every hook connects with a timeout short enough to finish in time.
+
+    Args:
+        hook: The hook module.
+    """
+    with patch("vauxhall.hooks.client.TelemetryClient") as client_class:
+        client = client_class.return_value
+        client.__enter__.return_value = client
+        _run_main(hook, json.dumps(SESSION_START))
+
+    client.send.assert_called_once()
+    assert client.client.connect_timeout == 1.0

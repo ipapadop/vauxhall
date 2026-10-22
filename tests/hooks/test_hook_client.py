@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from vauxhall.hooks.client import TelemetryClient, format_message
+from vauxhall.hooks.config import HookConfig
 
 
 class FakePublishResult:
@@ -200,3 +201,35 @@ def test_failed_context_connection_is_not_retried_by_send() -> None:
         assert not client.send("Agent", "/path", "Acting", "native:test-session")
 
     assert mqtt_client.events == ["connect"]
+
+
+def test_telemetry_client_uses_hook_settings(tmp_path: Path) -> None:
+    """The client connects with the broker settings of the hooks file.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    config_file = tmp_path / "vauxhall_hooks.json"
+    data = {"mqtt": {"host": "hook_host", "port": 9999, "keepalive": 120}}
+    config_file.write_text(json.dumps(data), encoding="utf-8")
+    custom_settings = HookConfig.load(config_file)
+
+    with (
+        patch("vauxhall.hooks.client.settings", custom_settings),
+        patch("vauxhall.hooks.client.mqtt.Client") as mock_mqtt,
+    ):
+        mock_inst = mock_mqtt.return_value
+        client = TelemetryClient()
+        assert client.host == "hook_host"
+        assert client.port == 9999
+
+        with client:
+            mock_inst.connect.assert_called_once_with("hook_host", 9999, keepalive=120)
+
+
+def test_telemetry_client_overrides_settings() -> None:
+    """An explicit host and port take precedence over the hooks settings."""
+    client = TelemetryClient(host="override_host", port=9999)
+
+    assert client.host == "override_host"
+    assert client.port == 9999

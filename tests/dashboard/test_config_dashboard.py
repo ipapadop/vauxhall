@@ -12,6 +12,15 @@ import pytest
 from vauxhall.core.config import ConfigurationError
 from vauxhall.dashboard.config import DashboardConfig
 
+DASHBOARD_LIMITS = [
+    ("width", 320, 16384),
+    ("height", 320, 16384),
+    ("stale_threshold", 1, 86400),
+    ("pending_update_limit", 1, 10000),
+    ("max_active_agents", 1, 1000),
+    ("max_payload_bytes", 1024, 1048576),
+]
+
 
 def test_dashboard_config_loading(tmp_path: Path) -> None:
     """Test loading dashboard configuration from a JSON file.
@@ -25,6 +34,33 @@ def test_dashboard_config_loading(tmp_path: Path) -> None:
     config = DashboardConfig.load(config_file)
     assert config.dashboard.width == 1200
     assert config.dashboard.height == 800  # Default
+
+
+def test_dashboard_config_found_in_cwd(isolated_cwd: Path) -> None:
+    """A configuration file in the current directory is used.
+
+    Args:
+        isolated_cwd: The empty working directory.
+    """
+    config_data = {"dashboard": {"window_title": "CWD Dashboard"}}
+    (isolated_cwd / "vauxhall_dashboard.json").write_text(json.dumps(config_data))
+
+    assert DashboardConfig.load().dashboard.window_title == "CWD Dashboard"
+
+
+@pytest.mark.usefixtures("isolated_cwd")
+def test_dashboard_config_found_in_home(isolated_home: Path) -> None:
+    """Without one in the current directory, ``~/.config/vauxhall`` is used.
+
+    Args:
+        isolated_home: The temporary home directory.
+    """
+    config_data = {"dashboard": {"window_title": "Home Dashboard"}}
+    config_dir = isolated_home / ".config" / "vauxhall"
+    config_dir.mkdir(parents=True)
+    (config_dir / "vauxhall_dashboard.json").write_text(json.dumps(config_data))
+
+    assert DashboardConfig.load().dashboard.window_title == "Home Dashboard"
 
 
 @pytest.mark.parametrize("payload", [[], "bad", 7, True])
@@ -109,17 +145,7 @@ def test_invalid_logging_level_identifies_source(tmp_path: Path, level: str) -> 
         DashboardConfig.load(path)
 
 
-@pytest.mark.parametrize(
-    ("field", "minimum", "maximum"),
-    [
-        ("width", 320, 16384),
-        ("height", 320, 16384),
-        ("stale_threshold", 1, 86400),
-        ("pending_update_limit", 1, 10000),
-        ("max_active_agents", 1, 1000),
-        ("max_payload_bytes", 1024, 1048576),
-    ],
-)
+@pytest.mark.parametrize(("field", "minimum", "maximum"), DASHBOARD_LIMITS)
 def test_dashboard_limits_accept_locked_boundaries(
     tmp_path: Path, field: str, minimum: int, maximum: int
 ) -> None:
@@ -138,17 +164,7 @@ def test_dashboard_limits_accept_locked_boundaries(
         assert getattr(DashboardConfig.load(path).dashboard, field) == value
 
 
-@pytest.mark.parametrize(
-    ("field", "minimum", "maximum"),
-    [
-        ("width", 320, 16384),
-        ("height", 320, 16384),
-        ("stale_threshold", 1, 86400),
-        ("pending_update_limit", 1, 10000),
-        ("max_active_agents", 1, 1000),
-        ("max_payload_bytes", 1024, 1048576),
-    ],
-)
+@pytest.mark.parametrize(("field", "minimum", "maximum"), DASHBOARD_LIMITS)
 def test_dashboard_limits_reject_values_outside_locked_boundaries(
     tmp_path: Path, field: str, minimum: int, maximum: int
 ) -> None:

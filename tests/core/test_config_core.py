@@ -5,6 +5,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -57,6 +58,22 @@ def test_load_config_data_rejects_malformed_json(tmp_path: Path) -> None:
     config_file.write_text("{ invalid json }", encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match="not valid JSON"):
+        load_config_data(config_file)
+
+
+def test_load_config_data_os_error(tmp_path: Path) -> None:
+    """Unreadable explicit files raise a source-aware configuration error.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    config_file = tmp_path / "unreadable.json"
+    config_file.touch()
+
+    with (
+        patch.object(Path, "open", side_effect=OSError("Permission denied")),
+        pytest.raises(ConfigurationError, match="Could not read configuration"),
+    ):
         load_config_data(config_file)
 
 

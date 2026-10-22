@@ -10,8 +10,8 @@
 
 import { closeDialog, openDialog } from './dialog.js';
 
-const WAITING_STATES = new Set(['Waiting', 'Waiting for Input', 'Input Required']);
-const STATUS_ORDER = { 'Error': 0, 'Waiting': 1, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
+const WAITING_STATES = new Set(['Waiting for Input', 'Input Required']);
+const STATUS_ORDER = { 'Error': 0, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
 // States that need a human: an active error, or a prompt/permission the agent is blocked on.
 const ATTENTION_STATES = new Set([...WAITING_STATES, 'Error']);
 
@@ -517,7 +517,7 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
 
     const filteredHistory = card.history.filter(item => {
         const matchesSearch = getDetailsString(item).toLowerCase().includes(searchTerm);
-        const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting' && item.state === 'Waiting for Input');
+        const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting for Input' && WAITING_STATES.has(item.state));
         return matchesSearch && matchesState;
     });
 

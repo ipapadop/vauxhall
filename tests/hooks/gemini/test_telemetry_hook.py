@@ -559,6 +559,49 @@ def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
     )
 
 
+def test_gemini_new_prompt_discards_unfinished_model_text(tmp_path: Path) -> None:
+    """A new prompt reports itself and drops text from the abandoned response.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    base = {"session_id": "session-123", "cwd": "/workspace"}
+    abandoned = {
+        **base,
+        "hook_event_name": "AfterModel",
+        "llm_response": {"candidates": [{"content": {"parts": ["Stale "]}}]},
+    }
+    prompt = {**base, "hook_event_name": "BeforeAgent", "prompt": "Try again"}
+    reply = {
+        **base,
+        "hook_event_name": "AfterModel",
+        "llm_response": {
+            "candidates": [{"content": {"parts": ["Fresh."]}, "finishReason": "STOP"}]
+        },
+    }
+
+    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+        client = _run(abandoned, prompt, reply)
+
+    prompted, replied = (call.kwargs for call in client.send.call_args_list)
+    assert prompted["state"] == "Thinking"
+    assert prompted["prompt"] == "Try again"
+    assert replied["message"] == "Fresh."
+
+
+def test_gemini_prompt_without_session_identity_discards_and_publishes_nothing() -> (
+    None
+):
+    """Without a session identity there is no chunk file to clear and no telemetry."""
+    prompt = {"hook_event_name": "BeforeAgent", "cwd": "/workspace", "prompt": "Hi"}
+
+    with patch("vauxhall.hooks.common.discard_message_chunks") as discard:
+        client = _run(prompt)
+
+    discard.assert_not_called()
+    client.send.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("hook_data", "expected"),
     [

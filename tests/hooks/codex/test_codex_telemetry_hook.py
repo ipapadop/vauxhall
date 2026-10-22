@@ -54,6 +54,11 @@ def test_codex_hook_outputs_valid_json() -> None:
         text=True,
         capture_output=True,
         check=False,
+        env={
+            **os.environ,
+            "VAUXHALL_MQTT_HOST": "127.0.0.1",
+            "VAUXHALL_MQTT_PORT": "1",
+        },
     )
 
     assert completed.returncode == 0

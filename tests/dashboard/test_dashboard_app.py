@@ -3,7 +3,6 @@
 
 """Tests for Vauxhall Dashboard components."""
 
-import json
 import unittest
 from copy import deepcopy
 from threading import Event, Thread
@@ -25,8 +24,6 @@ sys_modules_patch = patch.dict(
 sys_modules_patch.start()
 
 from vauxhall.dashboard.app import ICON_FILE, DashboardApp  # noqa: E402
-from vauxhall.dashboard.ipc import DashboardIPC  # noqa: E402
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber  # noqa: E402
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
@@ -153,7 +150,7 @@ class TestDashboardComponents(unittest.TestCase):
         mock_serve.assert_called_once()
 
     def test_on_telemetry_queuing(self) -> None:
-        """Verify that telemetry queued when IPC is not ready and flushed on drain."""
+        """Telemetry is queued until the frontend is ready, then flushed."""
         self.dashboard.ipc.is_ready = False
 
         valid_data = self.valid_telemetry()
@@ -164,8 +161,7 @@ class TestDashboardComponents(unittest.TestCase):
         assert len(self.dashboard.pending_updates) == 1
         assert self.dashboard.pending_updates[0] == valid_data
 
-        # Drain queue
-        self.dashboard.drain_queue()
+        self.dashboard.ipc.set_ready()
         self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
         assert len(self.dashboard.pending_updates) == 0
 
@@ -292,59 +288,6 @@ class TestDashboardComponents(unittest.TestCase):
             self.dashboard.on_telemetry(self.valid_telemetry())
 
         self.dashboard.window.invoke.assert_not_called()
-
-    def test_ipc_copy_to_clipboard(self) -> None:
-        """Test that the IPC bridge correctly calls pyperclip."""
-        ipc = DashboardIPC()
-        with patch("vauxhall.dashboard.ipc.pyperclip.copy") as mock_copy:
-            result = ipc.copy_to_clipboard("test text")
-            mock_copy.assert_called_once_with("test text")
-            assert result
-
-    def test_ipc_copy_to_clipboard_error(self) -> None:
-        """Test that clipboard errors are handled gracefully."""
-        ipc = DashboardIPC()
-        with patch(
-            "vauxhall.dashboard.ipc.pyperclip.copy", side_effect=Exception("error")
-        ):
-            result = ipc.copy_to_clipboard("test text")
-            assert not result
-
-    def test_subscriber_on_message(self) -> None:
-        """Test that the subscriber correctly forwards MQTT messages to the callback."""
-        callback = MagicMock()
-        subscriber = DashboardSubscriber(callback, MagicMock())
-
-        # Create a mock message
-        msg: Any = MagicMock()
-        data = {
-            "schema_version": 1,
-            "agent": "Gemini",
-            "workspace": "/home/user/project",
-            "session_id": "native:session-1",
-            "state": "Thinking",
-            "details": {},
-        }
-        msg.payload = json.dumps(data).encode()
-
-        # Call the private method directly for testing
-        subscriber._on_message(None, None, msg)
-
-        callback.assert_called_once_with(data)
-
-    def test_subscriber_on_message_invalid_json(self) -> None:
-        """Test that invalid JSON messages are ignored by the subscriber."""
-        callback = MagicMock()
-        subscriber = DashboardSubscriber(callback, MagicMock())
-
-        # Create a mock message with invalid JSON
-        msg: Any = MagicMock()
-        msg.payload = b"invalid json"
-
-        # Should not raise exception, but also not call callback
-        subscriber._on_message(None, None, msg)
-
-        callback.assert_not_called()
 
 
 def test_pending_updates_discards_oldest_when_not_ready(

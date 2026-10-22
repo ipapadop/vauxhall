@@ -7,7 +7,6 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 
 import { agents, clearAgents } from '../../../vauxhall/dashboard/ui/js/state.js';
-import { createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 const BASE = {
     schema_version: 1,

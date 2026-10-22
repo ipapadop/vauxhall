@@ -78,7 +78,6 @@ class TelemetryClient:
         self.port = port if port is not None else settings.mqtt.port
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.is_connected = False
-        self._managed = False
         self._loop_running = False
         self._configured = False
 
@@ -88,7 +87,6 @@ class TelemetryClient:
         Returns:
             The client, connected unless connecting failed.
         """
-        self._managed = True
         try:
             self._connect()
         except Exception:
@@ -105,7 +103,6 @@ class TelemetryClient:
             exc_tb: Traceback of the exception leaving the block, if any.
         """
         self._close_connection()
-        self._managed = False
 
     def _connect(self) -> None:
         """Connect to the broker and start the MQTT network loop."""
@@ -152,6 +149,9 @@ class TelemetryClient:
     ) -> bool:
         """Publish one telemetry message to the agent's activity topic at QoS 1.
 
+        The connection is the one the context manager opened; outside it, or
+        after it failed to connect, nothing is sent.
+
         Args:
             agent: The name of the agent.
             workspace: The workspace directory path.
@@ -163,18 +163,14 @@ class TelemetryClient:
         Returns:
             True when the broker acknowledges publication; otherwise False.
         """
-        one_shot = not self._managed
         try:
             payload = format_message(
                 agent, workspace, state, session_id, env, **details
             )
             topic = f"vauxhall/agents/{agent.lower()}/activity"
 
-            if self._managed and not self.is_connected:
-                return False
-
             if not self.is_connected:
-                self._connect()
+                return False
 
             publish_result = self.client.publish(topic, payload, qos=1)
             publish_result.wait_for_publish(PUBLISH_TIMEOUT_SECONDS)
@@ -188,6 +184,3 @@ class TelemetryClient:
             else:
                 logger.debug("Timed out sending telemetry for %s", agent)
             return delivered
-        finally:
-            if one_shot:
-                self._close_connection()

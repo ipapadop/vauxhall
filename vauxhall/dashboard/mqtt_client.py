@@ -90,7 +90,6 @@ class DashboardSubscriber:
             logger.info("Connected to MQTT broker at %s:%d", self.host, self.port)
             self.status_callback("Connected to Agent Fleet")
             client.subscribe("vauxhall/agents/+/activity")
-            client.subscribe("vauxhall/agents/+/status")
             client.subscribe(ACK_TOPIC_FILTER, qos=1)
             logger.info("Subscribed to agent telemetry topics.")
         else:

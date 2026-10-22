@@ -54,7 +54,7 @@
             <div class="modal-header">
                 <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
                     <h2 id="modal-agent-name">Agent History</h2>
-                    <div class="modal-toolbar" style="display: flex; gap: 10px;">
+                    <div style="display: flex; gap: 10px;">
                         <input type="text" id="modal-search" placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;" aria-label="Filter history entries">
                         <select id="modal-state-filter" class="secondary-btn" aria-label="Filter history by state">
                             <option value="ALL">All States</option>
@@ -73,7 +73,7 @@
         </div>
     </dialog>
 
-    <dialog id="card-menu-modal" class="modal card-menu-modal" aria-labelledby="card-menu-title">
+    <dialog id="card-menu-modal" class="modal" aria-labelledby="card-menu-title">
         <div class="modal-content card-menu-content">
             <div class="modal-header">
                 <h2 id="card-menu-title">Agent Options</h2>
@@ -86,7 +86,7 @@
         </div>
     </dialog>
 
-    <dialog id="prompt-modal" class="modal card-menu-modal" aria-labelledby="prompt-title">
+    <dialog id="prompt-modal" class="modal" aria-labelledby="prompt-title">
         <form id="prompt-form" class="modal-content prompt-content" novalidate>
             <div class="modal-header">
                 <h2 id="prompt-title">Send Prompt</h2>
@@ -132,7 +132,7 @@
             </div>
             <div class="settings-actions">
                 <button type="button" id="settings-cancel" class="secondary-btn">Cancel</button>
-                <button type="submit" id="settings-save" class="secondary-btn primary-btn">Save</button>
+                <button type="submit" class="secondary-btn primary-btn">Save</button>
             </div>
         </form>
     </dialog>

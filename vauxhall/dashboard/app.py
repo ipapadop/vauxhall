@@ -71,25 +71,15 @@ class DashboardApp:
         self.last_status: str | None = None
         self.mqtt: DashboardSubscriber | None = None
 
-    def drain_queue(self) -> None:
-        """Forward all queued updates to the frontend."""
-        self._drain_pending_updates(mark_ready=False)
-
     def _on_frontend_ready(self) -> None:
-        """Atomically transfer queued updates when the frontend becomes ready."""
-        self._drain_pending_updates(mark_ready=True)
+        """Mark the frontend ready and forward the queued updates to it.
 
-    def _drain_pending_updates(self, *, mark_ready: bool) -> None:
-        """Snapshot pending state under lock, then forward it to the frontend.
-
-        Args:
-            mark_ready: Whether to mark the frontend ready while holding the
-                lock, so an update cannot be stranded by the transition.
+        Readiness is set under the same lock as the pending snapshot, so an
+        update cannot be stranded by the transition.
         """
         with self._dispatch_lock:
             with self._updates_lock:
-                if mark_ready:
-                    self.ipc.is_ready = True
+                self.ipc.is_ready = True
                 last_status = self.last_status
                 pending_updates = list(self.pending_updates)
                 self.pending_updates.clear()

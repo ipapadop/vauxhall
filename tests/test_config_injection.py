@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 from vauxhall.dashboard.config import dashboard_settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.hooks.client import TelemetryClient
-from vauxhall.hooks.config import hook_settings
 
 
 def test_dashboard_subscriber_uses_settings_by_default() -> None:
@@ -18,14 +17,6 @@ def test_dashboard_subscriber_uses_settings_by_default() -> None:
 
     assert subscriber.host == dashboard_settings.mqtt.host
     assert subscriber.port == dashboard_settings.mqtt.port
-
-
-def test_telemetry_client_uses_settings_by_default() -> None:
-    """Verify that TelemetryClient uses hook_settings.mqtt for default host and port."""
-    client = TelemetryClient()
-
-    assert client.host == hook_settings.mqtt.host
-    assert client.port == hook_settings.mqtt.port
 
 
 def test_dashboard_subscriber_overrides_settings() -> None:

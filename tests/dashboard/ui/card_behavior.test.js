@@ -61,7 +61,6 @@ test('each state applies its own class and replaces the previous one', () => {
     assert.deepEqual(classFor('Error', { error: 'boom' }), ['error']);
     assert.deepEqual(classFor('Waiting for Input', { prompt: 'continue?' }), ['waiting']);
     assert.deepEqual(classFor('Input Required', { prompt: 'approve?' }), ['waiting']);
-    assert.deepEqual(classFor('Waiting', { prompt: 'still?' }), ['waiting']);
     assert.deepEqual(classFor('Acting', { tool: 'shell' }), ['working']);
     assert.deepEqual(classFor('Thinking', { status: 'planning' }), ['working']);
     assert.deepEqual(classFor('Idle', { status: 'Ready' }), []);

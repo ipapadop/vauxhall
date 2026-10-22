@@ -28,7 +28,7 @@ function setupPage() {
                 <option value="ALL" selected>All</option>
                 <option value="Acting">Acting</option>
                 <option value="Error">Error</option>
-                <option value="Waiting">Waiting</option>
+                <option value="Waiting for Input">Waiting</option>
             </select>
             <div id="modal-history-body"></div>
         </body></html>
@@ -208,18 +208,18 @@ test('the state filter keeps only events in that state', () => {
     assert.deepEqual(rendered(document), [{ state: 'Error', details: 'Error: boom' }]);
 });
 
-test('the waiting filter also matches events waiting for input', () => {
+test('the waiting filter matches every waiting state', () => {
     const document = setupPage();
     const card = cardWithHistory([
-        { state: 'Waiting for Input', details: { prompt: 'approve?' } },
-        { state: 'Waiting', details: { prompt: 'continue?' } },
+        { state: 'Waiting for Input', details: { prompt: 'continue?' } },
+        { state: 'Input Required', details: { prompt: 'approve?' } },
         { state: 'Acting', details: { tool: 'shell' } },
     ]);
-    selectState(document, 'Waiting');
+    selectState(document, 'Waiting for Input');
 
     openHistoryModal(KEY, { [KEY]: card });
 
-    assert.deepEqual(rendered(document).map((item) => item.state), ['Waiting for Input', 'Waiting']);
+    assert.deepEqual(rendered(document).map((item) => item.state), ['Waiting for Input', 'Input Required']);
 });
 
 test('the all filter keeps every event', () => {

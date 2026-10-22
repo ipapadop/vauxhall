@@ -17,6 +17,8 @@ def isolated_home(
     """Keep every test away from the real home directory and VAUXHALL_* variables.
 
     The dashboard reads and writes per-user files under ``~/.config/vauxhall``.
+    ``HOME`` and ``USERPROFILE`` are set too, so hooks run as child processes
+    don't read the real hooks file or write real pane records.
 
     Args:
         tmp_path_factory: Pytest temporary directory factory.
@@ -27,6 +29,8 @@ def isolated_home(
     """
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     for name in list(os.environ):
         if name.startswith("VAUXHALL_"):
             monkeypatch.delenv(name)

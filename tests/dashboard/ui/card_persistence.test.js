@@ -4,9 +4,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseHTML } from 'linkedom';
+import { agents } from '../../../vauxhall/dashboard/ui/js/state.js';
 
-import { agents, clearAgents } from '../../../vauxhall/dashboard/ui/js/state.js';
+import { bootDashboard } from './helpers.js';
 
 const SHELL = {
     agent: 'Codex',
@@ -16,97 +16,6 @@ const SHELL = {
     env: 'local',
     last_seen: Date.now(),
 };
-
-const PAGE = `
-    <html><body>
-        <div id="js-status"></div>
-        <button id="clear-btn"></button>
-        <button id="clear-stale-btn"></button>
-        <input id="search-input" value="">
-        <select id="sort-select">
-            <option value="recent" selected>Recent</option>
-            <option value="name">Name</option>
-            <option value="status">Status</option>
-            <option value="tokens">Tokens</option>
-        </select>
-        <input type="checkbox" id="attention-first-toggle">
-        <input type="checkbox" id="notify-toggle">
-        <div id="fleet-summary"></div>
-        <div id="agent-grid"></div>
-        <dialog id="history-modal">
-            <button type="button" class="close-btn"></button>
-            <div id="modal-agent-name"></div>
-            <input id="modal-search" value="">
-            <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
-            <div id="modal-history-body"></div>
-        </dialog>
-        <dialog id="card-menu-modal">
-            <button type="button" id="card-menu-close"></button>
-            <button type="button" id="card-menu-hide">Hide until next event</button>
-            <button type="button" id="card-menu-denylist">Add agent to denylist</button>
-        </dialog>
-    </body></html>
-`;
-
-/**
- * Starts the dashboard against a fresh document and returns its test handles.
- * @param {import('node:test').TestContext} t - The test context, used to restore globals.
- * @param {object} [ipcOverrides] - Extra or replaced DashboardIPC bridge methods.
- * @returns {Promise<object>} The document and the captured backend callbacks.
- */
-async function bootDashboard(t, ipcOverrides = {}) {
-    const { document, window } = parseHTML(PAGE);
-    const listeners = {};
-    window.pyloid = {
-        event: {
-            listen(name, callback) {
-                listeners[name] = callback;
-            },
-        },
-    };
-    window.ipc = {
-        DashboardIPC: {
-            ping: async () => true,
-            set_ready: async () => true,
-            get_stale_threshold: async () => 120,
-            get_max_active_agents: async () => 100,
-            get_saved_cards: async () => '[]',
-            save_cards: async () => true,
-            copy_to_clipboard: async () => true,
-            get_settings: async () => JSON.stringify({ agent_denylist: [] }),
-            save_settings: async () => JSON.stringify({ ok: true }),
-            get_ui_state: async () => '{}',
-            save_ui_state: async () => true,
-            notify: async () => true,
-            ...ipcOverrides,
-        },
-    };
-    Object.defineProperty(document.getElementById('js-status'), 'innerText', {
-        value: '',
-        writable: true,
-    });
-    globalThis.document = document;
-    globalThis.window = window;
-    globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-    const originalSetInterval = globalThis.setInterval;
-    const originalAnimationFrame = globalThis.requestAnimationFrame;
-    t.after(() => {
-        globalThis.setInterval = originalSetInterval;
-        globalThis.requestAnimationFrame = originalAnimationFrame;
-        clearAgents();
-    });
-    globalThis.setInterval = () => 0;
-    globalThis.requestAnimationFrame = (callback) => {
-        callback();
-        return 0;
-    };
-    clearAgents();
-
-    await import(`../../../vauxhall/dashboard/ui/app.js?persistence=${Date.now()}${Math.random()}`);
-    await new Promise((resolve) => setImmediate(resolve));
-
-    return { document, listeners };
-}
 
 test('a saved card shell is restored into the grid on startup', async (t) => {
     const { document } = await bootDashboard(t, { get_saved_cards: async () => JSON.stringify([SHELL]) });

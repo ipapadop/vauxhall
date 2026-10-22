@@ -8,6 +8,8 @@ import { parseHTML } from 'linkedom';
 
 import { createCard, filterGrid, renderSummary, sortGrid, summarizeAgents, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
+import { cardOrder } from './helpers.js';
+
 let document;
 let grid;
 
@@ -52,14 +54,6 @@ function addCard({ agent, workspace = `/home/user/${agent}`, state = 'Idle', las
     return card;
 }
 
-/**
- * Returns the agent names in the grid, in display order.
- * @returns {string[]} The ordered agent names.
- */
-function order() {
-    return [...grid.children].map((card) => card.querySelector('.agent-name').textContent);
-}
-
 test('sorting by name orders cards alphabetically', (t) => {
     setupGrid(t);
     addCard({ agent: 'Gemini' });
@@ -68,7 +62,7 @@ test('sorting by name orders cards alphabetically', (t) => {
 
     sortGrid('name', grid);
 
-    assert.deepEqual(order(), ['Claude', 'Codex', 'Gemini']);
+    assert.deepEqual(cardOrder(document), ['Claude', 'Codex', 'Gemini']);
 });
 
 test('sorting by recent puts the most recently seen card first', (t) => {
@@ -79,7 +73,7 @@ test('sorting by recent puts the most recently seen card first', (t) => {
 
     sortGrid('recent', grid);
 
-    assert.deepEqual(order(), ['Fresh', 'Middle', 'Stale']);
+    assert.deepEqual(cardOrder(document), ['Fresh', 'Middle', 'Stale']);
 });
 
 test('sorting by status puts the cards that need attention first', (t) => {
@@ -91,7 +85,7 @@ test('sorting by status puts the cards that need attention first', (t) => {
 
     sortGrid('status', grid);
 
-    assert.deepEqual(order(), ['Failed', 'Blocked', 'Acting', 'Idle']);
+    assert.deepEqual(cardOrder(document), ['Failed', 'Blocked', 'Acting', 'Idle']);
 });
 
 test('sorting by status ranks a stale card last', (t) => {
@@ -103,7 +97,7 @@ test('sorting by status ranks a stale card last', (t) => {
 
     sortGrid('status', grid);
 
-    assert.deepEqual(order(), ['Working', 'Resting', 'Gone']);
+    assert.deepEqual(cardOrder(document), ['Working', 'Resting', 'Gone']);
 });
 
 test('sorting by status ranks an unrecognized badge after every known one', (t) => {
@@ -114,7 +108,7 @@ test('sorting by status ranks an unrecognized badge after every known one', (t) 
 
     sortGrid('status', grid);
 
-    assert.deepEqual(order(), ['Resting', 'Mystery']);
+    assert.deepEqual(cardOrder(document), ['Resting', 'Mystery']);
 });
 
 test('sorting by tokens puts the largest count first and treats a missing badge as zero', (t) => {
@@ -125,7 +119,7 @@ test('sorting by tokens puts the largest count first and treats a missing badge 
 
     sortGrid('tokens', grid);
 
-    assert.deepEqual(order(), ['Large', 'Small', 'Silent']);
+    assert.deepEqual(cardOrder(document), ['Large', 'Small', 'Silent']);
 });
 
 test('sorting by tokens uses the exact count, not the abbreviated badge text', (t) => {
@@ -135,7 +129,7 @@ test('sorting by tokens uses the exact count, not the abbreviated badge text', (
 
     sortGrid('tokens', grid);
 
-    assert.deepEqual(order(), ['Biggest', 'Bigger']);
+    assert.deepEqual(cardOrder(document), ['Biggest', 'Bigger']);
 });
 
 test('attention first ranks Error and Waiting cards before the rest, honoring the chosen sort within each group', (t) => {
@@ -147,7 +141,7 @@ test('attention first ranks Error and Waiting cards before the rest, honoring th
 
     sortGrid('name', grid, true);
 
-    assert.deepEqual(order(), ['Blocked', 'Failed', 'Apple', 'Zebra']);
+    assert.deepEqual(cardOrder(document), ['Blocked', 'Failed', 'Apple', 'Zebra']);
 });
 
 test('attention first with no attention cards falls back to the chosen sort', (t) => {
@@ -157,7 +151,7 @@ test('attention first with no attention cards falls back to the chosen sort', (t
 
     sortGrid('name', grid, true);
 
-    assert.deepEqual(order(), ['Claude', 'Gemini']);
+    assert.deepEqual(cardOrder(document), ['Claude', 'Gemini']);
 });
 
 test('attention first defaults to off', (t) => {
@@ -167,7 +161,7 @@ test('attention first defaults to off', (t) => {
 
     sortGrid('name', grid);
 
-    assert.deepEqual(order(), ['Apple', 'Zeta']);
+    assert.deepEqual(cardOrder(document), ['Apple', 'Zeta']);
 });
 
 test('attention first still ranks a card that went stale while blocked above the rest', (t) => {
@@ -179,7 +173,7 @@ test('attention first still ranks a card that went stale while blocked above the
 
     sortGrid('name', grid, true);
 
-    assert.deepEqual(order(), ['Blocked', 'Apple']);
+    assert.deepEqual(cardOrder(document), ['Blocked', 'Apple']);
 });
 
 test('an unknown sort criterion leaves the order unchanged', (t) => {
@@ -189,14 +183,14 @@ test('an unknown sort criterion leaves the order unchanged', (t) => {
 
     sortGrid('toString', grid);
 
-    assert.deepEqual(order(), ['Gemini', 'Claude']);
+    assert.deepEqual(cardOrder(document), ['Gemini', 'Claude']);
 });
 
 test('sorting an empty grid does nothing', (t) => {
     setupGrid(t);
     sortGrid('name', grid);
 
-    assert.deepEqual(order(), []);
+    assert.deepEqual(cardOrder(document), []);
 });
 
 test('search matches the agent name and hides the rest', (t) => {

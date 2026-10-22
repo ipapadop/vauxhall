@@ -9,6 +9,8 @@ import { parseHTML } from 'linkedom';
 import { updateAgentHistory } from '../../../vauxhall/dashboard/ui/js/state.js';
 import { closeHistoryModal, createCard, openHistoryModal } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
+import { selectOption } from './helpers.js';
+
 const KEY = '["Codex","/home/user/project","session-1"]';
 const VIEWPORT_HEIGHT = 200;
 const CONTENT_HEIGHT = 1000;
@@ -58,21 +60,6 @@ function cardWithHistory(events) {
     );
     events.forEach((event) => updateAgentHistory(card, event));
     return card;
-}
-
-/**
- * Chooses a state in the modal's filter, the way clicking an option would.
- * @param {Document} document - The modal document.
- * @param {string} value - The value of the option to select.
- */
-function selectState(document, value) {
-    const { options } = document.getElementById('modal-state-filter');
-    // Deselecting an option after selecting another clears the selection in
-    // linkedom, so the choice is made only once nothing else is selected.
-    for (const option of options) option.selected = false;
-    for (const option of options) {
-        if (option.value === value) option.selected = true;
-    }
 }
 
 /**
@@ -201,7 +188,7 @@ test('the state filter keeps only events in that state', () => {
         { state: 'Error', details: { error: 'boom' } },
         { state: 'Acting', details: { tool: 'grep' } },
     ]);
-    selectState(document, 'Error');
+    selectOption(document.getElementById('modal-state-filter'), 'Error');
 
     openHistoryModal(KEY, { [KEY]: card });
 
@@ -215,7 +202,7 @@ test('the waiting filter matches every waiting state', () => {
         { state: 'Input Required', details: { prompt: 'approve?' } },
         { state: 'Acting', details: { tool: 'shell' } },
     ]);
-    selectState(document, 'Waiting for Input');
+    selectOption(document.getElementById('modal-state-filter'), 'Waiting for Input');
 
     openHistoryModal(KEY, { [KEY]: card });
 
@@ -228,7 +215,7 @@ test('the all filter keeps every event', () => {
         { state: 'Acting', details: { tool: 'shell' } },
         { state: 'Idle', details: { status: 'Ready' } },
     ]);
-    selectState(document, 'ALL');
+    selectOption(document.getElementById('modal-state-filter'), 'ALL');
 
     openHistoryModal(KEY, { [KEY]: card });
 
@@ -243,7 +230,7 @@ test('the search box and the state filter apply together', () => {
         { state: 'Error', details: { error: 'shell exited 1' } },
     ]);
     document.getElementById('modal-search').value = 'shell';
-    selectState(document, 'Acting');
+    selectOption(document.getElementById('modal-state-filter'), 'Acting');
 
     openHistoryModal(KEY, { [KEY]: card });
 

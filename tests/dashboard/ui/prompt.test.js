@@ -117,10 +117,17 @@ test('early acknowledgments are kept only up to a limit', async (t) => {
     handleAck({ id: 'early-0', status: 'delivered' });
 });
 
-test('acknowledgments for unknown or malformed messages change nothing', () => {
+test('malformed acknowledgments leave a waiting prompt waiting', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const card = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'a9' }).ipc, card, 'hello');
+
     handleAck(null);
     handleAck({ status: 'delivered' });
     handleAck({ id: 5, status: 'delivered' });
+
+    assert.equal(status(card), 'Prompt sent, waiting for the relay…');
+    handleAck({ id: 'a9', status: 'delivered' });
 });
 
 test('a rejected prompt returns the error and leaves the card alone', async () => {

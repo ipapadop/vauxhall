@@ -310,5 +310,5 @@ test('renderSummary shows the fleet totals as badges', (t) => {
 });
 
 test('renderSummary does nothing without a container', () => {
-    renderSummary(null, {});
+    assert.doesNotThrow(() => renderSummary(null, {}));
 });

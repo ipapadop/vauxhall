@@ -61,3 +61,6 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The Gemini CLI hook limits its MQTT connection attempt to 1 second, like the
   Claude Code and Codex hooks, instead of waiting longer when the broker is
   unreachable.
+- The dashboard starts once when Pyloid signals readiness after the page
+  loads. Before, it could start twice, registering every event listener and
+  the readiness signal two times.

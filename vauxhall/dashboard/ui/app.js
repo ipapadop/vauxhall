@@ -408,15 +408,23 @@ async function init() {
 if (window.pyloid) {
     init();
 } else {
-    window.addEventListener('pyloidReady', init);
+    // Whichever of the event and the poll sees Pyloid first starts the
+    // dashboard; the other does nothing.
+    let started = false;
+    const start = () => {
+        if (started) return;
+        started = true;
+        clearInterval(interval);
+        init();
+    };
+    window.addEventListener('pyloidReady', start);
 
     // Fallback: Check every 100ms for 2 seconds
     let checks = 0;
     const interval = setInterval(() => {
         checks++;
         if (window.pyloid) {
-            init();
-            clearInterval(interval);
+            start();
         } else if (checks > 20) {
             clearInterval(interval);
             console.error("Pyloid not found after 2 seconds");

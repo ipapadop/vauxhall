@@ -63,18 +63,23 @@ const PAGE = `
  * Starts the dashboard against a fresh document and returns its test handles.
  * @param {import('node:test').TestContext} t - The test context, used to restore globals.
  * @param {object} [ipcOverrides] - Extra or replaced DashboardIPC bridge methods.
- * @returns {Promise<object>} The document and the captured backend callbacks.
+ * @param {object} [options] - Startup options.
+ * @param {boolean} [options.pyloidLate] - Leave `window.pyloid` unset while
+ *     the dashboard loads, so the test delivers it.
+ * @returns {Promise<object>} The document, the captured backend callbacks, the
+ *     window, the Pyloid object, and the scheduled interval callbacks.
  */
-async function bootDashboard(t, ipcOverrides = {}) {
+async function bootDashboard(t, ipcOverrides = {}, { pyloidLate = false } = {}) {
     const { document, window } = parseHTML(PAGE);
     const listeners = {};
-    window.pyloid = {
+    const pyloid = {
         event: {
             listen(name, callback) {
                 listeners[name] = callback;
             },
         },
     };
+    if (!pyloidLate) window.pyloid = pyloid;
     const clipboard = [];
     window.ipc = {
         DashboardIPC: {
@@ -110,7 +115,11 @@ async function bootDashboard(t, ipcOverrides = {}) {
         globalThis.requestAnimationFrame = originalAnimationFrame;
         clearAgents();
     });
-    globalThis.setInterval = () => 0;
+    const intervals = [];
+    globalThis.setInterval = (callback) => {
+        intervals.push(callback);
+        return 0;
+    };
     globalThis.requestAnimationFrame = (callback) => {
         callback();
         return 0;
@@ -120,7 +129,7 @@ async function bootDashboard(t, ipcOverrides = {}) {
     await import(`../../../vauxhall/dashboard/ui/app.js?actions=${Date.now()}${Math.random()}`);
     await new Promise((resolve) => setImmediate(resolve));
 
-    return { document, clipboard, listeners };
+    return { document, clipboard, listeners, window, pyloid, intervals };
 }
 
 /**
@@ -156,6 +165,28 @@ function order(document) {
         (card) => card.querySelector('.agent-name').textContent,
     );
 }
+
+test('the dashboard starts once when pyloidReady fires before the fallback poll', async (t) => {
+    let readySignals = 0;
+    const { window, pyloid, intervals } = await bootDashboard(
+        t,
+        {
+            set_ready: async () => {
+                readySignals += 1;
+                return true;
+            },
+        },
+        { pyloidLate: true },
+    );
+    const [poll] = intervals;
+
+    window.pyloid = pyloid;
+    window.dispatchEvent(new window.Event('pyloidReady'));
+    poll();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(readySignals, 1);
+});
 
 test('clear removes every card from the grid and the state', async (t) => {
     const { document, listeners } = await bootDashboard(t);

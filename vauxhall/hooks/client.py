@@ -32,12 +32,12 @@ def format_message(event: Mapping[str, object]) -> str:
             and ``details``.
 
     Returns:
-        The JSON payload, with ``schema_version`` added.
+        The JSON payload, with ``schema_version`` set.
 
     Raises:
         ValueError: If the event is not valid telemetry.
     """
-    payload = {"schema_version": SCHEMA_VERSION, **event}
+    payload = {**event, "schema_version": SCHEMA_VERSION}
     error = telemetry_validation_error(payload)
     if error is not None:
         raise ValueError(error)
@@ -51,7 +51,7 @@ def publish(
 
     Each event goes to its agent's activity topic. Invalid events are logged
     and skipped. Connecting and waiting for all acknowledgments each take at
-    most ``TIMEOUT_SECONDS``. Failures are logged at debug level, never raised.
+    most ``TIMEOUT_SECONDS``. Failures are logged, never raised.
 
     Args:
         events: Events in the form ``format_message`` takes.
@@ -71,7 +71,7 @@ def publish(
             continue
         messages.append((f"vauxhall/agents/{event['agent']}/activity".lower(), payload))
     if not messages:
-        return False
+        return all_valid
 
     config = mqtt_config or settings.mqtt
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -89,15 +89,15 @@ def publish(
         logger.debug("Failed to connect telemetry client")
         return False
 
-    client.loop_start()
     try:
+        client.loop_start()
         results = [client.publish(topic, payload, qos=1) for topic, payload in messages]
         deadline = time.monotonic() + TIMEOUT_SECONDS
         for result in results:
             result.wait_for_publish(max(0.0, deadline - time.monotonic()))
         delivered = all(result.is_published() for result in results)
         if delivered:
-            logger.debug("Successfully sent telemetry to %s", messages[0][0])
+            logger.debug("Successfully sent telemetry (%d events)", len(messages))
         else:
             logger.debug("Timed out sending telemetry")
     except Exception:

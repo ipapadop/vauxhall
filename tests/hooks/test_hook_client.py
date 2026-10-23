@@ -4,6 +4,7 @@
 """Tests for the telemetry hook client."""
 
 import json
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
@@ -86,6 +87,7 @@ class FakeMQTTClient:
         self,
         *publish_results: FakePublishResult,
         fail_connect: bool = False,
+        fail_loop_start: bool = False,
     ) -> None:
         """Initialize the client with controllable publish and connect results.
 
@@ -93,10 +95,12 @@ class FakeMQTTClient:
             *publish_results: Results returned by successive ``publish`` calls;
                 delivered results when exhausted.
             fail_connect: Whether ``connect`` raises ``OSError``.
+            fail_loop_start: Whether ``loop_start`` raises ``RuntimeError``.
         """
         self.events: list[str] = []
         self.publish_results = list(publish_results)
         self.fail_connect = fail_connect
+        self.fail_loop_start = fail_loop_start
         self.connect_timeout = 5.0
         self.connected_to: tuple[str, int, int] | None = None
         self.published: list[tuple[str, dict, int]] = []
@@ -119,8 +123,14 @@ class FakeMQTTClient:
             raise OSError
 
     def loop_start(self) -> None:
-        """Record network-loop startup."""
+        """Record network-loop startup and optionally fail it.
+
+        Raises:
+            RuntimeError: If the client was built to fail starting its loop.
+        """
         self.events.append("loop_start")
+        if self.fail_loop_start:
+            raise RuntimeError
 
     def publish(self, topic: str, payload: str, *, qos: int = 0) -> FakePublishResult:
         """Record publication and return its delivery result.
@@ -171,6 +181,13 @@ def test_format_message_adds_the_schema_version() -> None:
         **EVENT,
         "env": "remote",
     }
+
+
+def test_format_message_keeps_its_schema_version() -> None:
+    """An event can't replace the schema version the client publishes."""
+    payload = json.loads(format_message({**EVENT, "schema_version": 2}))
+
+    assert payload["schema_version"] == 1
 
 
 def test_format_message_rejects_empty_session_id() -> None:
@@ -277,6 +294,36 @@ def test_publish_without_a_valid_event_never_connects(event: dict) -> None:
 
     assert not _publish(mqtt_client, event)
     assert mqtt_client.events == []
+
+
+def test_publish_closes_the_connection_when_the_network_loop_fails() -> None:
+    """A network loop that can't start fails the batch without raising."""
+    mqtt_client = FakeMQTTClient(fail_loop_start=True)
+
+    assert not _publish(mqtt_client, EVENT)
+    assert mqtt_client.events == ["connect", "loop_start", "disconnect", "loop_stop"]
+
+
+def test_publish_without_events_succeeds_without_connecting() -> None:
+    """An empty batch has nothing to deliver, so nothing fails."""
+    mqtt_client = FakeMQTTClient()
+
+    assert _publish(mqtt_client)
+    assert mqtt_client.events == []
+
+
+def test_publish_logs_how_many_events_were_delivered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The success log covers the whole batch, not only its first topic.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    with caplog.at_level(logging.DEBUG, logger="vauxhall.hooks.client"):
+        assert _publish(FakeMQTTClient(), EVENT, {**EVENT, "agent": "Codex"})
+
+    assert "Successfully sent telemetry (2 events)" in caplog.text
 
 
 def test_publish_returns_false_when_connecting_fails() -> None:

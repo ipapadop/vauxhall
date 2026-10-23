@@ -13,12 +13,13 @@ import random
 import tempfile
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from vauxhall.core.config import MQTTConfig
 from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.hooks.client import publish
+from vauxhall.hooks.config import hook_settings
 
 logger = get_logger(__name__)
 
@@ -68,7 +69,8 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
 
     env = random.choice(["local", "remote"])
 
-    broker = MQTTConfig(host="localhost", port=1883)
+    # The hooks' credentials and TLS settings apply to the local broker too.
+    broker = replace(hook_settings.mqtt, host="localhost", port=1883)
     for i in range(transitions):
         op = random.choice(POSSIBLE_OPERATIONS)
         event = {

@@ -3,6 +3,7 @@
 
 """Tests for the simulation script."""
 
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -10,10 +11,22 @@ import pytest
 from scripts.simulate_agent import POSSIBLE_OPERATIONS, simulate_agent
 from vauxhall.core.config import MQTTConfig
 from vauxhall.core.telemetry import SCHEMA_VERSION, telemetry_validation_error
+from vauxhall.hooks.config import hook_settings
 
 
-def test_simulate_agent_publishes_each_transition() -> None:
-    """Each transition is one event for the agent's session on the local broker."""
+def test_simulate_agent_publishes_each_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each transition is one event, sent to the local broker as the hooks would.
+
+    The hooks' credentials and TLS settings still apply; only the address
+    changes.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    hooks_mqtt = MQTTConfig(host="remote", port=8883, username="agent", tls=True)
+    monkeypatch.setattr(hook_settings, "mqtt", hooks_mqtt)
     with (
         patch("scripts.simulate_agent.publish", return_value=True) as publish,
         patch("scripts.simulate_agent.time.sleep"),
@@ -22,7 +35,7 @@ def test_simulate_agent_publishes_each_transition() -> None:
 
     assert publish.call_count == 2
     (event,), broker = publish.call_args.args
-    assert broker == MQTTConfig(host="localhost", port=1883)
+    assert broker == replace(hooks_mqtt, host="localhost", port=1883)
     assert event["agent"] == "Gemini-1.5-Pro-1"
     assert event["session_id"] == "simulation:1"
 

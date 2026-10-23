@@ -472,6 +472,10 @@ All contributors, including AI agents, must:
      which is deselected by default because it downloads Qt. CI runs it on
      Linux, macOS, and Windows.
    - With Node.js 20.19 or newer, run `npm test` for the frontend.
+   - Frontend tests run with `--test-isolation=none`, so all files share one
+     root: a top-level `beforeEach`, `afterEach`, `before`, or `after` runs
+     around every test in the suite. Set up and clean up inside each test,
+     with `t.after`; `tests/dashboard/ui/hook_scope.test.js` enforces this.
    - Add unit tests for every new feature and bug fix.
    - Avoid monkeypatching where possible. Prefer dependency injection and
      explicit fakes. Use monkeypatching when these alternatives are impractical.

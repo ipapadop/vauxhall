@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
-import { beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
@@ -10,7 +10,13 @@ import { createCard, openHistoryModal, updateCard } from '../../../vauxhall/dash
 
 const ATTACK = '<img class="injected" src="x">';
 
-beforeEach(() => {
+/**
+ * Give the test a fresh page holding the history modal.
+ *
+ * Called by each test rather than from a top-level beforeEach, which under
+ * --test-isolation=none would run before every test in every file.
+ */
+function setupPage() {
     const { document, window } = parseHTML(`
         <html>
             <body>
@@ -24,9 +30,10 @@ beforeEach(() => {
     `);
     globalThis.document = document;
     globalThis.window = window;
-});
+}
 
 test('agent identity and environment are rendered as inert text', () => {
+    setupPage();
     const card = createCard(
         {
             agent: ATTACK,
@@ -47,6 +54,7 @@ test('agent identity and environment are rendered as inert text', () => {
 });
 
 test('activity details and metrics are rendered without creating markup', () => {
+    setupPage();
     const card = createCard(
         { agent: 'Agent', workspace: '/workspace', env: 'local' },
         null,
@@ -70,6 +78,7 @@ test('activity details and metrics are rendered without creating markup', () => 
 });
 
 test('assistant messages appear as inert text in the activity log', () => {
+    setupPage();
     const card = createCard({ agent: 'Codex', workspace: '/workspace', session_id: 'session' }, null, () => {});
 
     updateCard(card, { state: 'Thinking', details: { message: ATTACK } });
@@ -80,6 +89,7 @@ test('assistant messages appear as inert text in the activity log', () => {
 });
 
 test('history details are rendered without creating markup', () => {
+    setupPage();
     const card = createCard(
         { agent: 'Agent', workspace: '/workspace', env: 'local' },
         null,

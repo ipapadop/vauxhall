@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
+import { test } from 'node:test';
 
 import { Event as DOMEvent, parseHTML } from 'linkedom';
 
@@ -87,15 +87,14 @@ function descriptor() {
 
 // linkedom elements only dispatch linkedom's own Event, which settings.js
 // creates through the global Event constructor.
-const NodeEvent = globalThis.Event;
-after(() => {
-    globalThis.Event = NodeEvent;
-});
-
-function setup(body = '<div id="fields"></div>') {
+function setup(t, body = '<div id="fields"></div>') {
     const { document, window } = parseHTML(`<html><body>${body}</body></html>`);
     globalThis.document = document;
     globalThis.window = window;
+    const nodeEvent = globalThis.Event;
+    t.after(() => {
+        globalThis.Event = nodeEvent;
+    });
     globalThis.Event = DOMEvent;
     return document;
 }
@@ -110,8 +109,8 @@ function setInput(document, id, value) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-test('renders sections, input types, and read-only fields as text', () => {
-    const document = setup();
+test('renders sections, input types, and read-only fields as text', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
 
     renderSettingsForm(container, descriptor());
@@ -138,8 +137,8 @@ test('renders sections, input types, and read-only fields as text', () => {
     assert.equal(document.querySelector('label[for="setting-mqtt-port"]').textContent, 'port');
 });
 
-test('collects only changed editable values with their types', () => {
-    const document = setup();
+test('collects only changed editable values with their types', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
     const settings = descriptor();
     renderSettingsForm(container, settings);
@@ -157,8 +156,8 @@ test('collects only changed editable values with their types', () => {
     });
 });
 
-test('reports and clears client-side errors', () => {
-    const document = setup();
+test('reports and clears client-side errors', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
     const settings = descriptor();
     renderSettingsForm(container, settings);
@@ -181,8 +180,8 @@ test('reports and clears client-side errors', () => {
     assert.equal(document.getElementById('setting-mqtt-port-error').textContent, '');
 });
 
-test('reset restores the default value', () => {
-    const document = setup();
+test('reset restores the default value', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
     const settings = descriptor();
     renderSettingsForm(container, settings);
@@ -202,8 +201,8 @@ test('saved notes mention restarts and hook failures only', () => {
     );
 });
 
-test('dialog saves changes, offers hooks updates, and shows server errors', async () => {
-    const document = setup(DIALOG);
+test('dialog saves changes, offers hooks updates, and shows server errors', async (t) => {
+    const document = setup(t, DIALOG);
     const requests = [];
     const responses = [
         { ok: false, error: 'Invalid configuration value for mqtt.port', field: 'mqtt.port', file: 'dashboard' },
@@ -243,8 +242,8 @@ test('dialog saves changes, offers hooks updates, and shows server errors', asyn
     assert.equal(dialog.hasAttribute('open'), false);
 });
 
-test('dialog blocks invalid input and closes without saving when unchanged', async () => {
-    const document = setup(DIALOG);
+test('dialog blocks invalid input and closes without saving when unchanged', async (t) => {
+    const document = setup(t, DIALOG);
     const requests = [];
     initSettings({
         get_settings: async () => JSON.stringify(descriptor()),
@@ -271,8 +270,8 @@ test('dialog blocks invalid input and closes without saving when unchanged', asy
     assert.equal(dialog.hasAttribute('open'), false);
 });
 
-test('dialog shows a load error instead of fields', async () => {
-    const document = setup(DIALOG);
+test('dialog shows a load error instead of fields', async (t) => {
+    const document = setup(t, DIALOG);
     initSettings({
         get_settings: async () => JSON.stringify({ error: '/x: mqtt must be an object, got 5' }),
         save_settings: async () => '{}',
@@ -287,8 +286,8 @@ test('dialog shows a load error instead of fields', async () => {
 
 const DENYLIST_SECTION = '<fieldset id="section" hidden><ul id="list"></ul><p id="settings-denylist-readonly-note" hidden></p></fieldset>';
 
-test('renderDenylist hides the section when empty and lists entries when not', () => {
-    const document = setup(DENYLIST_SECTION);
+test('renderDenylist hides the section when empty and lists entries when not', (t) => {
+    const document = setup(t, DENYLIST_SECTION);
     const section = document.getElementById('section');
     const list = document.getElementById('list');
 
@@ -306,8 +305,8 @@ test('renderDenylist hides the section when empty and lists entries when not', (
     assert.deepEqual(removed, [['gemini']]);
 });
 
-test('renderDenylist removes only the clicked entry when names repeat', () => {
-    const document = setup(DENYLIST_SECTION);
+test('renderDenylist removes only the clicked entry when names repeat', (t) => {
+    const document = setup(t, DENYLIST_SECTION);
     const section = document.getElementById('section');
     const list = document.getElementById('list');
 
@@ -319,8 +318,8 @@ test('renderDenylist removes only the clicked entry when names repeat', () => {
     assert.deepEqual(removed, [['codex']]);
 });
 
-test('renderDenylist disables removal and shows a note when the list is read-only', () => {
-    const document = setup(DENYLIST_SECTION);
+test('renderDenylist disables removal and shows a note when the list is read-only', (t) => {
+    const document = setup(t, DENYLIST_SECTION);
     const section = document.getElementById('section');
     const list = document.getElementById('list');
 
@@ -330,8 +329,8 @@ test('renderDenylist disables removal and shows a note when the list is read-onl
     assert.ok(list.querySelector('.denylist-item button').hasAttribute('disabled'));
 });
 
-test('dialog shows the denylist and removing an entry saves and reloads it', async () => {
-    const document = setup(DIALOG);
+test('dialog shows the denylist and removing an entry saves and reloads it', async (t) => {
+    const document = setup(t, DIALOG);
     const requests = [];
     let denylist = ['codex'];
     initSettings({
@@ -357,8 +356,8 @@ test('dialog shows the denylist and removing an entry saves and reloads it', asy
     assert.ok(section.hasAttribute('hidden'));
 });
 
-test('a failed denylist removal shows the error and keeps the entry', async () => {
-    const document = setup(DIALOG);
+test('a failed denylist removal shows the error and keeps the entry', async (t) => {
+    const document = setup(t, DIALOG);
     const requests = [];
     initSettings({
         get_settings: async () => JSON.stringify({ ...descriptor(), agent_denylist: ['codex'] }),
@@ -380,8 +379,8 @@ test('a failed denylist removal shows the error and keeps the entry', async () =
     assert.equal(document.getElementById('settings-denylist-list').children.length, 1);
 });
 
-test('hook changes compare editable MQTT fields with the values the hooks use', () => {
-    const document = setup();
+test('hook changes compare editable MQTT fields with the values the hooks use', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
     const settings = { ...descriptor(), hooks_mqtt: { host: 'hooks-broker', port: 1884, keepalive: 60 } };
     renderSettingsForm(container, settings);
@@ -395,8 +394,8 @@ test('hook changes compare editable MQTT fields with the values the hooks use', 
     assert.deepEqual(collectHookChanges(container, settings), {});
 });
 
-test('hook changes leave out fields the hooks do not share', () => {
-    const document = setup();
+test('hook changes leave out fields the hooks do not share', (t) => {
+    const document = setup(t);
     const container = document.getElementById('fields');
     const settings = {
         ...descriptor(),
@@ -413,8 +412,8 @@ test('hook changes leave out fields the hooks do not share', () => {
     assert.deepEqual(collectHookChanges(container, settings), {});
 });
 
-function hooksDialog(hooksPort) {
-    const document = setup(DIALOG);
+function hooksDialog(t, hooksPort) {
+    const document = setup(t, DIALOG);
     const requests = [];
     initSettings({
         get_settings: async () => JSON.stringify({
@@ -429,8 +428,8 @@ function hooksDialog(hooksPort) {
     return { document, requests, hooks: document.getElementById('settings-hooks') };
 }
 
-test('reset offers a hooks update when only the hooks file differs', async () => {
-    const { document, requests, hooks } = hooksDialog(1884);
+test('reset offers a hooks update when only the hooks file differs', async (t) => {
+    const { document, requests, hooks } = hooksDialog(t, 1884);
 
     document.getElementById('settings-btn').dispatchEvent(new Event('click'));
     await flush();
@@ -448,8 +447,8 @@ test('reset offers a hooks update when only the hooks file differs', async () =>
     assert.equal(document.getElementById('settings-dialog').hasAttribute('open'), false);
 });
 
-test('hooks option stays hidden when the hooks already match', async () => {
-    const { document, requests, hooks } = hooksDialog(1883);
+test('hooks option stays hidden when the hooks already match', async (t) => {
+    const { document, requests, hooks } = hooksDialog(t, 1883);
 
     document.getElementById('settings-btn').dispatchEvent(new Event('click'));
     await flush();
@@ -464,8 +463,8 @@ test('hooks option stays hidden when the hooks already match', async () => {
     assert.deepEqual(requests, []);
 });
 
-test('an unchecked hooks option saves nothing when only the hooks file differs', async () => {
-    const { document, requests } = hooksDialog(1884);
+test('an unchecked hooks option saves nothing when only the hooks file differs', async (t) => {
+    const { document, requests } = hooksDialog(t, 1884);
 
     document.getElementById('settings-btn').dispatchEvent(new Event('click'));
     await flush();

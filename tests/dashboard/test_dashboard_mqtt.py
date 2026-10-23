@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from vauxhall.core.prompts import ACK_TOPIC_FILTER
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 
@@ -106,10 +107,10 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
 
     subscriber._on_connect(mock_client, None, {}, 0, None)
 
-    mock_client.subscribe.assert_has_calls(
-        [call("vauxhall/agents/+/activity"), call("vauxhall/agents/+/status")],
-        any_order=True,
-    )
+    assert mock_client.subscribe.call_args_list == [
+        call("vauxhall/agents/+/activity"),
+        call(ACK_TOPIC_FILTER, qos=1),
+    ]
 
     subscriber.stop()
     mock_client.loop_stop.assert_called_once()

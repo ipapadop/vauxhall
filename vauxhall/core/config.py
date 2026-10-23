@@ -265,20 +265,6 @@ class ConfigResolver:
             return section_data[key], f"{self.config_path}:{section}.{key}"
         return None
 
-    def get(self, env_var: str, section: str, key: str, default: T) -> T:
-        """Resolve setting: Env -> JSON -> Default.
-
-        Args:
-            env_var: Environment variable name.
-            section: Section in JSON config.
-            key: Key within the section in JSON config.
-            default: Default value if not found elsewhere.
-
-        Returns:
-            T: The resolved value.
-        """
-        return self._resolve(env_var, section, key, default, {})
-
     def resolve_dataclass(self, cls: type[T], section: str, env_prefix: str) -> T:
         """Automatically resolve all fields for a dataclass.
 

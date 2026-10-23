@@ -140,7 +140,6 @@ mosquitto_passwd /etc/mosquitto/passwd agent-host
 # /etc/mosquitto/acl
 user dashboard
 topic read vauxhall/agents/+/activity
-topic read vauxhall/agents/+/status
 topic read vauxhall/agents/+/sessions/+/ack
 topic write vauxhall/agents/+/sessions/+/prompt
 

@@ -10,6 +10,6 @@
     "test:coverage": "node --test --test-isolation=none --experimental-test-coverage --test-coverage-include=vauxhall/dashboard/ui/js/** --test-coverage-lines=96 --test-coverage-branches=86 --test-coverage-functions=89 tests/dashboard/ui/*.test.js"
   },
   "devDependencies": {
-    "linkedom": "0.18.13"
+    "linkedom": "0.18.14"
   }
 }

@@ -469,6 +469,58 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
     return None
 
 
+def pre_tool_telemetry(
+    input_data: dict[str, Any],
+    *,
+    agent: str,
+    question_tool: str,
+    command_fields: Mapping[str, str],
+) -> Telemetry:
+    """Translate an event for a tool about to run, keyed by its tool-use ID.
+
+    Args:
+        input_data: The hook event naming the tool about to run.
+        agent: The agent whose start times are recorded.
+        question_tool: The tool that asks the user a question.
+        command_fields: Input field holding the command, per tool name.
+
+    Returns:
+        The waiting state for the question tool, otherwise the acting state and
+        the tool details.
+    """
+    if input_data.get("tool_name") == question_tool:
+        return "Waiting for Input", {
+            "prompt": question_prompt(input_data.get("tool_input"))
+        }
+    if (identity := tool_use_identity(input_data)) is not None:
+        record_tool_start(agent, identity)
+    return "Acting", tool_details(input_data, command_fields)
+
+
+def tool_result_telemetry(
+    input_data: dict[str, Any],
+    outcome: tuple[str, str, str | None],
+    duration: float | None,
+) -> Telemetry:
+    """Build the telemetry for a finished tool call.
+
+    Args:
+        input_data: The hook event naming the tool.
+        outcome: The state, the status to show, and an error message or ``None``.
+        duration: The call's duration in seconds, or ``None`` when unknown.
+
+    Returns:
+        The state, with the tool details, status, error, and duration.
+    """
+    state, status, error = outcome
+    details = {**tool_details(input_data, {}), "status": status}
+    if error is not None:
+        details["error"] = error
+    if duration is not None:
+        details["duration"] = duration
+    return state, details
+
+
 def track_pane(hook_type: object, agent: str, session_id: str) -> None:
     """Keep the local tmux pane record of a session in step with its lifecycle.
 

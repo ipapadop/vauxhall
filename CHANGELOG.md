@@ -71,3 +71,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The dashboard starts once when Pyloid signals readiness after the page
   loads. Before, it could start twice, registering every event listener and
   the readiness signal two times.
+
+### Security
+
+- The dashboard window checks HTTPS certificates. Pyloid turns those checks
+  off for every page with `--ignore-certificate-errors` and
+  `--allow-insecure-localhost`; the dashboard now removes both, since its UI
+  is served over plain HTTP. Flags you set in `QTWEBENGINE_CHROMIUM_FLAGS` are
+  kept as given.

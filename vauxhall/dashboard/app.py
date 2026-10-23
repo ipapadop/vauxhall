@@ -402,28 +402,35 @@ def _use_utf8_output() -> None:
                 )
 
 
-def _keep_user_chromium_flags(
+# Pyloid turns off certificate checks for every page the window loads. The UI
+# is served over plain HTTP, so they serve no purpose here.
+_INSECURE_PYLOID_FLAGS = frozenset(
+    {"--ignore-certificate-errors", "--allow-insecure-localhost"}
+)
+
+
+def _set_chromium_flags(
     environ: MutableMapping[str, str] = os.environ,
     user_flags: str = USER_CHROMIUM_FLAGS,
 ) -> None:
-    """Append the user's Chromium flags to the ones Pyloid set on import.
+    """Drop Pyloid's certificate overrides and append the user's flags.
 
     Qt reads the variable when the application starts, so this must run
-    before ``Pyloid``.
+    before ``Pyloid``. The user's flags are kept as given.
 
     Args:
         environ: The environment to update.
         user_flags: The flags the user set before Pyloid's import.
     """
-    if user_flags:
-        pyloid_flags = environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-        environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{pyloid_flags} {user_flags}".strip()
+    pyloid_flags = environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "").split()
+    flags = [flag for flag in pyloid_flags if flag not in _INSECURE_PYLOID_FLAGS]
+    environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join([*flags, user_flags]).strip()
 
 
 def main() -> None:
     """Run the Vauxhall Dashboard application."""
     _use_utf8_output()
-    _keep_user_chromium_flags()
+    _set_chromium_flags()
     setup_logging(level=settings.logging.level)
     logger.info("Starting Vauxhall Dashboard...")
 

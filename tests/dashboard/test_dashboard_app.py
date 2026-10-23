@@ -26,7 +26,7 @@ sys_modules_patch.start()
 from vauxhall.dashboard.app import (  # noqa: E402
     ICON_FILE,
     DashboardApp,
-    _keep_user_chromium_flags,
+    _set_chromium_flags,
 )
 
 
@@ -576,21 +576,31 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
 
 @pytest.mark.parametrize(
     ("user_flags", "expected"),
-    [("", "--pyloid"), ("--disable-gpu", "--pyloid --disable-gpu")],
-    ids=["unset", "set"],
+    [
+        ("", "--enable-features=X"),
+        ("--disable-gpu", "--enable-features=X --disable-gpu"),
+        (
+            "--ignore-certificate-errors",
+            "--enable-features=X --ignore-certificate-errors",
+        ),
+    ],
+    ids=["unset", "set", "user-chosen-override"],
 )
-def test_keep_user_chromium_flags_appends_only_when_set(
+def test_set_chromium_flags_drops_pyloids_certificate_overrides(
     user_flags: str, expected: str
 ) -> None:
-    """Without user flags, Pyloid's are left as they are.
+    """Pyloid's certificate overrides go; the user's flags are kept as given.
 
     Args:
         user_flags: The flags the user set before Pyloid's import.
         expected: The resulting flags.
     """
-    environ = {"QTWEBENGINE_CHROMIUM_FLAGS": "--pyloid"}
+    environ = {
+        "QTWEBENGINE_CHROMIUM_FLAGS": "--enable-features=X "
+        "--ignore-certificate-errors --allow-insecure-localhost"
+    }
 
-    _keep_user_chromium_flags(environ, user_flags)
+    _set_chromium_flags(environ, user_flags)
 
     assert environ == {"QTWEBENGINE_CHROMIUM_FLAGS": expected}
 

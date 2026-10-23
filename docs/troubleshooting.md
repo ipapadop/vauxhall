@@ -82,8 +82,7 @@ browser's GPU use:
 QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu" vauxhall
 ```
 
-The dashboard adds these flags after the ones Pyloid sets. They can't remove
-Pyloid's own switches, such as `--ignore-certificate-errors`.
+The dashboard adds these flags after the ones Pyloid sets.
 
 **The dashboard stops with `Invalid configuration value`.** The message names
 the environment variable or file, the field, the value, and what is expected.

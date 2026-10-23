@@ -23,7 +23,11 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
-from vauxhall.dashboard.app import ICON_FILE, DashboardApp  # noqa: E402
+from vauxhall.dashboard.app import (  # noqa: E402
+    ICON_FILE,
+    DashboardApp,
+    _keep_user_chromium_flags,
+)
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
@@ -568,6 +572,27 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
     subscriber_type.return_value.stop.assert_called_once_with()
     app.create_window.return_value.invoke.assert_not_called()
     assert dashboard.last_status == "Disconnected"
+
+
+@pytest.mark.parametrize(
+    ("user_flags", "expected"),
+    [("", "--pyloid"), ("--disable-gpu", "--pyloid --disable-gpu")],
+    ids=["unset", "set"],
+)
+def test_keep_user_chromium_flags_appends_only_when_set(
+    user_flags: str, expected: str
+) -> None:
+    """Without user flags, Pyloid's are left as they are.
+
+    Args:
+        user_flags: The flags the user set before Pyloid's import.
+        expected: The resulting flags.
+    """
+    environ = {"QTWEBENGINE_CHROMIUM_FLAGS": "--pyloid"}
+
+    _keep_user_chromium_flags(environ, user_flags)
+
+    assert environ == {"QTWEBENGINE_CHROMIUM_FLAGS": expected}
 
 
 if __name__ == "__main__":

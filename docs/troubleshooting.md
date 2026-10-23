@@ -73,6 +73,18 @@ On older releases, install `libasound2` instead of `libasound2t64`. Run
 is a desktop window: it needs a graphical session, and doesn't run over plain
 SSH.
 
+**The dashboard crashes, or its window stays blank, on a machine without a
+working GPU**, such as a virtual machine or a remote desktop, often after
+`Unable to initialize SkSurface` or `Context lost`. Turn off the embedded
+browser's GPU use:
+
+```bash
+QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu" vauxhall
+```
+
+The dashboard adds these flags after the ones Pyloid sets. They can't remove
+Pyloid's own switches, such as `--ignore-certificate-errors`.
+
 **The dashboard stops with `Invalid configuration value`.** The message names
 the environment variable or file, the field, the value, and what is expected.
 Fix or remove that value; see [configuration.md](configuration.md).

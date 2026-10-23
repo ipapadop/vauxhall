@@ -10,6 +10,7 @@ import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -220,35 +221,46 @@ def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
     assert not list(elsewhere.iterdir())
 
 
-class RecordingClient:
-    """Stands in for the telemetry client, recording what is sent."""
+class RecordingPublisher:
+    """Stands in for the telemetry publisher, recording each batch."""
 
     def __init__(self) -> None:
-        """Create a client that has sent nothing."""
-        self.sent: list[dict[str, object]] = []
+        """Create a publisher that has published nothing."""
+        self.batches: list[list[dict[str, Any]]] = []
 
-    def __enter__(self) -> "RecordingClient":  # noqa: PYI034
-        """Enter the context manager.
-
-        Returns:
-            The client.
-        """
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        """Exit the context manager."""
-
-    def send(self, **event: object) -> bool:
-        """Record one event.
+    def __call__(self, events: list[dict[str, Any]]) -> bool:
+        """Record one batch.
 
         Args:
-            **event: The event fields.
+            events: The events published together.
 
         Returns:
             Always ``True``.
         """
-        self.sent.append(event)
+        self.batches.append(events)
         return True
+
+
+def test_publish_telemetry_sends_messages_and_event_in_one_batch() -> None:
+    """Interim messages and the event go out together, in the wire shape."""
+    publisher = RecordingPublisher()
+
+    common.publish_telemetry(
+        {"hook_event_name": "Stop", "session_id": "one", "cwd": "/workspace"},
+        "Codex",
+        {"Stop": lambda _: ("Idle", {"status": "done"})},
+        publish=publisher,
+        messages=["first", "second"],
+    )
+
+    identity = {"agent": "Codex", "workspace": "/workspace", "session_id": "native:one"}
+    assert publisher.batches == [
+        [
+            {**identity, "state": "Thinking", "details": {"message": "first"}},
+            {**identity, "state": "Thinking", "details": {"message": "second"}},
+            {**identity, "state": "Idle", "details": {"status": "done"}},
+        ]
+    ]
 
 
 def test_publish_telemetry_records_the_pane_at_session_start(
@@ -266,7 +278,7 @@ def test_publish_telemetry_records_the_pane_at_session_start(
         {"hook_event_name": "SessionStart", "session_id": "one", "source": "startup"},
         "Codex",
         {"SessionStart": common.session_start_telemetry},
-        create_client=RecordingClient,  # type: ignore[arg-type]
+        publish=RecordingPublisher(),
     )
 
     assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
@@ -280,7 +292,7 @@ def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:
         {"hook_event_name": "SessionEnd", "session_id": "one"},
         "Codex",
         {"SessionEnd": lambda _: ("Idle", {"status": "session ended"})},
-        create_client=RecordingClient,  # type: ignore[arg-type]
+        publish=RecordingPublisher(),
     )
 
     assert load_pane("codex", "native:one") is None
@@ -299,16 +311,16 @@ def test_pane_record_failure_never_disturbs_the_hook(
     # A file where the records directory belongs makes writing fail for real.
     (isolated_home / ".config" / "vauxhall").mkdir(parents=True)
     (isolated_home / ".config" / "vauxhall" / "panes").write_text("", encoding="utf-8")
-    client = RecordingClient()
+    publisher = RecordingPublisher()
 
     common.publish_telemetry(
         {"hook_event_name": "SessionStart", "session_id": "one"},
         "Codex",
         {"SessionStart": common.session_start_telemetry},
-        create_client=lambda: client,  # type: ignore[arg-type,return-value]
+        publish=publisher,
     )
 
-    assert len(client.sent) == 1
+    assert len(publisher.batches) == 1
 
 
 def _run_main(hook: str, stdin: str) -> str:
@@ -468,35 +480,19 @@ def test_hook_answers_when_telemetry_setup_fails(hook: str) -> None:
     Args:
         hook: The hook module.
     """
-    with patch.object(common, "create_telemetry_client", side_effect=RuntimeError):
+    with patch("vauxhall.hooks.client.publish", side_effect=RuntimeError):
         assert _run_main(hook, json.dumps(SESSION_START)) == "{}\n"
 
 
 @pytest.mark.parametrize("hook", HOOKS)
 def test_hook_skips_event_without_stable_session_identity(hook: str) -> None:
-    """Without a session identity, no telemetry client is created.
+    """Without a session identity, nothing is published.
 
     Args:
         hook: The hook module.
     """
     event = {key: value for key, value in SESSION_START.items() if key != "session_id"}
-    with patch.object(common, "create_telemetry_client") as client_factory:
+    with patch("vauxhall.hooks.client.publish") as publish:
         assert _run_main(hook, json.dumps(event)) == "{}\n"
 
-    client_factory.assert_not_called()
-
-
-@pytest.mark.parametrize("hook", HOOKS)
-def test_hook_connect_timeout_fits_hook_budget(hook: str) -> None:
-    """Every hook connects with a timeout short enough to finish in time.
-
-    Args:
-        hook: The hook module.
-    """
-    with patch("vauxhall.hooks.client.TelemetryClient") as client_class:
-        client = client_class.return_value
-        client.__enter__.return_value = client
-        _run_main(hook, json.dumps(SESSION_START))
-
-    client.send.assert_called_once()
-    assert client.client.connect_timeout == 1.0
+    publish.assert_not_called()

@@ -190,7 +190,7 @@ dashboard on all three.
 | Claude Code | Built in | `.claude/settings.local.json` | A release with command hooks, including `MessageDisplay`, `PostCompact`, and `StopFailure` |
 | Codex | Built in | `.codex/hooks.json` | A release with the stable `hooks` feature, including `Interrupt` and `SubagentStart` |
 | Gemini CLI | Built in | `.gemini/settings.json` | A release with hooks, including `AfterModel` and `PreCompress` |
-| Anything else | `TelemetryClient` or raw MQTT | None | Python 3.10+, or any MQTT client |
+| Anything else | `publish()` or raw MQTT | None | Python 3.10+, or any MQTT client |
 
 The hooks follow each agent's documented hook format. An agent release
 without one of the events still works, without that event's updates. The

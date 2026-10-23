@@ -21,9 +21,16 @@ from vauxhall.core.config import PASSWORD_ENV, MQTTConfig
 from vauxhall.core.mqtt import configure_client
 from vauxhall.dashboard.config import dashboard_settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
-from vauxhall.hooks.client import TelemetryClient
+from vauxhall.hooks.client import publish
 from vauxhall.hooks.config import hook_settings
 from vauxhall.hooks.relay import PromptRelay
+
+EVENT = {
+    "agent": "Agent",
+    "workspace": "/workspace",
+    "session_id": "native:one",
+    "state": "Idle",
+}
 
 
 @dataclass
@@ -277,7 +284,7 @@ def test_encrypted_client_key_fails_instead_of_prompting(
 
 
 def test_hook_client_authenticates(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hooks' telemetry client connects with the hooks' credentials.
+    """The hooks' telemetry publisher connects with the hooks' credentials.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
@@ -286,10 +293,8 @@ def test_hook_client_authenticates(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             hook_settings, "mqtt", MQTTConfig(port=broker.port, username="agent-host")
         )
-        with TelemetryClient() as client:
-            attempt = broker.next_attempt()
-
-            assert client.is_connected
+        publish([EVENT])
+        attempt = broker.next_attempt()
 
     assert attempt.connect is not None
     assert attempt.connect.username == "agent-host"
@@ -302,7 +307,7 @@ def test_hook_client_reports_failed_tls_setup_and_never_connects(
     caplog: pytest.LogCaptureFixture,
     failure: str,
 ) -> None:
-    """When TLS setup fails, the hook client says so and does not connect at all.
+    """When TLS setup fails, the hooks' publisher says so and never connects.
 
     The files pass validation, then go wrong before the connection is made.
 
@@ -319,8 +324,7 @@ def test_hook_client_reports_failed_tls_setup_and_never_connects(
             pki.client_cert.unlink()
         monkeypatch.setattr(hook_settings, "mqtt", config)
 
-        with TelemetryClient() as client:
-            assert not client.is_connected
+        assert not publish([EVENT])
         with pytest.raises(queue.Empty):
             broker.next_attempt(timeout=0.3)
 

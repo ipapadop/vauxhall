@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.hooks.recording import record_published
 from vauxhall.hooks.gemini.telemetry_hook import _classify_tool_response, main
 
 
@@ -98,15 +99,13 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    assert client.send.call_args.kwargs == {
+    assert published.call_args.kwargs == {
         "agent": "Gemini",
         "workspace": str(workspace),
         "state": "Error",
@@ -115,7 +114,7 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
         "error": "Tool reported an error",
         "session_id": "native:session-123",
     }
-    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+    assert "secret" not in json.dumps(published.call_args.kwargs)
 
 
 @pytest.mark.parametrize(
@@ -148,15 +147,13 @@ def test_gemini_session_end_maps_documented_reasons(
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Gemini",
         workspace="/workspace",
         state="Idle",
@@ -182,15 +179,13 @@ def test_notification_tool_permission() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         main()
 
-        mock_instance.send.assert_called_once_with(
+        published.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
             session_id="native:session-123",
@@ -211,15 +206,13 @@ def test_ask_user_tool() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         main()
 
-        mock_instance.send.assert_called_once_with(
+        published.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
             session_id="native:session-123",
@@ -241,15 +234,13 @@ def test_after_model_tokens() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         main()
 
-        mock_instance.send.assert_called_once_with(
+        published.assert_called_once_with(
             agent="Gemini",
             workspace="/workspace",
             session_id="native:session-123",
@@ -284,13 +275,10 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
         patch("time.time") as mock_time,
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
-
         # 1. BeforeTool
         mock_time.return_value = 1000.0
         with patch("sys.stdin", io.StringIO(json.dumps(before_data))):
@@ -302,7 +290,7 @@ def test_tool_duration_calculation(tmp_path: Path) -> None:
             main()
 
         # Check AfterTool call (last call)
-        mock_instance.send.assert_called_with(
+        published.assert_called_with(
             agent="Gemini",
             workspace=str(workspace),
             session_id="native:session-123",
@@ -364,22 +352,20 @@ def test_tool_durations_are_isolated_by_session_and_tool(tmp_path: Path) -> None
     ]
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
         patch(
             "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1001.0, 1002.0, 1003.0, 1005.0, 1008.0],
         ),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         for event in events:
             with patch("sys.stdin", io.StringIO(json.dumps(event))):
                 main()
 
     completed = {
         call.kwargs["tool"]: call.kwargs.get("duration")
-        for call in mock_instance.send.call_args_list
+        for call in published.call_args_list
         if call.kwargs["state"] == "Thinking"
     }
     assert completed == {"alpha": 3.0, "beta": 4.0, "gamma": 6.0}
@@ -394,17 +380,15 @@ def test_unknown_tool_before_tool() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=io.StringIO()),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         main()
 
         # Should NOT have 'tool' key
-        mock_instance.send.assert_called_once()
-        kwargs = mock_instance.send.call_args.kwargs
+        published.assert_called_once()
+        kwargs = published.call_args.kwargs
         assert "tool" not in kwargs
         assert kwargs["state"] == "Acting"
 
@@ -445,22 +429,20 @@ def test_tool_durations_are_isolated_by_tool_input(
     ]
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as mock_client_factory,
+        record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
         patch(
             "vauxhall.hooks.common.time.time",
             side_effect=[1000.0, 1004.0, 1005.0, 1010.0],
         ),
     ):
-        mock_instance = mock_client_factory.return_value
-        mock_instance.__enter__.return_value = mock_instance
         for item in events:
             with patch("sys.stdin", io.StringIO(json.dumps(item))):
                 main()
 
     durations = [
         call.kwargs.get("duration")
-        for call in mock_instance.send.call_args_list
+        for call in published.call_args_list
         if call.kwargs["state"] == "Thinking"
     ]
     assert durations == [1.0, 10.0]
@@ -505,21 +487,19 @@ def test_malformed_nested_input_outputs_valid_json(hook_data: dict) -> None:
 
 
 def _run(*events: dict) -> MagicMock:
-    """Run the hook for each event and return the mocked telemetry client.
+    """Run the hook for each event and return the recorded events.
 
     Returns:
-        The mocked telemetry client.
+        The mock recording each published event.
     """
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         for event in events:
             with patch("sys.stdin", io.StringIO(json.dumps(event))):
                 main()
-    return client
+    return published
 
 
 def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
@@ -547,9 +527,9 @@ def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
     }
 
     with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
-        client = _run(first, last)
+        published = _run(first, last)
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Gemini",
         workspace="/workspace",
         session_id="native:session-123",
@@ -581,9 +561,9 @@ def test_gemini_new_prompt_discards_unfinished_model_text(tmp_path: Path) -> Non
     }
 
     with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
-        client = _run(abandoned, prompt, reply)
+        published = _run(abandoned, prompt, reply)
 
-    prompted, replied = (call.kwargs for call in client.send.call_args_list)
+    prompted, replied = (call.kwargs for call in published.call_args_list)
     assert prompted["state"] == "Thinking"
     assert prompted["prompt"] == "Try again"
     assert replied["message"] == "Fresh."
@@ -596,10 +576,10 @@ def test_gemini_prompt_without_session_identity_discards_and_publishes_nothing()
     prompt = {"hook_event_name": "BeforeAgent", "cwd": "/workspace", "prompt": "Hi"}
 
     with patch("vauxhall.hooks.common.discard_message_chunks") as discard:
-        client = _run(prompt)
+        published = _run(prompt)
 
     discard.assert_not_called()
-    client.send.assert_not_called()
+    published.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -650,9 +630,9 @@ def test_gemini_lifecycle_events_publish_dashboard_states(
         hook_data: The case's hook event.
         expected: The result the case expects.
     """
-    client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
+    published = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Gemini",
         workspace="/workspace",
         session_id="native:session-123",
@@ -688,9 +668,9 @@ def test_gemini_ignores_events_without_dashboard_state(hook_data: dict) -> None:
     Args:
         hook_data: The case's hook event.
     """
-    client = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
+    published = _run({**hook_data, "session_id": "session-123", "cwd": "/workspace"})
 
-    client.send.assert_not_called()
+    published.assert_not_called()
 
 
 def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) -> None:
@@ -714,7 +694,7 @@ def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) 
             side_effect=[1000.0, 1002.0, 1005.0, 1009.0],
         ),
     ):
-        client = _run(
+        published = _run(
             *(
                 {**event, "hook_event_name": hook}
                 for hook in ("BeforeTool", "BeforeTool", "AfterTool", "AfterTool")
@@ -723,7 +703,7 @@ def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) 
 
     durations = [
         call.kwargs.get("duration")
-        for call in client.send.call_args_list
+        for call in published.call_args_list
         if call.kwargs["state"] == "Thinking"
     ]
     assert durations == [3.0, 9.0]
@@ -749,7 +729,7 @@ def test_unfinished_tool_call_does_not_inflate_later_duration(tmp_path: Path) ->
         patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)),
         patch("vauxhall.hooks.common.time.time", side_effect=[1000.0, 2000.0, 2003.0]),
     ):
-        client = _run(before, before, after)
+        published = _run(before, before, after)
 
-    assert client.send.call_args.kwargs["duration"] == 3.0
+    assert published.call_args.kwargs["duration"] == 3.0
     assert len(list(tmp_path.rglob("*.time"))) == 1

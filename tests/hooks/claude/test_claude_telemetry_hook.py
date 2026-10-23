@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.hooks.recording import record_published
 from vauxhall.hooks.claude.telemetry_hook import main
 
 HOOK = "vauxhall.hooks.claude.telemetry_hook"
@@ -21,21 +22,19 @@ BASE = {"session_id": "session-123", "cwd": "/workspace"}
 
 
 def _run(*events: dict) -> MagicMock:
-    """Run the hook for each event and return the mocked telemetry client.
+    """Run the hook for each event and return the recorded events.
 
     Returns:
-        The mocked telemetry client.
+        The mock recording each published event.
     """
     with (
-        patch(f"{COMMON}.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         for event in events:
             with patch("sys.stdin", StringIO(json.dumps(event))):
                 main()
-    return client
+    return published
 
 
 def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
@@ -55,9 +54,9 @@ def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
     last = {**first, "index": 1, "delta": "through it.", "final": True}
 
     with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
-        client = _run(first, last)
+        published = _run(first, last)
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Claude Code",
         workspace="/workspace",
         session_id="native:session-123",
@@ -88,9 +87,9 @@ def test_claude_messages_in_two_workspaces_do_not_share_one_file(
     here_ends = {**here, "delta": "", "final": True}
 
     with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
-        client = _run(here, there, here_ends)
+        published = _run(here, there, here_ends)
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Claude Code",
         workspace="/workspace/a",
         session_id="native:session-123",
@@ -353,15 +352,15 @@ def test_claude_events_publish_dashboard_states(
         expected: The result the case expects.
     """
     with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
-        client = _run({**BASE, **hook_data})
+        published = _run({**BASE, **hook_data})
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Claude Code",
         workspace="/workspace",
         session_id="native:session-123",
         **expected,
     )
-    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+    assert "secret" not in json.dumps(published.call_args.kwargs)
 
 
 @pytest.mark.parametrize(
@@ -385,9 +384,9 @@ def test_claude_ignores_events_without_dashboard_state(hook_data: dict) -> None:
     Args:
         hook_data: The case's hook event.
     """
-    client = _run({**BASE, **hook_data})
+    published = _run({**BASE, **hook_data})
 
-    client.send.assert_not_called()
+    published.assert_not_called()
 
 
 def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> None:
@@ -420,7 +419,7 @@ def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> No
         patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
         patch(f"{COMMON}.time.time", side_effect=[1000.0, 1001.0, 1003.0, 1007.0]),
     ):
-        client = _run(
+        published = _run(
             event("PreToolUse", "toolu_a"),
             event("PreToolUse", "toolu_b"),
             event("PostToolUse", "toolu_b"),
@@ -429,7 +428,7 @@ def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> No
 
     durations = [
         call.kwargs.get("duration")
-        for call in client.send.call_args_list
+        for call in published.call_args_list
         if call.kwargs["state"] == "Thinking"
     ]
     assert durations == [2.0, 7.0]
@@ -455,9 +454,9 @@ def test_claude_failed_tool_reports_duration(tmp_path: Path) -> None:
         patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
         patch(f"{COMMON}.time.time", side_effect=[1000.0, 1002.5]),
     ):
-        client = _run(before, after)
+        published = _run(before, after)
 
-    assert client.send.call_args.kwargs["duration"] == 2.5
+    assert published.call_args.kwargs["duration"] == 2.5
 
 
 def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
@@ -484,7 +483,7 @@ def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
         patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
         patch(f"{COMMON}.time.time", side_effect=[1000.0, 2000.0]),
     ):
-        client = _run(before, after)
+        published = _run(before, after)
 
-    assert client.send.call_args.kwargs["duration"] == 4.2
+    assert published.call_args.kwargs["duration"] == 4.2
     assert not list(tmp_path.rglob("*.time"))

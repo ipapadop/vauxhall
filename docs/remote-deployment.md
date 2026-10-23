@@ -75,16 +75,16 @@ On the agent machine, with the tunnel up, publish a test event:
 ```bash
 .vauxhall-venv/bin/python - <<'EOF'
 from uuid import uuid4
-from vauxhall.hooks.client import TelemetryClient
+from vauxhall.hooks.client import publish
 
-delivered = TelemetryClient().send(
-    agent="Tunnel test",
-    workspace="/tmp",
-    session_id=str(uuid4()),
-    state="Idle",
-    env="remote",
-    status="Tunnel works",
-)
+delivered = publish([{
+    "agent": "Tunnel test",
+    "workspace": "/tmp",
+    "session_id": str(uuid4()),
+    "state": "Idle",
+    "env": "remote",
+    "details": {"status": "Tunnel works"},
+}])
 print("delivered" if delivered else "not delivered")
 EOF
 ```

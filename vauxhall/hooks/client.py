@@ -4,10 +4,13 @@
 """Telemetry client for sending agent activity to the Vauxhall Dashboard."""
 
 import json
-from typing import TypeVar
+import time
+from collections.abc import Iterable, Mapping
+from contextlib import suppress
 
 import paho.mqtt.client as mqtt
 
+from vauxhall.core.config import MQTTConfig
 from vauxhall.core.logging import get_logger
 from vauxhall.core.mqtt import configure_client
 from vauxhall.core.telemetry import SCHEMA_VERSION, telemetry_validation_error
@@ -15,179 +18,94 @@ from vauxhall.hooks.config import hook_settings as settings
 
 logger = get_logger(__name__)
 
-PUBLISH_TIMEOUT_SECONDS = 1.0
-# ``typing.Self`` is unavailable on the supported Python 3.10 runtime.
-_TelemetryClientT = TypeVar("_TelemetryClientT", bound="TelemetryClient")
+# Bounds both the connection attempt and the wait for every acknowledgment,
+# so a hook finishes quickly even when the broker is slow or unreachable.
+TIMEOUT_SECONDS = 1.0
 
 
-def format_message(
-    agent: str,
-    workspace: str,
-    state: str,
-    session_id: str,
-    env: str | None = None,
-    **details: object,
-) -> str:
-    """Format a telemetry message as a JSON string.
+def format_message(event: Mapping[str, object]) -> str:
+    """Encode one telemetry event as its JSON wire payload.
 
     Args:
-        agent: The name of the agent.
-        workspace: The workspace directory path.
-        state: The current state of the agent.
-        session_id: Stable identity for the agent session.
-        env: Optional execution environment (local, remote).
-        **details: Additional key-value pairs for message details.
+        event: The payload fields other than ``schema_version``: ``agent``,
+            ``workspace``, ``session_id``, ``state``, and optionally ``env``
+            and ``details``.
 
     Returns:
-        str: A JSON-formatted string containing the telemetry data.
+        The JSON payload, with ``schema_version`` set.
 
     Raises:
-        ValueError: If the assembled payload is not valid telemetry.
+        ValueError: If the event is not valid telemetry.
     """
-    payload_dict = {
-        "schema_version": SCHEMA_VERSION,
-        "agent": agent,
-        "workspace": workspace,
-        "session_id": session_id,
-        "state": state,
-        "details": details,
-    }
-    if env:
-        payload_dict["env"] = env
-
-    error = telemetry_validation_error(payload_dict)
+    payload = {**event, "schema_version": SCHEMA_VERSION}
+    error = telemetry_validation_error(payload)
     if error is not None:
         raise ValueError(error)
-    return json.dumps(payload_dict)
+    return json.dumps(payload)
 
 
-class TelemetryClient:
-    """Publishes agent activity telemetry over MQTT.
+def publish(
+    events: Iterable[Mapping[str, object]], mqtt_config: MQTTConfig | None = None
+) -> bool:
+    """Publish telemetry events at QoS 1 over one broker connection.
 
-    Connection and publication failures are logged at debug level, never raised.
+    Each event goes to its agent's activity topic. Invalid events are logged
+    and skipped. Connecting and waiting for all acknowledgments each take at
+    most ``TIMEOUT_SECONDS``. Failures are logged, never raised.
+
+    Args:
+        events: Events in the form ``format_message`` takes.
+        mqtt_config: Broker settings; defaults to the hooks' settings.
+
+    Returns:
+        True when every event was valid and the broker acknowledged it.
     """
-
-    def __init__(self, host: str | None = None, port: int | None = None) -> None:
-        """Initialize the telemetry client.
-
-        Args:
-            host: The MQTT broker hostname. Defaults to settings.mqtt.host.
-            port: The MQTT broker port. Defaults to settings.mqtt.port.
-        """
-        self.host = host if host is not None else settings.mqtt.host
-        self.port = port if port is not None else settings.mqtt.port
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self.is_connected = False
-        self._managed = False
-        self._loop_running = False
-        self._configured = False
-
-    def __enter__(self: _TelemetryClientT) -> _TelemetryClientT:  # noqa: PYI019
-        """Enter the context manager, establishing a persistent connection.
-
-        Returns:
-            The client, connected unless connecting failed.
-        """
-        self._managed = True
+    messages: list[tuple[str, str]] = []
+    all_valid = True
+    for event in events:
         try:
-            self._connect()
-        except Exception:
-            logger.debug("Failed to connect telemetry client inside context manager")
-            self._close_connection()
-        return self
+            payload = format_message(event)
+        except (TypeError, ValueError):
+            logger.debug("Skipping invalid telemetry")
+            all_valid = False
+            continue
+        messages.append((f"vauxhall/agents/{event['agent']}/activity".lower(), payload))
+    if not messages:
+        return all_valid
 
-    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        """Exit the context manager, closing the connection.
+    config = mqtt_config or settings.mqtt
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.connect_timeout = TIMEOUT_SECONDS
+    try:
+        # A failure stops the connection: it must never fall back to a
+        # plaintext or unauthenticated one.
+        configure_client(client, config)
+    except OSError:
+        logger.exception("Could not set up the broker connection")
+        return False
+    try:
+        client.connect(config.host, config.port, keepalive=config.keepalive)
+    except Exception:
+        logger.debug("Failed to connect telemetry client")
+        return False
 
-        Args:
-            exc_type: Type of the exception leaving the block, if any.
-            exc_val: The exception leaving the block, if any.
-            exc_tb: Traceback of the exception leaving the block, if any.
-        """
-        self._close_connection()
-        self._managed = False
-
-    def _connect(self) -> None:
-        """Connect to the broker and start the MQTT network loop."""
-        if not self._configured:
-            # A failure leaves the client unconfigured and stops the connection:
-            # it must never fall back to a plaintext or unauthenticated one.
-            try:
-                configure_client(self.client, settings.mqtt)
-            except OSError:
-                logger.exception("Could not set up the broker connection")
-                raise
-            self._configured = True
-        self.client.connect(self.host, self.port, keepalive=settings.mqtt.keepalive)
-        self.is_connected = True
-        self.client.loop_start()
-        self._loop_running = True
-
-    def _close_connection(self) -> None:
-        """Close MQTT transport without allowing cleanup failures to escape."""
-        if self.is_connected:
-            try:
-                self.client.disconnect()
-            except Exception:
-                logger.debug("Failed to disconnect telemetry client")
-            finally:
-                self.is_connected = False
-
-        if self._loop_running:
-            try:
-                self.client.loop_stop()
-            except Exception:
-                logger.debug("Failed to stop telemetry client network loop")
-            finally:
-                self._loop_running = False
-
-    def send(
-        self,
-        agent: str,
-        workspace: str,
-        state: str,
-        session_id: str,
-        env: str | None = None,
-        **details: object,
-    ) -> bool:
-        """Publish one telemetry message to the agent's activity topic at QoS 1.
-
-        Args:
-            agent: The name of the agent.
-            workspace: The workspace directory path.
-            state: The current state of the agent.
-            session_id: Stable identity for the agent session.
-            env: Optional execution environment (local, remote).
-            **details: Additional key-value pairs for message details.
-
-        Returns:
-            True when the broker acknowledges publication; otherwise False.
-        """
-        one_shot = not self._managed
-        try:
-            payload = format_message(
-                agent, workspace, state, session_id, env, **details
-            )
-            topic = f"vauxhall/agents/{agent.lower()}/activity"
-
-            if self._managed and not self.is_connected:
-                return False
-
-            if not self.is_connected:
-                self._connect()
-
-            publish_result = self.client.publish(topic, payload, qos=1)
-            publish_result.wait_for_publish(PUBLISH_TIMEOUT_SECONDS)
-            delivered = publish_result.is_published()
-        except Exception:
-            logger.debug("Failed to send telemetry for %s", agent)
-            return False
+    try:
+        client.loop_start()
+        results = [client.publish(topic, payload, qos=1) for topic, payload in messages]
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+        for result in results:
+            result.wait_for_publish(max(0.0, deadline - time.monotonic()))
+        delivered = all(result.is_published() for result in results)
+        if delivered:
+            logger.debug("Successfully sent telemetry (%d events)", len(messages))
         else:
-            if delivered:
-                logger.debug("Successfully sent telemetry for %s to %s", agent, topic)
-            else:
-                logger.debug("Timed out sending telemetry for %s", agent)
-            return delivered
-        finally:
-            if one_shot:
-                self._close_connection()
+            logger.debug("Timed out sending telemetry")
+    except Exception:
+        logger.debug("Failed to send telemetry")
+        delivered = False
+    finally:
+        with suppress(Exception):
+            client.disconnect()
+        with suppress(Exception):
+            client.loop_stop()
+    return delivered and all_valid

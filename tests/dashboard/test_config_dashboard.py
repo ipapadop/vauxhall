@@ -281,3 +281,66 @@ def test_invalid_environment_value_overrides_valid_file(tmp_path: Path) -> None:
             match=r"VAUXHALL_MQTT_PORT.*mqtt\.port.*'invalid'.*integer",
         ):
             DashboardConfig.load(path)
+
+
+def test_graphics_backend_defaults_to_auto(tmp_path: Path) -> None:
+    """Without a setting, the dashboard picks the graphics backend itself.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    path.write_text("{}", encoding="utf-8")
+
+    assert DashboardConfig.load(path).dashboard.graphics_backend == "auto"
+
+
+@pytest.mark.parametrize("backend", ["auto", "vulkan", "opengl", "software"])
+def test_graphics_backend_loads_from_file(tmp_path: Path, backend: str) -> None:
+    """Each documented graphics backend is accepted from the file.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        backend: The case's graphics backend.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    data = {"dashboard": {"graphics_backend": backend}}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    assert DashboardConfig.load(path).dashboard.graphics_backend == backend
+
+
+def test_graphics_backend_loads_from_environment(tmp_path: Path) -> None:
+    """The environment variable overrides the file's graphics backend.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    data = {"dashboard": {"graphics_backend": "vulkan"}}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setenv("VAUXHALL_DASHBOARD_GRAPHICS_BACKEND", "software")
+        config = DashboardConfig.load(path)
+
+    assert config.dashboard.graphics_backend == "software"
+
+
+@pytest.mark.parametrize("backend", ["metal", "Vulkan", ""])
+def test_graphics_backend_rejects_unknown_values(tmp_path: Path, backend: str) -> None:
+    """An unknown graphics backend names the field and the valid choices.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        backend: The case's invalid graphics backend.
+    """
+    path = tmp_path / "vauxhall_dashboard.json"
+    data = {"dashboard": {"graphics_backend": backend}}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"dashboard\.graphics_backend.*auto, opengl, software, vulkan",
+    ):
+        DashboardConfig.load(path)

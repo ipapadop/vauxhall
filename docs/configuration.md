@@ -52,6 +52,7 @@ which overrides the default. See `vauxhall_dashboard.json.example` and
 | `dashboard` | `max_active_agents` | `VAUXHALL_DASHBOARD_MAX_ACTIVE_AGENTS` | `100` | Integer 1–1000 |
 | `dashboard` | `max_payload_bytes` | `VAUXHALL_DASHBOARD_MAX_PAYLOAD_BYTES` | `65536` | Integer 1024–1048576 bytes |
 | `dashboard` | `agent_denylist` | Not settable via environment variable | `[]` | List of agent names |
+| `dashboard` | `graphics_backend` | `VAUXHALL_DASHBOARD_GRAPHICS_BACKEND` | `auto` | `auto`, `vulkan`, `opengl`, or `software`; see [Graphics backend](#graphics-backend) |
 
 Invalid values (malformed JSON, non-object sections, wrong types, out-of-range
 values, or unparsable environment values) stop the dashboard at startup. The
@@ -71,6 +72,24 @@ The password is never a configuration field, so it can't be committed with a
 `VAUXHALL_MQTT_PASSWORD` environment variable, or put it in the file named by
 `password_file`, whose trailing newline is ignored. The environment variable
 wins when both are set. Both need `username`.
+
+### Graphics backend
+
+`dashboard.graphics_backend` chooses how the window draws the page:
+
+| Value | Effect |
+| --- | --- |
+| `auto` | Vulkan on Linux, where the OpenGL default can leave the window blank on Wayland. Qt's own choice elsewhere: Metal on macOS, Direct3D on Windows. |
+| `vulkan` | Vulkan on every platform. |
+| `opengl` | OpenGL, Qt's default on Linux. |
+| `software` | No GPU: adds `--disable-gpu` to the embedded browser's flags. Slower, but works without a usable GPU. |
+
+Before choosing Vulkan, the dashboard checks that a Vulkan driver reports a
+device. If none does, it logs `Vulkan is not available` and lets Qt choose.
+
+If you set `QSG_RHI_BACKEND` yourself, the dashboard leaves the graphics setup
+to you and ignores this setting. See
+[troubleshooting.md](troubleshooting.md#dashboard-startup) for a blank window.
 
 ### Other environment variables
 
@@ -115,7 +134,7 @@ Saved changes take effect as follows:
 | --- | --- |
 | Immediately | `logging.level`, `dashboard.stale_threshold`, `dashboard.max_active_agents`, `dashboard.max_payload_bytes`, `dashboard.agent_denylist` |
 | After reconnecting to the broker | `mqtt.host`, `mqtt.port`, `mqtt.keepalive`, `mqtt.tls`, `mqtt.ca_certs`, `mqtt.username`, `mqtt.password_file`, `mqtt.certfile`, `mqtt.keyfile` |
-| After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit` |
+| After restarting Vauxhall | `dashboard.port`, `dashboard.debug`, `dashboard.window_title`, `dashboard.width`, `dashboard.height`, `dashboard.pending_update_limit`, `dashboard.graphics_backend` |
 
 Lowering `max_active_agents` removes the least recently seen surplus cards
 right away. When the broker's `host`, `port`, `keepalive`, `tls`, or `ca_certs` in the

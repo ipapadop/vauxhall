@@ -31,6 +31,11 @@ class UIConfig:
         default=65536, metadata={"min": 1024, "max": 1048576}
     )
     agent_denylist: list[str] = field(default_factory=list)
+    # "auto" is Vulkan on Linux, where Qt's default OpenGL backend can leave
+    # the window blank on Wayland, and Qt's own choice elsewhere.
+    graphics_backend: str = field(
+        default="auto", metadata={"choices": {"auto", "vulkan", "opengl", "software"}}
+    )
 
 
 @dataclass

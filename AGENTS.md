@@ -389,6 +389,19 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   off certificate checks in the window although the UI is served over plain
   HTTP, and appends the user's value unchanged. The packaged startup test
   relies on this for its `--disable-gpu` flags.
+- **Graphics backend**: `vauxhall.dashboard.graphics.set_graphics_backend`
+  runs in `main()` after logging is set up and before `Pyloid`, because Qt
+  reads `QSG_RHI_BACKEND` and `QTWEBENGINE_CHROMIUM_FLAGS` when the
+  application starts. `auto` means Vulkan on Linux, where Qt's OpenGL default
+  showed a blank window (`Compositor returned null texture`) on KDE Wayland
+  with an AMD GPU, and Qt's choice elsewhere; PySide6 bundles no MoltenVK, so
+  Vulkan isn't the macOS default. Before setting Vulkan, `vulkan_available`
+  creates and destroys a bare Vulkan instance through `ctypes` and requires a
+  physical device (about 14 ms); without one it logs a warning and leaves Qt
+  to choose. Pyloid's own Vulkan fallback reacts to Qt log messages, after
+  the window exists, so it doesn't help here. `software` appends
+  `--disable-gpu`. A `QSG_RHI_BACKEND` in the environment leaves everything to
+  the user.
 - **Notifications**: `DashboardIPC.notify` calls the `on_notify` callback
   `DashboardApp` registers, which calls `Pyloid.show_notification` for an
   OS-level (system tray) notification. Without a registered callback, or if

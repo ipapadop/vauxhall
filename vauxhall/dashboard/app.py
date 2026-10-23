@@ -23,6 +23,7 @@ from vauxhall.core.telemetry import telemetry_validation_error
 from vauxhall.dashboard import USER_CHROMIUM_FLAGS
 from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
+from vauxhall.dashboard.graphics import set_graphics_backend
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber
 from vauxhall.dashboard.settings_editor import (
@@ -433,6 +434,7 @@ def main() -> None:
     _set_chromium_flags()
     setup_logging(level=settings.logging.level)
     logger.info("Starting Vauxhall Dashboard...")
+    set_graphics_backend(settings.dashboard.graphics_backend)
 
     app = Pyloid(app_name="Vauxhall Dashboard")
     dashboard = DashboardApp(app)

@@ -44,39 +44,22 @@ _STOP_FAILURE_ERRORS = frozenset(
 )
 
 
-def _add_duration(input_data: dict[str, Any], details: dict[str, Any]) -> None:
-    """Add a finished tool call's duration, preferring Claude Code's own timing.
+def _tool_duration(input_data: dict[str, Any]) -> float | None:
+    """Return a finished tool call's duration, preferring Claude Code's own timing.
 
     Args:
         input_data: The hook event, read for the agent's reported duration.
-        details: Telemetry details the duration is added to, in place.
+
+    Returns:
+        The duration in seconds, or ``None`` when unknown.
     """
     identity = common.tool_use_identity(input_data)
+    # Claimed even when Claude Code reports a duration, to remove the start record.
     measured = common.claim_tool_duration("claude", identity) if identity else None
     duration_ms = input_data.get("duration_ms")
     if isinstance(duration_ms, int | float) and not isinstance(duration_ms, bool):
-        details["duration"] = round(duration_ms / 1000, 1)
-    elif measured is not None:
-        details["duration"] = measured
-
-
-def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Claude Code PreToolUse event.
-
-    Args:
-        input_data: The hook event naming the tool about to run.
-
-    Returns:
-        The waiting state for a question tool, otherwise the acting state and
-        the tool details.
-    """
-    if input_data.get("tool_name") == "AskUserQuestion":
-        prompt = common.question_prompt(input_data.get("tool_input"))
-        return "Waiting for Input", {"prompt": prompt}
-
-    if (identity := common.tool_use_identity(input_data)) is not None:
-        common.record_tool_start("claude", identity)
-    return "Acting", common.tool_details(input_data, _COMMAND_FIELDS)
+        return round(duration_ms / 1000, 1)
+    return measured
 
 
 def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
@@ -93,10 +76,10 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     interrupted = isinstance(response, dict) and (
         response.get("interrupted") is True or common.is_cancelled(response)
     )
-    state, status = ("Idle", "cancelled") if interrupted else ("Thinking", "completed")
-    details = {**common.tool_details(input_data, {}), "status": status}
-    _add_duration(input_data, details)
-    return state, details
+    outcome = (
+        ("Idle", "cancelled", None) if interrupted else ("Thinking", "completed", None)
+    )
+    return common.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
 
 
 def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
@@ -109,16 +92,11 @@ def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
         The idle state for an interrupt, otherwise the error state, with the
         tool details and duration.
     """
-    details = common.tool_details(input_data, {})
     if input_data.get("is_interrupt") is True:
-        state = "Idle"
-        details["status"] = "cancelled"
+        outcome = ("Idle", "cancelled", None)
     else:
-        state = "Error"
-        details["status"] = "failed"
-        details["error"] = "Tool reported an error"
-    _add_duration(input_data, details)
-    return state, details
+        outcome = ("Error", "failed", "Tool reported an error")
+    return common.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
 
 
 def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
@@ -186,7 +164,12 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
 HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
-    "PreToolUse": _handle_pre_tool,
+    "PreToolUse": partial(
+        common.pre_tool_telemetry,
+        agent="claude",
+        question_tool="AskUserQuestion",
+        command_fields=_COMMAND_FIELDS,
+    ),
     "PermissionRequest": common.permission_request_telemetry,
     "PostToolUse": _handle_post_tool,
     "PostToolUseFailure": _handle_post_tool_failure,

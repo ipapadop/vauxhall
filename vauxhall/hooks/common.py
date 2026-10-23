@@ -17,6 +17,7 @@ from typing import Any
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.hooks.files import remove_old_files
 from vauxhall.hooks.identity import resolve_session_id
 from vauxhall.hooks.panes import forget_pane, record_pane
 
@@ -189,22 +190,8 @@ def _message_path(agent: str, identity: object) -> Path:
         json.dumps(identity, sort_keys=True, default=str).encode()
     ).hexdigest()
     directory = private_directory(f"vauxhall-messages-{agent}")
-    _sweep_stale_messages(directory)
+    remove_old_files(directory, "*.message", _MESSAGE_MAX_AGE_SECONDS)
     return directory / f"{key}.message"
-
-
-def _sweep_stale_messages(directory: Path) -> None:
-    """Remove message text left behind by responses that never finished.
-
-    Args:
-        directory: The agent's message directory to sweep.
-    """
-    cutoff = time.time() - _MESSAGE_MAX_AGE_SECONDS
-    with suppress(OSError):
-        for stale in directory.glob("*.message"):
-            with suppress(OSError):
-                if stale.stat().st_mtime < cutoff:
-                    stale.unlink(missing_ok=True)
 
 
 def discard_message_chunks(agent: str, identity: object) -> None:
@@ -480,6 +467,58 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
             claimed.unlink(missing_ok=True)
         return round(time.time() - started_at, 1)
     return None
+
+
+def pre_tool_telemetry(
+    input_data: dict[str, Any],
+    *,
+    agent: str,
+    question_tool: str,
+    command_fields: Mapping[str, str],
+) -> Telemetry:
+    """Translate an event for a tool about to run, keyed by its tool-use ID.
+
+    Args:
+        input_data: The hook event naming the tool about to run.
+        agent: The agent whose start times are recorded.
+        question_tool: The tool that asks the user a question.
+        command_fields: Input field holding the command, per tool name.
+
+    Returns:
+        The waiting state for the question tool, otherwise the acting state and
+        the tool details.
+    """
+    if input_data.get("tool_name") == question_tool:
+        return "Waiting for Input", {
+            "prompt": question_prompt(input_data.get("tool_input"))
+        }
+    if (identity := tool_use_identity(input_data)) is not None:
+        record_tool_start(agent, identity)
+    return "Acting", tool_details(input_data, command_fields)
+
+
+def tool_result_telemetry(
+    input_data: dict[str, Any],
+    outcome: tuple[str, str, str | None],
+    duration: float | None,
+) -> Telemetry:
+    """Build the telemetry for a finished tool call.
+
+    Args:
+        input_data: The hook event naming the tool.
+        outcome: The state, the status to show, and an error message or ``None``.
+        duration: The call's duration in seconds, or ``None`` when unknown.
+
+    Returns:
+        The state, with the tool details, status, error, and duration.
+    """
+    state, status, error = outcome
+    details = {**tool_details(input_data, {}), "status": status}
+    if error is not None:
+        details["error"] = error
+    if duration is not None:
+        details["duration"] = duration
+    return state, details
 
 
 def track_pane(hook_type: object, agent: str, session_id: str) -> None:

@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -175,6 +176,29 @@ def test_discard_message_chunks_prevents_next_turn_contamination(
         message = common.collect_message_chunk("gemini", ["session"], "new", final=True)
 
     assert message == "new"
+
+
+def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
+    tmp_path: Path,
+) -> None:
+    """Text of a response unfinished for over a day is removed on the next chunk.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.collect_message_chunk("codex", ["old"], "old", final=False)
+        common.collect_message_chunk("codex", ["recent"], "recent", final=False)
+        old, recent = sorted(
+            tmp_path.rglob("*.message"), key=lambda path: path.read_text()
+        )
+        day_ago = time.time() - 25 * 60 * 60
+        os.utime(old, (day_ago, day_ago))
+
+        common.collect_message_chunk("codex", ["new"], "new", final=False)
+
+    assert not old.exists()
+    assert recent.exists()
 
 
 @pytest.mark.skipif(

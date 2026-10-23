@@ -24,6 +24,19 @@ export function agentKey(data) {
 }
 
 /**
+ * Reads the identity a card was built from.
+ * @param {HTMLElement} card - The agent card element.
+ * @returns {{agent: string, workspace: string, session_id: string}} The identity.
+ */
+export function cardIdentity(card) {
+    return {
+        agent: card.querySelector('.agent-name')?.textContent || '',
+        workspace: card.querySelector('.agent-workspace')?.textContent || '',
+        session_id: card.querySelector('.agent-session')?.title || '',
+    };
+}
+
+/**
  * Snapshots each card's identity and last known state for persistence.
  * Never includes prompt, message, command, error, token, or history content.
  * @param {object} agents - The agents state object.
@@ -33,9 +46,7 @@ export function agentKey(data) {
 export function snapshotAgents(agents) {
     return Object.values(agents).map(card => {
         const entry = {
-            agent: card.querySelector('.agent-name')?.textContent || '',
-            workspace: card.querySelector('.agent-workspace')?.textContent || '',
-            session_id: card.querySelector('.agent-session')?.title || '',
+            ...cardIdentity(card),
             state: card.dataset.state || 'Idle',
             last_seen: Number(card.dataset.lastSeen || 0),
         };
@@ -82,8 +93,6 @@ export function ensureAgentCapacity(maxAgents) {
  * @param {object} data - The telemetry data.
  */
 export function updateAgentHistory(card, data) {
-    card.history ??= [];
-
     card.history.unshift({
         time: new Date().toLocaleTimeString(),
         state: data.state,

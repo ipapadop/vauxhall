@@ -133,6 +133,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
     const sessionElement = card.querySelector('.agent-session');
     sessionElement.textContent = `Session: ${sessionId}`;
     sessionElement.title = sessionId;
+    card.history = [];
 
     // Concurrent sessions can share an agent and a workspace, so the names
     // carry the whole card identity.

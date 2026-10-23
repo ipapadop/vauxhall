@@ -121,14 +121,10 @@ def _handle_after_tool(input_data: dict[str, Any]) -> common.Telemetry:
     Returns:
         The state for the response, with the tool details and duration.
     """
-    state, status, error = _classify_tool_response(input_data.get("tool_response"))
-    details = {**common.tool_details(input_data, {}), "status": status}
-    if error is not None:
-        details["error"] = error
     duration = common.claim_tool_duration("gemini", _tool_call_identity(input_data))
-    if duration is not None:
-        details["duration"] = duration
-    return state, details
+    return common.tool_result_telemetry(
+        input_data, _classify_tool_response(input_data.get("tool_response")), duration
+    )
 
 
 def _handle_pre_compress(input_data: dict[str, Any]) -> common.Telemetry:

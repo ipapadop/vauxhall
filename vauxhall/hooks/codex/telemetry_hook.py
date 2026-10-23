@@ -36,25 +36,6 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     return "Thinking", "result unavailable", None
 
 
-def _handle_pre_tool(input_data: dict[str, Any]) -> common.Telemetry:
-    """Translate a Codex PreToolUse event.
-
-    Args:
-        input_data: The hook event naming the tool about to run.
-
-    Returns:
-        The waiting state for a question tool, otherwise the acting state and
-        the tool details.
-    """
-    if input_data.get("tool_name") == "request_user_input":
-        prompt = common.question_prompt(input_data.get("tool_input"))
-        return "Waiting for Input", {"prompt": prompt}
-
-    if (identity := common.tool_use_identity(input_data)) is not None:
-        common.record_tool_start("codex", identity)
-    return "Acting", common.tool_details(input_data, _COMMAND_FIELDS)
-
-
 def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     """Translate a Codex PostToolUse event.
 
@@ -64,16 +45,11 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     Returns:
         The state for the response, with the tool details and duration.
     """
-    state, status, error = _classify_tool_response(input_data.get("tool_response"))
-    details = {**common.tool_details(input_data, {}), "status": status}
-    if error is not None:
-        details["error"] = error
     identity = common.tool_use_identity(input_data)
-    if identity is not None:
-        duration = common.claim_tool_duration("codex", identity)
-        if duration is not None:
-            details["duration"] = duration
-    return state, details
+    duration = common.claim_tool_duration("codex", identity) if identity else None
+    return common.tool_result_telemetry(
+        input_data, _classify_tool_response(input_data.get("tool_response")), duration
+    )
 
 
 def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
@@ -95,7 +71,12 @@ def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
 HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
-    "PreToolUse": _handle_pre_tool,
+    "PreToolUse": partial(
+        common.pre_tool_telemetry,
+        agent="codex",
+        question_tool="request_user_input",
+        command_fields=_COMMAND_FIELDS,
+    ),
     "PermissionRequest": common.permission_request_telemetry,
     "PostToolUse": _handle_post_tool,
     "SubagentStart": common.subagent_start_telemetry,

@@ -11,11 +11,11 @@ import hashlib
 import json
 import os
 import re
-import time
 from collections.abc import Mapping
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+
+from vauxhall.hooks.files import remove_old_files
 
 _PANE_PATTERN = re.compile(r"%\d+")
 _MAX_AGE_SECONDS = 30 * 24 * 60 * 60
@@ -62,20 +62,6 @@ def _record_path(agent: str, session_id: str) -> Path:
     return panes_directory() / f"{key}.json"
 
 
-def _sweep_old_records(directory: Path) -> None:
-    """Remove records of sessions that have not started in a long time.
-
-    Args:
-        directory: The records directory.
-    """
-    cutoff = time.time() - _MAX_AGE_SECONDS
-    with suppress(OSError):
-        for record in directory.glob("*.json"):
-            with suppress(OSError):
-                if record.stat().st_mtime < cutoff:
-                    record.unlink(missing_ok=True)
-
-
 def _server_details(tmux: str) -> tuple[str | None, int | None]:
     """Split ``$TMUX`` into the server socket and process ID.
 
@@ -120,7 +106,7 @@ def record_pane(
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         json.dump({"pane": pane, "socket": socket, "server_pid": server_pid}, handle)
     temporary.replace(path)
-    _sweep_old_records(path.parent)
+    remove_old_files(path.parent, "*.json", _MAX_AGE_SECONDS)
 
 
 def forget_pane(agent: str, session_id: str) -> None:

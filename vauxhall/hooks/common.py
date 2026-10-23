@@ -17,6 +17,7 @@ from typing import Any
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.hooks.files import remove_old_files
 from vauxhall.hooks.identity import resolve_session_id
 from vauxhall.hooks.panes import forget_pane, record_pane
 
@@ -189,22 +190,8 @@ def _message_path(agent: str, identity: object) -> Path:
         json.dumps(identity, sort_keys=True, default=str).encode()
     ).hexdigest()
     directory = private_directory(f"vauxhall-messages-{agent}")
-    _sweep_stale_messages(directory)
+    remove_old_files(directory, "*.message", _MESSAGE_MAX_AGE_SECONDS)
     return directory / f"{key}.message"
-
-
-def _sweep_stale_messages(directory: Path) -> None:
-    """Remove message text left behind by responses that never finished.
-
-    Args:
-        directory: The agent's message directory to sweep.
-    """
-    cutoff = time.time() - _MESSAGE_MAX_AGE_SECONDS
-    with suppress(OSError):
-        for stale in directory.glob("*.message"):
-            with suppress(OSError):
-                if stale.stat().st_mtime < cutoff:
-                    stale.unlink(missing_ok=True)
 
 
 def discard_message_chunks(agent: str, identity: object) -> None:

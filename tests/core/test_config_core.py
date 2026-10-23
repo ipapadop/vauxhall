@@ -88,7 +88,7 @@ def test_mqtt_keepalive_accepts_locked_boundaries(tmp_path: Path) -> None:
 
     assert (
         ConfigResolver("vauxhall.json", config_file)
-        .resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT")
+        .resolve_dataclass(MQTTConfig, "mqtt")
         .keepalive
         == 0
     )
@@ -96,7 +96,7 @@ def test_mqtt_keepalive_accepts_locked_boundaries(tmp_path: Path) -> None:
     config_file.write_text(json.dumps({"mqtt": {"keepalive": 65535}}), encoding="utf-8")
     assert (
         ConfigResolver("vauxhall.json", config_file)
-        .resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT")
+        .resolve_dataclass(MQTTConfig, "mqtt")
         .keepalive
         == 65535
     )
@@ -119,5 +119,5 @@ def test_mqtt_keepalive_rejects_values_outside_locked_boundaries(
 
     with pytest.raises(ConfigurationError, match=r"mqtt\.keepalive.*0\.\.65535"):
         ConfigResolver("vauxhall.json", config_file).resolve_dataclass(
-            MQTTConfig, "mqtt", "VAUXHALL_MQTT"
+            MQTTConfig, "mqtt"
         )

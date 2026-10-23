@@ -30,7 +30,7 @@ def load_mqtt(tmp_path: Path, mqtt: dict[str, object]) -> MQTTConfig:
     path = tmp_path / "vauxhall_hooks.json"
     path.write_text(json.dumps({"mqtt": mqtt}), encoding="utf-8")
     return ConfigResolver("vauxhall_hooks.json", path).resolve_dataclass(
-        MQTTConfig, "mqtt", "VAUXHALL_MQTT"
+        MQTTConfig, "mqtt"
     )
 
 

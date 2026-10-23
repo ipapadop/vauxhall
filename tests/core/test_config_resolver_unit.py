@@ -44,8 +44,8 @@ def test_resolve_dataclass_parses_boolean_environment_values(
         expected: The boolean it stands for.
     """
     resolver = ConfigResolver("test_config.json")
-    with patch.dict(os.environ, {"VAUXHALL_ENABLED": value}):
-        config = resolver.resolve_dataclass(MockConfig, "test", "VAUXHALL")
+    with patch.dict(os.environ, {"VAUXHALL_TEST_ENABLED": value}):
+        config = resolver.resolve_dataclass(MockConfig, "test")
 
     assert config.enabled is expected
 
@@ -55,7 +55,7 @@ def test_resolve_dataclass() -> None:
     resolver = ConfigResolver("test_config.json")
 
     # 1. Test with defaults
-    config = resolver.resolve_dataclass(MockConfig, "test", "VAUXHALL")
+    config = resolver.resolve_dataclass(MockConfig, "test")
     assert config.host == "localhost"
     assert config.port == 1883
     assert config.enabled is True
@@ -67,7 +67,7 @@ def test_resolve_dataclass() -> None:
         patch("vauxhall.core.config.load_config_data", return_value=json_data),
     ):
         resolver_json = ConfigResolver("test_config.json")
-        config = resolver_json.resolve_dataclass(MockConfig, "test", "VAUXHALL")
+        config = resolver_json.resolve_dataclass(MockConfig, "test")
         assert config.host == "json.host"
         assert config.port == 9000
         assert config.enabled is True
@@ -76,13 +76,13 @@ def test_resolve_dataclass() -> None:
     with patch.dict(
         os.environ,
         {
-            "VAUXHALL_HOST": "env.host",
-            "VAUXHALL_PORT": "1234",
-            "VAUXHALL_ENABLED": "false",
+            "VAUXHALL_TEST_HOST": "env.host",
+            "VAUXHALL_TEST_PORT": "1234",
+            "VAUXHALL_TEST_ENABLED": "false",
         },
     ):
         resolver_env = ConfigResolver("test_config.json")
-        config = resolver_env.resolve_dataclass(MockConfig, "test", "VAUXHALL")
+        config = resolver_env.resolve_dataclass(MockConfig, "test")
         assert config.host == "env.host"
         assert config.port == 1234
         assert config.enabled is False

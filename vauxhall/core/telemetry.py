@@ -52,8 +52,10 @@ def _is_valid_details(details: object) -> bool:
     return True
 
 
-def _identity_validation_error(payload: dict[str, Any]) -> str | None:
-    """Validate bounded identity fields without exposing their values.
+def identity_validation_error(payload: dict[str, Any]) -> str | None:
+    """Validate the bounded identity fields without exposing their values.
+
+    The dashboard's saved cards use the same fields and rules.
 
     Args:
         payload: The telemetry payload to check.
@@ -98,7 +100,7 @@ def telemetry_validation_error(payload: object) -> str | None:  # noqa: PLR0911
         or payload["schema_version"] != SCHEMA_VERSION
     ):
         return f"unsupported schema_version; expected {SCHEMA_VERSION}"
-    identity_error = _identity_validation_error(payload)
+    identity_error = identity_validation_error(payload)
     if identity_error is not None:
         return identity_error
     if set(payload) - _ALLOWED_FIELDS:

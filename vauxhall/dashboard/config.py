@@ -54,13 +54,9 @@ class DashboardConfig:
         resolver = ConfigResolver("vauxhall_dashboard.json", config_path)
 
         return cls(
-            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT"),
-            logging=resolver.resolve_dataclass(
-                LoggingConfig, "logging", "VAUXHALL_LOGGING"
-            ),
-            dashboard=resolver.resolve_dataclass(
-                UIConfig, "dashboard", "VAUXHALL_DASHBOARD"
-            ),
+            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt"),
+            logging=resolver.resolve_dataclass(LoggingConfig, "logging"),
+            dashboard=resolver.resolve_dataclass(UIConfig, "dashboard"),
         )
 
 

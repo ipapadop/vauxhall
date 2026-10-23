@@ -57,6 +57,19 @@ class ConfigurationError(ValueError):
 PASSWORD_ENV = "VAUXHALL_MQTT_PASSWORD"  # noqa: S105
 
 
+def env_var_name(section: str, key: str) -> str:
+    """Return the environment variable that overrides a configuration field.
+
+    Args:
+        section: The section in the JSON config, such as "mqtt".
+        key: The field within the section, such as "port".
+
+    Returns:
+        The variable name, such as "VAUXHALL_MQTT_PORT".
+    """
+    return f"VAUXHALL_{section.upper()}_{key.upper()}"
+
+
 @dataclass
 class MQTTConfig:
     """MQTT client configuration.
@@ -265,13 +278,13 @@ class ConfigResolver:
             return section_data[key], f"{self.config_path}:{section}.{key}"
         return None
 
-    def resolve_dataclass(self, cls: type[T], section: str, env_prefix: str) -> T:
+    def resolve_dataclass(self, cls: type[T], section: str) -> T:
         """Automatically resolve all fields for a dataclass.
 
         Args:
             cls: The dataclass type to instantiate.
-            section: The section in the JSON config.
-            env_prefix: The prefix for environment variables.
+            section: The section in the JSON config, which also names each
+                field's environment variable (see ``env_var_name``).
 
         Returns:
             T: An instance of the dataclass.
@@ -279,7 +292,7 @@ class ConfigResolver:
         config = cls(
             **{
                 f.name: self._resolve(
-                    f"{env_prefix}_{f.name.upper()}",
+                    env_var_name(section, f.name),
                     section,
                     f.name,
                     _field_default(f),

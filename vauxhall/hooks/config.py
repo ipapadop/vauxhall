@@ -38,10 +38,8 @@ class HookConfig:
         """
         resolver = ConfigResolver("vauxhall_hooks.json", config_path)
         return cls(
-            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt", "VAUXHALL_MQTT"),
-            logging=resolver.resolve_dataclass(
-                LoggingConfig, "logging", "VAUXHALL_LOGGING"
-            ),
+            mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt"),
+            logging=resolver.resolve_dataclass(LoggingConfig, "logging"),
         )
 
 

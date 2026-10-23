@@ -104,8 +104,10 @@ def test_clean_drops_card_without_env() -> None:
     "changes",
     [
         {"agent": ""},
+        {"agent": "   "},
         {"agent": "x" * 129},
         {"workspace": ""},
+        {"workspace": "x" * 4097},
         {"session_id": "x" * 257},
         {"state": "STALE"},
         {"state": "bogus"},

@@ -14,15 +14,12 @@ from typing import Any
 from vauxhall.core.config import load_config_data
 from vauxhall.core.config_store import user_config_path, write_json_atomically
 from vauxhall.core.logging import get_logger
-from vauxhall.core.telemetry import SUPPORTED_STATES
+from vauxhall.core.telemetry import identity_validation_error
 
 logger = get_logger(__name__)
 
 STATE_FILE = "dashboard_cards.json"
 
-_STRING_FIELDS = ("agent", "workspace", "session_id")
-_STRING_LIMITS = {"agent": 128, "workspace": 4096, "session_id": 256}
-_ENVS = {"local", "remote"}
 # A defensive cap on a hand-edited or corrupt file; the frontend already
 # bounds what it saves to the configured max_active_agents.
 _MAX_CARDS = 1000
@@ -49,15 +46,7 @@ def _is_valid_card(card: object) -> bool:
     Returns:
         Whether every required field is present and within its bounds.
     """
-    if not isinstance(card, dict):
-        return False
-    for field in _STRING_FIELDS:
-        value = card.get(field)
-        if not isinstance(value, str) or not 0 < len(value) <= _STRING_LIMITS[field]:
-            return False
-    if card.get("state") not in SUPPORTED_STATES:
-        return False
-    if "env" in card and card["env"] not in _ENVS:
+    if not isinstance(card, dict) or identity_validation_error(card) is not None:
         return False
     return _is_last_seen(card.get("last_seen"))
 

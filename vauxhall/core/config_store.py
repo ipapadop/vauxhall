@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from vauxhall.core.config import ConfigurationError, find_config_file, load_config_data
+from vauxhall.core.config import (
+    ConfigurationError,
+    env_var_name,
+    find_config_file,
+    load_config_data,
+)
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,7 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
             message = f"{location}: {section} must be an object, got {section_data!r}"
             raise ConfigurationError(message)
         for key in values:
-            environment_variable = f"VAUXHALL_{section.upper()}_{key.upper()}"
+            environment_variable = env_var_name(section, key)
             if environment_variable in os.environ:
                 source = FieldSource(
                     "environment", environment_variable, editable=False

@@ -73,16 +73,43 @@ On older releases, install `libasound2` instead of `libasound2t64`. Run
 is a desktop window: it needs a graphical session, and doesn't run over plain
 SSH.
 
-**The dashboard crashes, or its window stays blank, on a machine without a
-working GPU**, such as a virtual machine or a remote desktop, often after
-`Unable to initialize SkSurface` or `Context lost`. Turn off the embedded
-browser's GPU use:
+**The dashboard window stays blank**, often with
+`Compositor returned null texture` in the log. The page loaded (the log says
+`Frontend signaled readiness`), but the window can't display it with the
+current graphics backend. This happens with OpenGL on Linux under Wayland,
+which is why the default, `auto`, uses Vulkan there. Try, in order:
 
-```bash
-QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu" vauxhall
-```
+1. Another [graphics backend](configuration.md#graphics-backend): set
+   `dashboard.graphics_backend` to `vulkan`, or to `software` if the machine
+   has no usable GPU. For one run:
 
-The dashboard adds these flags after the ones Pyloid sets.
+   ```bash
+   VAUXHALL_DASHBOARD_GRAPHICS_BACKEND=software vauxhall
+   ```
+
+2. On Linux under Wayland, the X11 compatibility layer (XWayland), which keeps
+   the GPU:
+
+   ```bash
+   QT_QPA_PLATFORM=xcb vauxhall
+   ```
+
+3. Qt's and Chromium's own variables, which take precedence over the setting:
+   `QSG_RHI_BACKEND` (`vulkan`, `opengl`, and on other platforms `metal`,
+   `d3d11`, or `d3d12`), and `QTWEBENGINE_CHROMIUM_FLAGS`, which the dashboard
+   adds after the flags Pyloid sets.
+
+If the log says `Vulkan is not available`, the dashboard found no Vulkan
+driver and let Qt choose; use `software` or XWayland.
+
+**The dashboard crashes on a machine without a working GPU**, such as a
+virtual machine or a remote desktop, often after
+`Unable to initialize SkSurface` or `Context lost`. Set
+`dashboard.graphics_backend` to `software`, as above.
+
+**`aiohttp.server: Failed to create request handler with custom kwargs`**
+repeats in the log. It is harmless: Pyloid passes aiohttp an option it doesn't
+accept, and aiohttp continues without it.
 
 **The dashboard stops with `Invalid configuration value`.** The message names
 the environment variable or file, the field, the value, and what is expected.

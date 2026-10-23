@@ -56,6 +56,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A complete source distribution that can run every Python and frontend test.
 - A tag-triggered release workflow that tests, builds, checks, and attaches
   the wheel and source distribution to a GitHub release.
+- A `dashboard.graphics_backend` setting (`auto`, `vulkan`, `opengl`, or
+  `software`) that chooses how the window draws the page; see
+  [configuration](https://github.com/ipapadop/vauxhall/blob/main/docs/configuration.md#graphics-backend).
 
 ### Fixed
 
@@ -68,6 +71,9 @@ The first release, planned as 0.1.0. It is alpha software; see
   embedded browser. Before, importing Pyloid replaced them, so flags such as
   `--disable-gpu` had no effect; see
   [troubleshooting](https://github.com/ipapadop/vauxhall/blob/main/docs/troubleshooting.md#dashboard-startup).
+- The dashboard window shows the page on Linux under Wayland. Before, Qt's
+  OpenGL default could leave it blank; the dashboard now uses Vulkan on Linux
+  when a Vulkan driver is available.
 - The dashboard starts once when Pyloid signals readiness after the page
   loads. Before, it could start twice, registering every event listener and
   the readiness signal two times.

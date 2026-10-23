@@ -7,6 +7,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 
 def test_dashboard_main_initializes_configured_logging() -> None:
     """The dashboard entry point must initialize logging before it runs."""
@@ -76,3 +78,53 @@ vauxhall.dashboard.app.main()
         "--disable-gpu",
         "--no-sandbox",
     ]
+
+
+@pytest.mark.parametrize(
+    ("backend", "expected_rhi", "expected_last_flag"),
+    [("opengl", "opengl", "--no-sandbox"), ("software", "", "--disable-gpu")],
+)
+def test_dashboard_main_applies_the_graphics_backend(
+    backend: str, expected_rhi: str, expected_last_flag: str
+) -> None:
+    """``main`` applies the configured graphics backend before creating Pyloid.
+
+    Args:
+        backend: The configured graphics backend.
+        expected_rhi: The ``QSG_RHI_BACKEND`` Qt sees, empty when unset.
+        expected_last_flag: The last Chromium flag Qt sees.
+    """
+    code = """
+import os
+
+import vauxhall.dashboard.app
+
+def stop(*_, **__):
+    print("rhi:", os.environ.get("QSG_RHI_BACKEND", ""))
+    print("flags:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+    raise SystemExit(0)
+
+vauxhall.dashboard.app.Pyloid = stop
+vauxhall.dashboard.app.main()
+"""
+    env = {
+        **os.environ,
+        "QTWEBENGINE_CHROMIUM_FLAGS": "--no-sandbox",
+        "VAUXHALL_DASHBOARD_GRAPHICS_BACKEND": backend,
+    }
+    env.pop("QSG_RHI_BACKEND", None)
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
+
+    lines = dict(
+        line.partition(": ")[::2]
+        for line in result.stdout.splitlines()
+        if line.startswith(("rhi:", "flags:"))
+    )
+    assert lines["rhi"] == expected_rhi
+    assert lines["flags"].split()[-1] == expected_last_flag

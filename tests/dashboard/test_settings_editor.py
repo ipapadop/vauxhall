@@ -79,7 +79,7 @@ def test_describe_settings_lists_every_field() -> None:
     described = describe_settings(dashboard_settings)
     fields = {field["key"]: field for field in described["fields"]}
 
-    assert len(fields) == 19
+    assert len(fields) == 20
     assert fields["mqtt.port"] == {
         "key": "mqtt.port",
         "section": "mqtt",
@@ -110,6 +110,13 @@ def test_describe_settings_lists_every_field() -> None:
     assert fields["logging.level"]["apply"] == "live"
     assert fields["dashboard.debug"]["type"] == "boolean"
     assert fields["dashboard.window_title"]["apply"] == "restart"
+    assert fields["dashboard.graphics_backend"]["choices"] == [
+        "auto",
+        "opengl",
+        "software",
+        "vulkan",
+    ]
+    assert fields["dashboard.graphics_backend"]["apply"] == "restart"
     assert "dashboard.agent_denylist" not in fields
     assert described["agent_denylist"] == []
     assert described["agent_denylist_editable"] is True
@@ -144,7 +151,7 @@ def test_describe_settings_reports_hooks_file_error() -> None:
 
     assert "not valid JSON" in described["hooks_error"]
     assert described["hooks_mqtt"] is None
-    assert len(described["fields"]) == 19
+    assert len(described["fields"]) == 20
 
 
 def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
@@ -630,7 +637,7 @@ def test_ipc_get_settings_returns_json() -> None:
     """The bridge returns the settings description as JSON."""
     described = json.loads(DashboardIPC().get_settings())
 
-    assert len(described["fields"]) == 19
+    assert len(described["fields"]) == 20
 
 
 def test_ipc_get_settings_reports_malformed_file() -> None:

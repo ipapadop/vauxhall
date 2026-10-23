@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 # Agent Integrations
 
 Vauxhall works with any agent that can publish JSON over MQTT. It ships hooks
-for Claude Code, Codex, and Gemini CLI; other agents can use `TelemetryClient`
+for Claude Code, Codex, and Gemini CLI; other agents can use the Python client
 or publish messages directly. [privacy.md](privacy.md) summarizes what each
 integration publishes and how to limit it.
 
@@ -17,40 +17,46 @@ integration publishes and how to limit it.
 ```python
 from uuid import uuid4
 
-from vauxhall.hooks.client import TelemetryClient
+from vauxhall.core.config import MQTTConfig
+from vauxhall.hooks.client import publish
 
-session_id = str(uuid4())
-client = TelemetryClient(host="localhost", port=1883)
+session = {
+    "agent": "MyAgent",
+    "workspace": "/path/to/project",
+    "session_id": str(uuid4()),
+}
 
 # Report a running tool with metrics and environment
-delivered = client.send(
-    agent="MyAgent",
-    workspace="/path/to/project",
-    session_id=session_id,
-    state="Acting",
-    env="local",  # Optional: "local" or "remote"
-    tool="grep",
-    cmd="grep -r 'TODO' .",
-    tokens=1245,  # Optional
-    duration=12.4,  # Optional, in seconds
+delivered = publish(
+    [
+        {
+            **session,
+            "state": "Acting",
+            "env": "local",  # Optional: "local" or "remote"
+            "details": {
+                "tool": "grep",
+                "cmd": "grep -r 'TODO' .",
+                "tokens": 1245,  # Optional
+                "duration": 12.4,  # Optional, in seconds
+            },
+        }
+    ],
+    MQTTConfig(host="localhost", port=1883),
 )
 
-# Report that the agent is done
-client.send(
-    agent="MyAgent",
-    workspace="/path/to/project",
-    session_id=session_id,
-    state="Idle",
-)
+# Report that the agent is done, with the hooks' broker settings
+publish([{**session, "state": "Idle"}])
 ```
 
-`send()` validates the event, publishes it at QoS 1, and waits up to one second
-for the broker's acknowledgment. It returns `True` only when the broker
-acknowledges the message; validation, connection, and publish failures return
-`False` instead of raising. Use the client as a context manager to send several
-events over one connection. Importing the client or configuration modules does
-not change the host application's logging; the dashboard and hook entry points
-configure logging when they run.
+Each event is the [telemetry schema](#telemetry-schema) without
+`schema_version`, which `publish()` adds. It publishes the events at QoS 1
+over one connection and waits up to one second in total for the broker's
+acknowledgments. It returns `True` only when every event is valid and
+acknowledged; an invalid event is skipped, and validation, connection, and
+publish failures return `False` instead of raising. Without an `MQTTConfig`,
+it uses the [hooks' broker settings](configuration.md). Importing the client or
+configuration modules does not change the host application's logging; the
+dashboard and hook entry points configure logging when they run.
 
 ### Raw MQTT (Any Language)
 
@@ -100,7 +106,7 @@ variable. If none is available, the hook skips the event.
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid
 telemetry. Rejection logs never include payload values. The dashboard and
-`TelemetryClient` share one validator, `vauxhall.core.telemetry`.
+`publish()` share one validator, `vauxhall.core.telemetry`.
 
 ## Supported States
 

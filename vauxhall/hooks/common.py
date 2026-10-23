@@ -13,15 +13,12 @@ import time
 from collections.abc import Callable, Mapping
 from contextlib import redirect_stdout, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.hooks.identity import resolve_session_id
 from vauxhall.hooks.panes import forget_pane, record_pane
-
-if TYPE_CHECKING:
-    from vauxhall.hooks.client import TelemetryClient
 
 logger = get_logger(__name__)
 
@@ -485,19 +482,6 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
     return None
 
 
-def create_telemetry_client() -> "TelemetryClient":
-    """Create a telemetry client whose connection attempt fits the hook timeout.
-
-    Returns:
-        A client with a connect timeout short enough for a hook to finish.
-    """
-    from vauxhall.hooks.client import TelemetryClient  # noqa: PLC0415
-
-    client = TelemetryClient()
-    client.client.connect_timeout = 1.0
-    return client
-
-
 def track_pane(hook_type: object, agent: str, session_id: str) -> None:
     """Keep the local tmux pane record of a session in step with its lifecycle.
 
@@ -522,7 +506,7 @@ def publish_telemetry(
     input_data: dict[str, Any],
     agent: str,
     handlers: Mapping[str, EventHandler],
-    create_client: Callable[[], "TelemetryClient"] | None = None,
+    publish: Callable[[list[dict[str, Any]]], bool] | None = None,
     messages: list[str] | None = None,
 ) -> None:
     """Translate one hook event with its handler and publish the telemetry.
@@ -533,8 +517,8 @@ def publish_telemetry(
         input_data: The hook event to translate.
         agent: The agent name published with the telemetry.
         handlers: Event handler, keyed by hook event name.
-        create_client: Factory for the telemetry client, defaulting to
-            ``create_telemetry_client``.
+        publish: Publishes the events, defaulting to
+            ``vauxhall.hooks.client.publish``.
         messages: Interim assistant messages to publish before the event.
     """
     hook_type = input_data.get("hook_event_name")
@@ -554,15 +538,22 @@ def publish_telemetry(
     ]
     if telemetry is not None:
         events.append(telemetry)
-    with (create_client or create_telemetry_client)() as client:
-        for state, details in events:
-            client.send(
-                agent=agent,
-                workspace=input_data.get("cwd", str(Path.cwd())),
-                session_id=session_id,
-                state=state,
-                **details,
-            )
+    if publish is None:
+        from vauxhall.hooks.client import publish  # noqa: PLC0415
+
+    workspace = input_data.get("cwd", str(Path.cwd()))
+    publish(
+        [
+            {
+                "agent": agent,
+                "workspace": workspace,
+                "session_id": session_id,
+                "state": state,
+                "details": details,
+            }
+            for state, details in events
+        ]
+    )
 
 
 def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:

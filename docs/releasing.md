@@ -33,7 +33,7 @@ These are Vauxhall's public interfaces:
 | Telemetry schema | A payload that validates today keeps validating until `schema_version` changes. A new schema version is announced in the changelog, and the dashboard keeps accepting the previous one for at least one minor release, so hooks and dashboards can be upgraded separately. |
 | Commands | `vauxhall` and `vauxhall-hook-install`, with their arguments. |
 | Configuration | The files, fields, environment variables, and defaults in [configuration.md](configuration.md). |
-| Python API | `vauxhall.hooks.client.TelemetryClient`, `vauxhall.core.telemetry`, and `vauxhall.core.config_store`. Everything else is internal. |
+| Python API | `publish` and `format_message` in `vauxhall.hooks.client`, `vauxhall.core.telemetry`, and `vauxhall.core.config_store`. Everything else is internal. |
 | Hook registrations | The hook events and settings files the installers write, as listed in [integrations.md](integrations.md). |
 | Python and operating systems | The versions in the [compatibility table](../README.md#compatibility). Dropping one needs a minor release. |
 

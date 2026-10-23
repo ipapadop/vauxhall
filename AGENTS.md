@@ -25,7 +25,7 @@ flowchart LR
         cx["Codex"]
         gm["Gemini CLI"]
         hook["Hook process<br>(.vauxhall-venv)"]
-        client["TelemetryClient"]
+        client["publish()"]
         cc --> hook
         cx --> hook
         gm --> hook
@@ -93,10 +93,10 @@ sequenceDiagram
    resolves the session ID from the agent's own session ID, a hash of the
    transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
    skipped.
-3. **The client publishes it.** `TelemetryClient` validates the payload against
-   schema version 1, publishes it at QoS 1 to
-   `vauxhall/agents/<agent_name>/activity`, and waits up to one second for the
-   broker's acknowledgment. The hook always writes valid protocol JSON on
+3. **The client publishes it.** `publish()` validates each payload against
+   schema version 1, publishes the hook's events at QoS 1 over one connection
+   to `vauxhall/agents/<agent_name>/activity`, and waits up to one second in
+   total for the broker's acknowledgments. The hook always writes valid protocol JSON on
    stdout, even when telemetry fails, so the agent is never blocked.
 4. **The broker routes it.** Mosquitto delivers the message to the dashboard,
    which subscribes to `vauxhall/agents/+/activity`.
@@ -410,8 +410,9 @@ can't be encrypted, because a hook can't prompt for a passphrase. The password
 is deliberately not a field: `MQTTConfig.password()` reads
 `VAUXHALL_MQTT_PASSWORD`, else `password_file`, so no code that walks the
 fields (`asdict`, `field_sources`, the settings dialog, `save_user_config`)
-can expose or write it. The hooks' clients configure lazily in `_connect`, so a
-failed setup ends the attempt instead of falling back to plaintext. "Update
+can expose or write it. `publish()` configures each connection before
+connecting, so a failed setup ends the attempt instead of falling back to
+plaintext. "Update
 hooks" in the settings dialog copies only `HOOKS_SYNCED_MQTT` (`host`, `port`,
 `keepalive`, `tls`, `ca_certs`), never an identity; `describe_settings` marks
 each field with `hooks_synced` so the frontend skips the others.

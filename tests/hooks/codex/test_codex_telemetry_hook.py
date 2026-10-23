@@ -13,27 +13,26 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.hooks.recording import record_published
 from vauxhall.hooks.codex.telemetry_hook import _classify_tool_response, main
 
 
 def _run(hook_data: dict) -> MagicMock:
-    """Run the Codex hook for one event and return the mocked client.
+    """Run the Codex hook for one event and return the recorded events.
 
     Args:
         hook_data: The hook event to feed the hook on stdin.
 
     Returns:
-        The mocked telemetry client.
+        The mock recording each published event.
     """
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
-    return client
+    return published
 
 
 def test_codex_hook_outputs_valid_json() -> None:
@@ -67,7 +66,7 @@ def test_codex_hook_outputs_valid_json() -> None:
 
 def test_codex_stop_publishes_final_message() -> None:
     """The final assistant reply is sent when Codex completes a turn."""
-    client = _run(
+    published = _run(
         {
             "hook_event_name": "Stop",
             "session_id": "session-123",
@@ -76,7 +75,7 @@ def test_codex_stop_publishes_final_message() -> None:
         }
     )
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Codex",
         workspace="/workspace",
         session_id="native:session-123",
@@ -151,15 +150,15 @@ def test_codex_publishes_new_interim_messages_from_transcript(tmp_path: Path) ->
             "tool_name": "Bash",
             "tool_input": {"command": "pwd"},
         }
-        client = _run(event)
+        published = _run(event)
         repeated = _run(event)
 
-    assert [call.kwargs.get("message") for call in client.send.call_args_list] == [
+    assert [call.kwargs.get("message") for call in published.call_args_list] == [
         "First update",
         "Second update",
         None,
     ]
-    repeated.send.assert_called_once()
+    repeated.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -214,15 +213,13 @@ def test_codex_post_tool_does_not_publish_response_content() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    assert client.send.call_args.kwargs == {
+    assert published.call_args.kwargs == {
         "agent": "Codex",
         "workspace": "/workspace",
         "state": "Error",
@@ -231,7 +228,7 @@ def test_codex_post_tool_does_not_publish_response_content() -> None:
         "error": "Bash failed (exit code 2)",
         "session_id": "native:session-123",
     }
-    assert "secret" not in json.dumps(client.send.call_args.kwargs)
+    assert "secret" not in json.dumps(published.call_args.kwargs)
 
 
 @pytest.mark.parametrize(
@@ -332,15 +329,13 @@ def test_codex_events_publish_dashboard_states(hook_data: dict, expected: dict) 
     output = StringIO()
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", output),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    client.send.assert_called_once_with(**expected)
+    published.assert_called_once_with(**expected)
     assert output.getvalue() == "{}\n"
 
 
@@ -358,15 +353,13 @@ def test_codex_request_user_input_is_waiting() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Codex",
         workspace="/workspace",
         session_id="native:session-123",
@@ -387,15 +380,13 @@ def test_codex_tool_input_does_not_publish_arbitrary_fields() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    details = client.send.call_args.kwargs
+    details = published.call_args.kwargs
     assert "args" not in details
     assert "secret" not in json.dumps(details)
 
@@ -412,15 +403,13 @@ def test_codex_apply_patch_does_not_publish_patch_contents() -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("sys.stdin", StringIO(json.dumps(hook_data))),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
         main()
 
-    assert client.send.call_args.kwargs == {
+    assert published.call_args.kwargs == {
         "agent": "Codex",
         "workspace": "/workspace",
         "session_id": "native:session-123",
@@ -450,7 +439,7 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
     }
 
     with (
-        patch("vauxhall.hooks.common.create_telemetry_client") as client_factory,
+        record_published() as published,
         patch("vauxhall.hooks.common.time.time") as current_time,
         patch(
             "vauxhall.hooks.common.tempfile.gettempdir",
@@ -458,9 +447,6 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
         ),
         patch("sys.stdout", new=StringIO()),
     ):
-        client = client_factory.return_value
-        client.__enter__.return_value = client
-
         current_time.return_value = 1000.0
         with patch("sys.stdin", StringIO(json.dumps(before_data))):
             main()
@@ -469,7 +455,7 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
         with patch("sys.stdin", StringIO(json.dumps(after_data))):
             main()
 
-    client.send.assert_called_with(
+    published.assert_called_with(
         agent="Codex",
         workspace=str(tmp_path),
         session_id="native:session-duration",
@@ -542,9 +528,9 @@ def test_codex_lifecycle_events_publish_dashboard_states(
         hook_data: The case's hook event.
         expected: The result the case expects.
     """
-    client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
+    published = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
 
-    client.send.assert_called_once_with(
+    published.assert_called_once_with(
         agent="Codex", workspace="/w", session_id="native:session-123", **expected
     )
 
@@ -563,6 +549,6 @@ def test_codex_ignores_events_without_dashboard_state(hook_data: dict) -> None:
     Args:
         hook_data: The case's hook event.
     """
-    client = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
+    published = _run({**hook_data, "session_id": "session-123", "cwd": "/w"})
 
-    client.send.assert_not_called()
+    published.assert_not_called()

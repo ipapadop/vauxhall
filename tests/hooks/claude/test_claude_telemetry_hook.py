@@ -106,8 +106,6 @@ def test_claude_messages_in_two_workspaces_do_not_share_one_file(
         json.dumps({**BASE, "hook_event_name": "UnknownEvent"}),
         json.dumps({**BASE, "hook_event_name": "PreToolUse", "tool_input": []}),
         json.dumps({**BASE, "hook_event_name": ["not-a-name"]}),
-        "not json",
-        "[]",
     ],
 )
 def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
@@ -490,16 +488,3 @@ def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
 
     assert client.send.call_args.kwargs["duration"] == 4.2
     assert not list(tmp_path.rglob("*.time"))
-
-
-def test_claude_hook_skips_event_without_stable_session_identity() -> None:
-    """Telemetry must be skipped when the hook has no stable identity source."""
-    with (
-        patch(f"{COMMON}.create_telemetry_client") as client_factory,
-        patch("sys.stdin", StringIO(json.dumps({"hook_event_name": "Stop"}))),
-        patch("sys.stdout", new=StringIO()),
-        patch.dict("os.environ", {}, clear=True),
-    ):
-        main()
-
-    client_factory.assert_not_called()

@@ -4,6 +4,9 @@
 """Tests for the logging configuration module."""
 
 import logging
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -99,3 +102,34 @@ def test_colored_formatter_does_not_build_a_formatter_per_call(
     formatter.format(record)
 
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "module", ["vauxhall.dashboard.config", "vauxhall.hooks.client"]
+)
+def test_importing_preserves_host_logging(module: str) -> None:
+    """Importing a Vauxhall module leaves an application's root handlers alone.
+
+    Args:
+        module: The module imported after the host configures logging.
+    """
+    code = f"""
+import logging
+
+root = logging.getLogger()
+handler = logging.NullHandler()
+root.handlers = [handler]
+
+import {module}
+
+print(root.handlers == [handler])
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+    )
+
+    assert result.stdout.strip() == "True"

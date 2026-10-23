@@ -366,3 +366,11 @@ def test_start_failure_before_loop_ownership_is_cleaned_up(
     mock_client.loop_start.assert_not_called()
     mock_client.loop_stop.assert_not_called()
     mock_client.disconnect.assert_not_called()
+
+
+def test_dashboard_subscriber_uses_settings_by_default() -> None:
+    """Without an explicit host and port, the dashboard's MQTT settings apply."""
+    subscriber = DashboardSubscriber(MagicMock(), MagicMock())
+
+    assert subscriber.host == settings.mqtt.host
+    assert subscriber.port == settings.mqtt.port

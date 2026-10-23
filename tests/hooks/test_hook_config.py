@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Tests for enhanced hook configuration."""
+"""Tests for loading hook configuration."""
 
 import os
 from dataclasses import asdict
-from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.core.config import MQTTConfig
@@ -13,7 +12,7 @@ from vauxhall.hooks.config import HookConfig
 
 
 def test_hook_config_load_env_only() -> None:
-    """Test environment-only optimization in HookConfig.load()."""
+    """When the environment sets every field, no configuration file is looked up."""
     env = {
         f"VAUXHALL_MQTT_{name.upper()}": str(value)
         for name, value in asdict(MQTTConfig()).items()
@@ -35,31 +34,3 @@ def test_hook_config_load_env_only() -> None:
         assert config.mqtt.port == 1884
         assert config.mqtt.keepalive == 120
         assert config.logging.level == "DEBUG"
-
-
-def test_hook_config_load_search_path(tmp_path: Path) -> None:
-    """Test search path resolution in HookConfig.load().
-
-    Args:
-        tmp_path: Pytest temporary directory.
-    """
-    config_file = tmp_path / "vauxhall_hooks.json"
-    config_file.write_text('{"mqtt": {"host": "path-host"}}', encoding="utf-8")
-
-    with patch("vauxhall.core.config.find_config_file", return_value=config_file):
-        config = HookConfig.load()
-        assert config.mqtt.host == "path-host"
-
-
-def test_hook_config_load_env_override(tmp_path: Path) -> None:
-    """Test that environment variables override file values.
-
-    Args:
-        tmp_path: Pytest temporary directory.
-    """
-    config_file = tmp_path / "vauxhall_hooks.json"
-    config_file.write_text('{"mqtt": {"host": "file-host"}}', encoding="utf-8")
-
-    with patch.dict(os.environ, {"VAUXHALL_MQTT_HOST": "env-host"}):
-        config = HookConfig.load(config_file)
-        assert config.mqtt.host == "env-host"

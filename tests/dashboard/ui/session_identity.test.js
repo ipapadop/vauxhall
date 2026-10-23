@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { agentKey, agents } from '../../../vauxhall/dashboard/ui/js/state.js';
+import { agentKey, agents, cardIdentity } from '../../../vauxhall/dashboard/ui/js/state.js';
 
 import { bootDashboard } from './helpers.js';
 
@@ -16,6 +16,15 @@ test('agent identity includes session and cannot collide on delimiters', () => {
     assert.notEqual(first, second);
     assert.notEqual(first, otherSession);
     assert.equal(first, '["A:B","C","D"]');
+});
+
+test('a card reports the identity it was built from', async (t) => {
+    const { listeners } = await bootDashboard(t, { ping: async () => false });
+    const identity = { agent: 'Codex', workspace: '/workspace', session_id: 'native:one' };
+
+    listeners['agent-update']({ schema_version: 1, ...identity, state: 'Idle', details: {} });
+
+    assert.deepEqual(cardIdentity(agents[agentKey(identity)]), identity);
 });
 
 test('same agent and workspace sessions create separate cards', async (t) => {

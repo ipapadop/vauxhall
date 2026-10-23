@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden, snapshotAgents } from './js/state.js';
+import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, setHidden, snapshotAgents } from './js/state.js';
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
@@ -64,41 +64,39 @@ async function init() {
         if (url) window.ipc?.DashboardIPC?.open_url(url);
     });
 
-    // Tracks which agent is currently being viewed in the modal for live updates
-    let currentHistoryKey = null;
-    let historyOpener = null;
-    const closeModal = () => closeHistoryModal();
-    // The close button, the backdrop, and Escape all end in the dialog's close
-    // event, so the view state and the focus return are restored in one place.
-    // An opener evicted while the dialog was open hands focus to the grid.
-    modal?.addEventListener('close', () => {
-        currentHistoryKey = null;
-        (historyOpener?.isConnected ? historyOpener : grid).focus?.();
-        historyOpener = null;
-    });
-    const refreshModal = () => {
-        if (currentHistoryKey) openHistoryModal(currentHistoryKey, agents, true);
+    // Tracks which card a dialog acts on and the control that opened it. The
+    // close button, the backdrop, and Escape all end in the dialog's close
+    // event, so the target is reset and focus returned in one place. An opener
+    // evicted while the dialog was open hands focus to the grid.
+    const dialogTarget = (dialog) => {
+        const target = { key: null, opener: null };
+        dialog?.addEventListener('close', () => {
+            target.key = null;
+            (target.opener?.isConnected ? target.opener : grid).focus?.();
+            target.opener = null;
+        });
+        return target;
     };
 
-    // Tracks which agent card the options menu is currently acting on.
+    // The history modal follows its card's live updates.
+    const historyTarget = dialogTarget(modal);
+    const closeModal = () => closeHistoryModal();
+    const refreshModal = () => {
+        if (historyTarget.key) openHistoryModal(historyTarget.key, agents, true);
+    };
+
     const cardMenuModal = document.getElementById('card-menu-modal');
-    let currentMenuKey = null;
-    let menuOpener = null;
+    const menuTarget = dialogTarget(cardMenuModal);
     const closeMenu = () => closeDialog(cardMenuModal);
-    cardMenuModal?.addEventListener('close', () => {
-        currentMenuKey = null;
-        (menuOpener?.isConnected ? menuOpener : grid).focus?.();
-        menuOpener = null;
-    });
     document.getElementById('card-menu-close')?.addEventListener('click', closeMenu);
     document.getElementById('card-menu-hide')?.addEventListener('click', () => {
-        const card = agents[currentMenuKey];
+        const card = agents[menuTarget.key];
         if (card) setHidden(card, true);
         closeMenu();
     });
     document.getElementById('card-menu-denylist')?.addEventListener('click', async () => {
-        const card = agents[currentMenuKey];
-        const agentName = card?.querySelector('.agent-name')?.textContent;
+        const card = agents[menuTarget.key];
+        const agentName = card && cardIdentity(card).agent;
         closeMenu();
         if (!agentName || !window.ipc?.DashboardIPC) return;
         try {
@@ -120,25 +118,18 @@ async function init() {
         }
     });
 
-    // Tracks which agent card the prompt dialog is sending to.
     const promptModal = document.getElementById('prompt-modal');
     const promptForm = document.getElementById('prompt-form');
     const promptText = document.getElementById('prompt-text');
     const promptError = document.getElementById('prompt-error');
     const promptSend = document.getElementById('prompt-send');
-    let currentPromptKey = null;
-    let promptOpener = null;
+    const promptTarget = dialogTarget(promptModal);
     const closePrompt = () => { if (promptModal) closeDialog(promptModal); };
-    promptModal?.addEventListener('close', () => {
-        currentPromptKey = null;
-        (promptOpener?.isConnected ? promptOpener : grid).focus?.();
-        promptOpener = null;
-    });
     document.getElementById('prompt-close')?.addEventListener('click', closePrompt);
     document.getElementById('prompt-cancel')?.addEventListener('click', closePrompt);
     promptForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const card = agents[currentPromptKey];
+        const card = agents[promptTarget.key];
         if (!card || !window.ipc?.DashboardIPC) return;
         promptError.textContent = '';
         promptSend.disabled = true;
@@ -157,28 +148,36 @@ async function init() {
     const openPrompt = (key, opener) => {
         const card = agents[key];
         if (!card) return;
-        currentPromptKey = key;
-        promptOpener = opener;
+        promptTarget.key = key;
+        promptTarget.opener = opener;
         promptError.textContent = '';
         // Text typed while the agent shows a question or permission dialog
         // answers that dialog, so say so before the user sends anything.
         document.getElementById('prompt-warning').textContent = card.classList.contains('waiting')
             ? 'This agent is waiting for input. What you send will answer its current question or permission request.'
             : '';
-        document.getElementById('prompt-target').textContent =
-            `${card.querySelector('.agent-name')?.textContent} in ${card.querySelector('.agent-workspace')?.textContent}`;
+        const { agent, workspace } = cardIdentity(card);
+        document.getElementById('prompt-target').textContent = `${agent} in ${workspace}`;
         openDialog(promptModal);
         promptText.focus?.();
     };
 
+    // Closes the dialogs acting on any of the given cards, which are leaving
+    // the grid.
+    const closeDialogsFor = (keys) => {
+        if (keys.includes(historyTarget.key)) closeModal();
+        if (keys.includes(menuTarget.key)) closeMenu();
+        if (keys.includes(promptTarget.key)) closePrompt();
+    };
+
     // Builds a card whose history, options, and prompt buttons act on its key.
     const newCard = (key, data) => createCard(data, window.ipc, (opener) => {
-        currentHistoryKey = key; // Lock modal to this agent
-        historyOpener = opener;
+        historyTarget.key = key;
+        historyTarget.opener = opener;
         openHistoryModal(key, agents);
     }, (opener) => {
-        currentMenuKey = key;
-        menuOpener = opener;
+        menuTarget.key = key;
+        menuTarget.opener = opener;
         openDialog(cardMenuModal);
     }, (opener) => openPrompt(key, opener));
 
@@ -215,7 +214,7 @@ async function init() {
             if (card.classList.contains('stale')) {
                 card.remove();
                 removeAgent(key);
-                if (key === currentPromptKey) closePrompt();
+                closeDialogsFor([key]);
             }
         }
         refreshSummary();
@@ -306,11 +305,6 @@ async function init() {
                         const key = agentKey(shell);
                         if (agents[key]) continue;
                         const card = newCard(key, shell);
-                        // No history content is persisted; an empty array
-                        // (rather than leaving this undefined) lets the
-                        // history modal open showing "no events yet" instead
-                        // of silently no-op'ing.
-                        card.history = [];
                         updateCard(card, shell);
                         card.dataset.lastSeen = String(shell.last_seen || 0);
                         agents[key] = card;
@@ -331,10 +325,7 @@ async function init() {
                 let card = agents[key];
 
                 if (!card) {
-                    const evicted = ensureAgentCapacity(maxActiveAgents);
-                    if (evicted.includes(currentHistoryKey)) closeModal();
-                    if (evicted.includes(currentMenuKey)) closeMenu();
-                    if (evicted.includes(currentPromptKey)) closePrompt();
+                    closeDialogsFor(ensureAgentCapacity(maxActiveAgents));
                     card = newCard(key, data);
                     agents[key] = card;
                     grid.appendChild(card);
@@ -351,7 +342,7 @@ async function init() {
                 }
 
                 // Push live updates to the history modal if it's viewing this agent
-                if (currentHistoryKey === key) openHistoryModal(key, agents, true);
+                if (historyTarget.key === key) openHistoryModal(key, agents, true);
 
                 // Re-apply filter and sort to keep view consistent
                 if (searchInput?.value) filterGrid(searchInput.value.toLowerCase(), agents);
@@ -365,19 +356,14 @@ async function init() {
             onSettingsChanged: (changed) => {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
-                const evicted = evictAgents(maxActiveAgents);
-                if (evicted.includes(currentHistoryKey)) closeModal();
-                if (evicted.includes(currentMenuKey)) closeMenu();
-                if (evicted.includes(currentPromptKey)) closePrompt();
+                closeDialogsFor(evictAgents(maxActiveAgents));
 
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {
-                    if (!denylist.has(card.querySelector('.agent-name')?.textContent)) continue;
+                    if (!denylist.has(cardIdentity(card).agent)) continue;
                     card.remove();
                     removeAgent(key);
-                    if (key === currentHistoryKey) closeModal();
-                    if (key === currentMenuKey) closeMenu();
-                    if (key === currentPromptKey) closePrompt();
+                    closeDialogsFor([key]);
                 }
 
                 checkStaleness(agents, staleThresholdMs);

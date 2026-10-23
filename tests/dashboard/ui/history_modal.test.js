@@ -74,6 +74,12 @@ function rendered(document) {
     }));
 }
 
+test('a new card starts with an empty history', () => {
+    setupPage();
+
+    assert.deepEqual(cardWithHistory([]).history, []);
+});
+
 test('history keeps the twenty newest events, newest first', () => {
     setupPage();
     const events = Array.from({ length: 25 }, (_, index) => ({

@@ -8,6 +8,8 @@
  * @description Sending prompts to agent sessions and showing how delivery went.
  */
 
+import { cardIdentity } from './state.js';
+
 export const ACK_TIMEOUT_MS = 10000;
 
 const FAILURE_REASONS = {
@@ -53,11 +55,8 @@ function describeAck(ack) {
  * @returns {Promise<{ok: boolean, error?: string}>} Whether it was published, or why not.
  */
 export async function sendPrompt(dashboardIpc, card, text) {
-    const request = {
-        agent: card.querySelector('.agent-name')?.textContent || '',
-        session_id: card.querySelector('.agent-session')?.title || '',
-        text,
-    };
+    const { agent, session_id } = cardIdentity(card);
+    const request = { agent, session_id, text };
     let result;
     try {
         result = JSON.parse(await dashboardIpc.send_prompt(JSON.stringify(request)));

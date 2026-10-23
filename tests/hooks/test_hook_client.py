@@ -130,46 +130,56 @@ def test_format_message_rejects_empty_session_id() -> None:
         format_message("Gemini", "/workspace", "Acting", "")
 
 
-def test_send_outside_a_context_does_not_reach_the_broker() -> None:
-    """Without the context manager's connection, a send fails without connecting."""
+def test_one_shot_send_waits_for_delivery_and_cleans_up() -> None:
+    """An ad-hoc send confirms delivery and closes MQTT in protocol order."""
     mqtt_client = FakeMQTTClient()
+    with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
+        client = TelemetryClient(host="test_host", port=1234)
+
+    assert client.send(
+        "Gemini",
+        "/home/user/project",
+        "Acting",
+        "native:test-session",
+        tool="grep",
+    )
+    assert mqtt_client.publish_qos == 1
+    assert mqtt_client.publish_result.wait_timeout == 1.0
+    assert mqtt_client.events == [
+        "connect",
+        "loop_start",
+        "publish",
+        "disconnect",
+        "loop_stop",
+    ]
+
+
+def test_send_returns_false_when_publish_times_out() -> None:
+    """A publication not acknowledged within the deadline is unsuccessful."""
+    mqtt_client = FakeMQTTClient(FakePublishResult(published=False))
     with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
         client = TelemetryClient()
 
     assert not client.send(
         "Gemini", "/home/user/project", "Acting", "native:test-session"
     )
-    assert mqtt_client.events == []
-
-
-def test_send_returns_false_when_publish_times_out() -> None:
-    """A publication not acknowledged within the deadline is unsuccessful."""
-    mqtt_client = FakeMQTTClient(FakePublishResult(published=False))
-    with (
-        patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client),
-        TelemetryClient() as client,
-    ):
-        assert not client.send(
-            "Gemini", "/home/user/project", "Acting", "native:test-session"
-        )
+    assert mqtt_client.events[-2:] == ["disconnect", "loop_stop"]
 
 
 def test_send_handles_serialization_failure() -> None:
-    """Invalid detail values fail silently without publishing."""
+    """Invalid detail values fail silently without touching the broker."""
     mqtt_client = FakeMQTTClient()
-    with (
-        patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client),
-        TelemetryClient() as client,
-    ):
-        assert not client.send(
-            "Gemini",
-            "/home/user/project",
-            "Acting",
-            "native:test-session",
-            path=Path(),
-        )
+    with patch("vauxhall.hooks.client.mqtt.Client", return_value=mqtt_client):
+        client = TelemetryClient()
 
-    assert "publish" not in mqtt_client.events
+    assert not client.send(
+        "Gemini",
+        "/home/user/project",
+        "Acting",
+        "native:test-session",
+        path=Path(),
+    )
+    assert mqtt_client.events == []
 
 
 def test_context_manager_waits_for_delivery_and_cleans_up() -> None:
@@ -181,7 +191,6 @@ def test_context_manager_waits_for_delivery_and_cleans_up() -> None:
     ):
         assert client.is_connected
         assert client.send("Agent", "/path", "Acting", "native:test-session")
-        assert mqtt_client.publish_qos == 1
         assert mqtt_client.publish_result.wait_timeout == 1.0
         assert mqtt_client.events == ["connect", "loop_start", "publish"]
 

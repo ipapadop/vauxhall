@@ -38,8 +38,8 @@ print(root.level == logging.INFO and type(root.handlers[0]) is logging.StreamHan
     assert result.stdout.splitlines()[-1] == "True"
 
 
-def test_dashboard_main_keeps_the_users_chromium_flags() -> None:
-    """Flags the user sets survive Pyloid's import, after Pyloid's own flags."""
+def test_dashboard_main_sets_safe_chromium_flags_and_keeps_the_users() -> None:
+    """Pyloid's flags lose the certificate overrides; the user's follow them."""
     code = """
 import os
 
@@ -69,4 +69,10 @@ vauxhall.dashboard.app.main()
         )
         if label in {"after import", "at startup"}
     }
-    assert flags["at startup"] == f"{flags['after import']} --disable-gpu --no-sandbox"
+    insecure = {"--ignore-certificate-errors", "--allow-insecure-localhost"}
+    assert insecure <= set(flags["after import"].split())
+    assert flags["at startup"].split() == [
+        *(flag for flag in flags["after import"].split() if flag not in insecure),
+        "--disable-gpu",
+        "--no-sandbox",
+    ]

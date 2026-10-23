@@ -384,9 +384,11 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
   Importing `pyloid` overwrites `QTWEBENGINE_CHROMIUM_FLAGS`, so
   `vauxhall/dashboard/__init__.py` saves the user's value before any
-  submodule imports it, and `main()` appends it to Pyloid's flags before
-  creating `Pyloid`. The packaged startup test relies on this for its
-  `--disable-gpu` flags.
+  submodule imports it. Before creating `Pyloid`, `main()` removes Pyloid's
+  `--ignore-certificate-errors` and `--allow-insecure-localhost`, which turn
+  off certificate checks in the window although the UI is served over plain
+  HTTP, and appends the user's value unchanged. The packaged startup test
+  relies on this for its `--disable-gpu` flags.
 - **Notifications**: `DashboardIPC.notify` calls the `on_notify` callback
   `DashboardApp` registers, which calls `Pyloid.show_notification` for an
   OS-level (system tray) notification. Without a registered callback, or if

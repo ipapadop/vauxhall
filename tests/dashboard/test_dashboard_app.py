@@ -3,6 +3,9 @@
 
 """Tests for Vauxhall Dashboard components."""
 
+import os
+import subprocess
+import sys
 import unittest
 from copy import deepcopy
 from threading import Event, Thread
@@ -23,7 +26,11 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
-from vauxhall.dashboard.app import ICON_FILE, DashboardApp  # noqa: E402
+from vauxhall.dashboard.app import (  # noqa: E402
+    ICON_FILE,
+    DashboardApp,
+    _keep_user_chromium_flags,
+)
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
@@ -572,3 +579,75 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Runs main() with a stand-in for Pyloid that prints the Chromium flags it
+# would start Qt with, then stops.
+_PRINT_FLAGS_AT_STARTUP = """
+import os
+import vauxhall.dashboard.app as app
+
+def stop(**_):
+    print(os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+    raise SystemExit(0)
+
+app.Pyloid = stop
+app.main()
+"""
+
+
+def _startup_chromium_flags(env: dict[str, str]) -> str:
+    """Return the Chromium flags the dashboard starts Qt with.
+
+    Runs in a child process, because importing Pyloid changes the environment.
+
+    Args:
+        env: The child process's environment.
+
+    Returns:
+        The value of ``QTWEBENGINE_CHROMIUM_FLAGS`` when Pyloid is created.
+    """
+    result = subprocess.run(
+        [sys.executable, "-c", _PRINT_FLAGS_AT_STARTUP],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    return result.stdout.splitlines()[-1]
+
+
+def test_main_keeps_the_users_chromium_flags() -> None:
+    """Flags the user sets survive Pyloid's import, after Pyloid's own flags."""
+    pyloid_flags = _startup_chromium_flags(
+        {k: v for k, v in os.environ.items() if k != "QTWEBENGINE_CHROMIUM_FLAGS"}
+    )
+
+    flags = _startup_chromium_flags(
+        {**os.environ, "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu --no-sandbox"}
+    )
+
+    assert flags == f"{pyloid_flags} --disable-gpu --no-sandbox"
+
+
+@pytest.mark.parametrize(
+    ("user_flags", "expected"),
+    [("", "--pyloid"), ("--disable-gpu", "--pyloid --disable-gpu")],
+    ids=["unset", "set"],
+)
+def test_keep_user_chromium_flags_appends_only_when_set(
+    user_flags: str, expected: str
+) -> None:
+    """Without user flags, Pyloid's are left as they are.
+
+    Args:
+        user_flags: The flags the user set before Pyloid's import.
+        expected: The resulting flags.
+    """
+    with (
+        patch.dict(os.environ, {"QTWEBENGINE_CHROMIUM_FLAGS": "--pyloid"}),
+        patch("vauxhall.dashboard.app.USER_CHROMIUM_FLAGS", user_flags),
+    ):
+        _keep_user_chromium_flags()
+        assert os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] == expected

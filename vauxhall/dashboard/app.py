@@ -4,6 +4,7 @@
 """Main entry point for the Vauxhall Dashboard application."""
 
 import logging
+import os
 import sys
 from collections import deque
 from contextlib import suppress
@@ -18,6 +19,7 @@ from vauxhall.core.config import ConfigurationError
 from vauxhall.core.config_store import check_user_config, save_user_config
 from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.core.telemetry import telemetry_validation_error
+from vauxhall.dashboard import USER_CHROMIUM_FLAGS
 from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.ipc import DashboardIPC
@@ -399,9 +401,23 @@ def _use_utf8_output() -> None:
                 )
 
 
+def _keep_user_chromium_flags() -> None:
+    """Append the user's Chromium flags to the ones Pyloid set on import.
+
+    Coming last, the user's flags win where the two conflict. Qt reads the
+    variable when the application starts, so this must run before ``Pyloid``.
+    """
+    if USER_CHROMIUM_FLAGS:
+        pyloid_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            f"{pyloid_flags} {USER_CHROMIUM_FLAGS}".strip()
+        )
+
+
 def main() -> None:
     """Run the Vauxhall Dashboard application."""
     _use_utf8_output()
+    _keep_user_chromium_flags()
     setup_logging(level=settings.logging.level)
     logger.info("Starting Vauxhall Dashboard...")
 

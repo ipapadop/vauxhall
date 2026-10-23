@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Tests for the dashboard entry point's logging setup."""
+"""Tests for the dashboard entry point."""
 
 import os
 import subprocess
@@ -36,3 +36,33 @@ print(root.level == logging.INFO and type(root.handlers[0]) is logging.StreamHan
     )
 
     assert result.stdout.splitlines()[-1] == "True"
+
+
+def test_dashboard_main_keeps_the_users_chromium_flags() -> None:
+    """Flags the user sets survive Pyloid's import, after Pyloid's own flags."""
+    code = """
+import os
+
+import vauxhall.dashboard.app
+
+print(os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+
+def stop(**_):
+    print(os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+    raise SystemExit(0)
+
+vauxhall.dashboard.app.Pyloid = stop
+vauxhall.dashboard.app.main()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu --no-sandbox"},
+    )
+
+    # The first line is the value importing Pyloid left; the last, the value
+    # Pyloid starts Qt with.
+    lines = result.stdout.splitlines()
+    assert lines[-1] == f"{lines[0]} --disable-gpu --no-sandbox"

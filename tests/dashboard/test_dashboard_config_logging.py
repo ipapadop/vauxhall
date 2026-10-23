@@ -45,10 +45,10 @@ import os
 
 import vauxhall.dashboard.app
 
-print(os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+print("after import:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
 
-def stop(**_):
-    print(os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
+def stop(*_, **__):
+    print("at startup:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
     raise SystemExit(0)
 
 vauxhall.dashboard.app.Pyloid = stop
@@ -62,7 +62,11 @@ vauxhall.dashboard.app.main()
         env={**os.environ, "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu --no-sandbox"},
     )
 
-    # The first line is the value importing Pyloid left; the last, the value
-    # Pyloid starts Qt with.
-    lines = result.stdout.splitlines()
-    assert lines[-1] == f"{lines[0]} --disable-gpu --no-sandbox"
+    flags = {
+        label: value
+        for label, _, value in (
+            line.partition(": ") for line in result.stdout.splitlines()
+        )
+        if label in {"after import", "at startup"}
+    }
+    assert flags["at startup"] == f"{flags['after import']} --disable-gpu --no-sandbox"

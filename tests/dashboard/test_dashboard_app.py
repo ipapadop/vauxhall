@@ -3,7 +3,6 @@
 
 """Tests for Vauxhall Dashboard components."""
 
-import os
 import unittest
 from copy import deepcopy
 from threading import Event, Thread
@@ -589,12 +588,11 @@ def test_keep_user_chromium_flags_appends_only_when_set(
         user_flags: The flags the user set before Pyloid's import.
         expected: The resulting flags.
     """
-    with (
-        patch.dict(os.environ, {"QTWEBENGINE_CHROMIUM_FLAGS": "--pyloid"}),
-        patch("vauxhall.dashboard.app.USER_CHROMIUM_FLAGS", user_flags),
-    ):
-        _keep_user_chromium_flags()
-        assert os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] == expected
+    environ = {"QTWEBENGINE_CHROMIUM_FLAGS": "--pyloid"}
+
+    _keep_user_chromium_flags(environ, user_flags)
+
+    assert environ == {"QTWEBENGINE_CHROMIUM_FLAGS": expected}
 
 
 if __name__ == "__main__":

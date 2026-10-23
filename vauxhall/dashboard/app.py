@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from collections import deque
+from collections.abc import MutableMapping
 from contextlib import suppress
 from pathlib import Path
 from threading import Lock
@@ -401,17 +402,22 @@ def _use_utf8_output() -> None:
                 )
 
 
-def _keep_user_chromium_flags() -> None:
+def _keep_user_chromium_flags(
+    environ: MutableMapping[str, str] = os.environ,
+    user_flags: str = USER_CHROMIUM_FLAGS,
+) -> None:
     """Append the user's Chromium flags to the ones Pyloid set on import.
 
-    Coming last, the user's flags win where the two conflict. Qt reads the
-    variable when the application starts, so this must run before ``Pyloid``.
+    Qt reads the variable when the application starts, so this must run
+    before ``Pyloid``.
+
+    Args:
+        environ: The environment to update.
+        user_flags: The flags the user set before Pyloid's import.
     """
-    if USER_CHROMIUM_FLAGS:
-        pyloid_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            f"{pyloid_flags} {USER_CHROMIUM_FLAGS}".strip()
-        )
+    if user_flags:
+        pyloid_flags = environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{pyloid_flags} {user_flags}".strip()
 
 
 def main() -> None:

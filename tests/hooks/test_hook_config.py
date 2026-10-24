@@ -149,6 +149,10 @@ def test_no_warning_when_the_current_directory_holds_the_user_file(
     assert caplog.records == []
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows refuses to remove a process's current directory",
+)
 def test_no_warning_when_the_current_directory_is_gone(
     isolated_cwd: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

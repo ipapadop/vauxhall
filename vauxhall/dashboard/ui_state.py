@@ -5,7 +5,6 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import fields
-from threading import Lock
 from typing import Any
 
 from vauxhall.core.config import load_config_data
@@ -34,10 +33,6 @@ _SIZE_LIMITS = {
 # How much of the window's top edge must be on a screen to restore its position.
 VISIBLE_WIDTH = 100
 VISIBLE_HEIGHT = 40
-
-# Frontend saves and the shutdown window save each load, merge, and replace the
-# file; holding this lock for the whole update keeps one from discarding the other.
-_update_lock = Lock()
 
 
 def _is_int(value: object) -> bool:
@@ -148,7 +143,8 @@ def update_ui_state(changes: object) -> dict[str, Any]:
     """Merge valid changes into the saved state and write it atomically.
 
     Invalid or unknown values in ``changes`` are ignored and keep any saved
-    value. Concurrent updates run one at a time, so none is lost.
+    value. Every caller runs on the dashboard's UI thread, so updates never
+    overlap and none is lost.
 
     Args:
         changes: New preferences or window geometry.
@@ -159,12 +155,11 @@ def update_ui_state(changes: object) -> dict[str, Any]:
     Raises:
         OSError: If the state file cannot be written.
     """
-    with _update_lock:
-        state = load_ui_state()
-        state.update(clean_ui_state(changes))
-        path = user_config_path(STATE_FILE)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        write_json_atomically(path, state)
+    state = load_ui_state()
+    state.update(clean_ui_state(changes))
+    path = user_config_path(STATE_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomically(path, state)
     return state
 
 

@@ -322,15 +322,20 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   network thread on a broker change or at shutdown, can't deadlock. Events
   run on the UI thread in the order they were posted. `DashboardApp` takes the
   queue as `queue_to_ui`, so tests can run events at once or hold them.
-- **Readiness**: Marking the frontend ready, taking the pending snapshot, and
-  posting it happen under the lock live events check readiness with, so no
-  event is lost between the MQTT callback and the initial drain, and no live
-  event is posted ahead of the snapshot. Repeated readiness signals have no
-  effect.
+  Readiness, the pending updates, the last status, and the outbox of events
+  being sent belong to the UI thread alone, so `DashboardApp` holds no lock.
+  Pyloid's `invoke` waits for its result in a nested event loop, which can run
+  the next posted event; that event joins the outbox instead of sending
+  inside the current send, so sends never nest and keep their order.
+- **Readiness**: The UI thread marks the frontend ready and puts the last
+  status and the pending updates in the outbox in one step, so no event is
+  lost between the MQTT callback and the initial drain, and an event posted
+  earlier but run later goes out after them. Repeated readiness signals have
+  no effect.
 - **Connection status**: The status line shows `Connecting...`,
   `Connected to Agent Fleet`, retry messages after connection failures or
   disconnects, and `Disconnected` on shutdown.
-- **Saving settings**: `DashboardApp.save_settings` runs under one lock, so
+- **Saving settings**: `DashboardApp.save_settings` runs on the UI thread, so
   saves never overlap. It checks the dashboard file and, when requested, the
   hooks file with `check_user_config` before writing either one. It then reloads
   `DashboardConfig`, replaces the running `mqtt`, `logging`, and `dashboard`
@@ -355,8 +360,9 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 - **View state**: `vauxhall.dashboard.ui_state` reads and writes
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.
-  Each update holds one lock across load, merge, and write, so a frontend save
-  and the shutdown window save can't discard each other's fields.
+  Frontend saves and the shutdown window save both run on the UI thread, so
+  neither can discard the other's fields. Two dashboard processes saving at
+  once can still lose one update.
   `save_ui_state` accepts only `theme`, `sort`, `history_filter`,
   `attention_first`, and `notify`, the last two as booleans; only Python
   writes `window`. `run()` creates the window with the saved size, calls
@@ -379,8 +385,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are
-  kept instead of being sent to the destroyed window. Events still queued for
-  the UI thread are dropped: saving the window state calls Pyloid, whose
+  kept instead of being sent to the destroyed window, and other events still
+  queued for the UI thread are dropped: saving the window state calls Pyloid, whose
   nested event loop can run them, and sending one to the deleted web view
   makes Pyloid wait forever for a result.
 - **Dialogs**: `vauxhall/dashboard/ui/js/dialog.js` opens and closes both

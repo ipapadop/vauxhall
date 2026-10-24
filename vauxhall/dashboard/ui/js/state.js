@@ -105,6 +105,26 @@ export function updateAgentHistory(card, data) {
 }
 
 /**
+ * Returns whether an event is a late copy of the message that ended the turn.
+ *
+ * Claude Code runs its message and stop hooks at the same time, so the
+ * final message's Thinking event can arrive after the Idle event that
+ * already carries it.
+ * @param {HTMLElement} card - The agent card element.
+ * @param {object} data - The telemetry data.
+ * @returns {boolean} Whether the event only repeats the idle card's message.
+ */
+export function isLateFinalMessage(card, data) {
+    const [latest] = card.history;
+    const details = data.details || {};
+    return latest?.state === 'Idle'
+        && data.state === 'Thinking'
+        && Object.keys(details).length === 1
+        && typeof details.message === 'string'
+        && details.message === latest.details.message;
+}
+
+/**
  * Tracks the last seen time for an agent.
  * @param {HTMLElement} card - The agent card element.
  */

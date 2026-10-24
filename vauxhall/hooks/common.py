@@ -254,6 +254,22 @@ def ready_telemetry(_input_data: dict[str, Any]) -> Telemetry:
     return "Idle", {"status": "Ready"}
 
 
+def stop_telemetry(input_data: dict[str, Any]) -> Telemetry:
+    """Publish the final assistant message with the idle state.
+
+    Args:
+        input_data: The hook event carrying the last assistant message.
+
+    Returns:
+        The idle state, with the final message when the event reports one.
+    """
+    state, details = ready_telemetry(input_data)
+    message = message_text(input_data.get("last_assistant_message"))
+    if message is not None:
+        details["message"] = message
+    return state, details
+
+
 def permission_request_telemetry(input_data: dict[str, Any]) -> Telemetry:
     """Translate a tool permission request into a waiting state.
 

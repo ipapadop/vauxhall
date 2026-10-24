@@ -315,6 +315,14 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
             {"state": "Idle", "status": "Ready"},
         ),
         (
+            {"hook_event_name": "Stop", "last_assistant_message": "Done."},
+            {"state": "Idle", "status": "Ready", "message": "Done."},
+        ),
+        (
+            {"hook_event_name": "Stop", "last_assistant_message": ["Done."]},
+            {"state": "Idle", "status": "Ready"},
+        ),
+        (
             {
                 "hook_event_name": "StopFailure",
                 "error": "rate_limit",

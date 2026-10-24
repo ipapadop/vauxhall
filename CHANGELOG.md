@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A Claude Code card shows `Idle` when a turn ends. Before, the final
+  message's `Thinking` event often arrived after the turn's `Idle` event and
+  left the card showing `Thinking` while the session waited for input
+  ([#74](https://github.com/ipapadop/vauxhall/issues/74)).
 - The Gemini CLI hook limits its MQTT connection attempt to 1 second, like the
   Claude Code and Codex hooks, instead of waiting longer when the broker is
   unreachable.

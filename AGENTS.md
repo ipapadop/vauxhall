@@ -236,6 +236,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   states, `Error: <error>`, `Agent: <message>`, `Running: <tool> <cmd>` (or
   `Completed: <tool>` for a completed `Thinking` event), `Prompt: <prompt>`,
   or the status.
+- **Late final message**: A `Thinking` event whose only detail is a `message`
+  equal to the message of the card's latest event, when that event is `Idle`,
+  is ignored. Claude Code runs the final message's `MessageDisplay` hook and
+  its `Stop` hook at the same time, and `Stop` also publishes the message, so
+  the `Thinking` copy can arrive last and would otherwise leave an idle card
+  showing `Thinking`.
 - **History**: The 🕒 icon opens a resizable modal with the card's last 20
   events, filterable by text and state. It updates live and follows new events
   only when scrolled to the bottom and not hovered.

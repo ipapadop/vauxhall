@@ -702,3 +702,45 @@ test('clearing stale cards closes the prompt dialog only when its card was remov
     document.getElementById('clear-stale-btn').click();
     assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
 });
+
+const CLAUDE = { ...BASE, agent: 'Claude Code', session_id: 'turn' };
+const CLAUDE_KEY = '["Claude Code","/home/user/project","turn"]';
+
+test('a final message arriving after the turn ended leaves the card idle', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...CLAUDE, details: { prompt: 'Explain tmux' } });
+    listeners['agent-update']({ ...CLAUDE, state: 'Idle', details: { status: 'Ready', message: 'Done.' } });
+
+    listeners['agent-update']({ ...CLAUDE, state: 'Thinking', details: { message: 'Done.' } });
+
+    const card = agents[CLAUDE_KEY];
+    assert.equal(card.dataset.state, 'Idle');
+    assert.deepEqual(card.history.map((event) => event.state), ['Idle', 'Thinking']);
+});
+
+test('a final message arriving before the turn ended still ends idle', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...CLAUDE, details: { message: 'Done.' } });
+
+    listeners['agent-update']({ ...CLAUDE, state: 'Idle', details: { status: 'Ready', message: 'Done.' } });
+
+    assert.equal(agents[CLAUDE_KEY].dataset.state, 'Idle');
+});
+
+test('a different message after the turn ended is shown', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...CLAUDE, state: 'Idle', details: { status: 'Ready', message: 'Done.' } });
+
+    listeners['agent-update']({ ...CLAUDE, state: 'Thinking', details: { message: 'Checking again.' } });
+
+    assert.equal(agents[CLAUDE_KEY].dataset.state, 'Thinking');
+});
+
+test('an event with more than the repeated message is shown', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...CLAUDE, state: 'Idle', details: { status: 'Ready', message: 'Done.' } });
+
+    listeners['agent-update']({ ...CLAUDE, state: 'Thinking', details: { message: 'Done.', prompt: 'Again' } });
+
+    assert.equal(agents[CLAUDE_KEY].dataset.state, 'Thinking');
+});

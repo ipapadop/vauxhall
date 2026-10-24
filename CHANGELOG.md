@@ -62,6 +62,14 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- The prompt relay no longer retypes a retained prompt each time it
+  reconnects. A prompt another client publishes with the retain flag is
+  typed only by a relay connected when it is published.
+- The prompt relay keeps running after an unexpected error while handling a
+  prompt, logs it, and acknowledges a delivery that raised as not delivered.
+  Before, the error ended the relay, and later prompts went unanswered.
+- Prompts and acknowledgments whose ID isn't valid text are dropped. Before,
+  such a prompt passed validation and crashed the relay when delivered.
 - A Claude Code card shows `Idle` when a turn ends. Before, the final
   message's `Thinking` event often arrived after the turn's `Idle` event and
   left the card showing `Thinking` while the session waited for input

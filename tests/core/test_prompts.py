@@ -116,6 +116,10 @@ def test_format_prompt_rejects_invalid_input() -> None:
         b"[]",
         json.dumps({"id": "a", "text": "x"}).encode(),
         json.dumps({"schema_version": 1, "id": "", "text": "x"}).encode(),
+        pytest.param(
+            json.dumps({"schema_version": 1, "id": "\ud800", "text": "x"}).encode(),
+            id="unencodable-id",
+        ),
         json.dumps({"schema_version": 1, "id": "a", "text": "\x1b"}).encode(),
         pytest.param(
             json.dumps(
@@ -165,6 +169,12 @@ def test_format_ack_rejects_invalid_input() -> None:
         b"[]",
         json.dumps({"schema_version": 1, "id": "a", "status": "maybe"}).encode(),
         json.dumps({"schema_version": 1, "id": 1, "status": "delivered"}).encode(),
+        pytest.param(
+            json.dumps(
+                {"schema_version": 1, "id": "\ud800", "status": "delivered"}
+            ).encode(),
+            id="unencodable-id",
+        ),
         json.dumps(
             {"schema_version": 1, "id": "a", "status": "failed", "reason": "x"}
         ).encode(),

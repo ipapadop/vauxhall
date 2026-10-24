@@ -181,6 +181,7 @@ class Message:
 
     topic: str
     payload: bytes
+    retain: bool = False
 
 
 @dataclass
@@ -349,6 +350,127 @@ def test_relay_delivers_a_prompt_for_a_known_session_and_acknowledges(
     assert topic == session_topic("codex", "native:1", ACK_KIND)
     assert qos == 1
     assert parse_ack(payload.encode()) == {"id": "id-1", "status": "delivered"}
+
+
+def test_relay_ignores_a_retained_prompt(
+    prompt_relay: relay.PromptRelay, deliveries: Deliveries
+) -> None:
+    """A retained prompt, replayed on every subscribe, is not typed.
+
+    Args:
+        prompt_relay: The relay under test.
+        deliveries: The delivery recorder.
+    """
+    panes.record_pane("Codex", "native:1", {"TMUX_PANE": "%3"})
+    message = prompt_message("Codex", "native:1")
+    message.retain = True
+
+    receive(prompt_relay, message)
+
+    assert deliveries.calls == []
+    assert published(prompt_relay).published == []
+
+
+def test_relay_ignores_a_retained_prompt_for_another_machine_quietly(
+    prompt_relay: relay.PromptRelay, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Relays sharing a broker don't warn about other machines' retained prompts.
+
+    Args:
+        prompt_relay: The relay under test.
+        caplog: Pytest log capture fixture.
+    """
+    message = prompt_message("Codex", "elsewhere")
+    message.retain = True
+
+    with caplog.at_level("WARNING"):
+        receive(prompt_relay, message)
+
+    assert caplog.records == []
+
+
+def test_relay_acknowledges_a_delivery_that_raises_and_keeps_going(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An error while delivering is acknowledged as failed and logged.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    panes.record_pane("Codex", "native:1", {"TMUX_PANE": "%3"})
+    attempts: list[str] = []
+
+    def fail_first_delivery(
+        _target: PaneTarget, message_id: str, _text: str
+    ) -> str | None:
+        """Fail the first delivery the way an unforeseen bug would.
+
+        Args:
+            _target: The pane.
+            message_id: The prompt's identifier.
+            _text: The prompt.
+
+        Returns:
+            ``None`` for every delivery after the first.
+
+        Raises:
+            RuntimeError: On the first delivery.
+        """
+        attempts.append(message_id)
+        if len(attempts) == 1:
+            raise RuntimeError
+        return None
+
+    prompt_relay = relay.PromptRelay(
+        MQTTConfig(host="broker"), deliver=fail_first_delivery
+    )
+    prompt_relay.client = FakeClient()  # type: ignore[assignment]
+
+    receive(prompt_relay, prompt_message("Codex", "native:1"))
+    receive(
+        prompt_relay,
+        prompt_message("Codex", "native:1", payload=format_prompt("id-2", "again")),
+    )
+
+    acks = [
+        parse_ack(payload.encode())
+        for _, payload, _ in published(prompt_relay).published
+    ]
+    assert acks == [
+        {"id": "id-1", "status": "failed", "reason": "delivery-failed"},
+        {"id": "id-2", "status": "delivered"},
+    ]
+    assert "Could not deliver a prompt to codex" in caplog.text
+    assert "hello" not in caplog.text
+
+
+def test_relay_survives_an_error_before_delivery(
+    prompt_relay: relay.PromptRelay, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An error outside delivery is logged, not raised into paho's loop.
+
+    Args:
+        prompt_relay: The relay under test.
+        caplog: Pytest log capture fixture.
+    """
+
+    class UnreadableMessage:
+        """A message whose topic can't be read."""
+
+        retain = False
+
+        @property
+        def topic(self) -> str:
+            """Fail the way an unforeseen bug would.
+
+            Raises:
+                RuntimeError: Always.
+            """
+            raise RuntimeError
+
+    prompt_relay._on_message(prompt_relay.client, None, UnreadableMessage())  # type: ignore[arg-type]
+
+    assert "Could not handle a prompt message" in caplog.text
 
 
 def test_relay_acknowledges_a_failed_delivery(

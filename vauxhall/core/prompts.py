@@ -94,9 +94,15 @@ def _is_message_id(value: object) -> TypeGuard[str]:
         value: The candidate identifier.
 
     Returns:
-        Whether it is a non-empty string of bounded length.
+        Whether it is a non-empty, encodable string of bounded length.
     """
-    return isinstance(value, str) and 0 < len(value) <= _MAX_ID_LENGTH
+    if not isinstance(value, str) or not 0 < len(value) <= _MAX_ID_LENGTH:
+        return False
+    try:
+        value.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def format_prompt(message_id: str, text: str) -> str:

@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 from collections import deque
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from contextlib import suppress
 from pathlib import Path
 from threading import Lock
@@ -15,6 +15,7 @@ from typing import Any
 
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
+from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.config_store import check_user_config, save_user_config
@@ -47,20 +48,81 @@ logger = get_logger(__name__)
 UI_DIR = (Path(__file__).parent / "ui").resolve()
 ICON_FILE = UI_DIR / "icon.png"
 
+WindowEvent = Callable[[str, object], None]
+
+
+class _UIThreadQueue(QObject):
+    """Runs window events on the thread that created it, in the order posted."""
+
+    _posted = Signal(str, object)
+
+    def __init__(self, handler: WindowEvent) -> None:
+        """Connect the queue to its handler.
+
+        Args:
+            handler: Called on this object's thread with each posted event.
+        """
+        super().__init__()
+        self._handler = handler
+        # Queued even when posted from this thread, so every event keeps its
+        # place in one order.
+        self._posted.connect(self._run, Qt.ConnectionType.QueuedConnection)
+
+    def post(self, name: str, data: object) -> None:
+        """Queue an event and return without waiting for it to run.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        self._posted.emit(name, data)
+
+    @Slot(str, object)
+    def _run(self, name: str, data: object) -> None:
+        """Hand a queued event to the handler.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        self._handler(name, data)
+
+
+def queue_to_ui_thread(handler: WindowEvent) -> WindowEvent:
+    """Return a non-blocking poster that runs ``handler`` on the UI thread.
+
+    Args:
+        handler: The function that sends one event to the window.
+
+    Returns:
+        WindowEvent: Queues an event for ``handler`` and returns at once.
+    """
+    return _UIThreadQueue(handler).post
+
 
 class DashboardApp:
     """Encapsulates the Dashboard application state and logic."""
 
-    def __init__(self, app: Pyloid) -> None:
+    def __init__(
+        self,
+        app: Pyloid,
+        queue_to_ui: Callable[[WindowEvent], WindowEvent] = queue_to_ui_thread,
+    ) -> None:
         """Initialize the Dashboard application.
+
+        Must run on the UI thread, which then runs every window event.
 
         Args:
             app: The Pyloid application instance.
+            queue_to_ui: Wraps the window-event handler in a poster that runs
+                it on the UI thread without waiting.
         """
         self.app = app
         self.window: Any = None
+        # Pyloid's window.invoke() waits for the UI thread, so only the UI
+        # thread calls it; everyone else posts and moves on.
+        self._post = queue_to_ui(self._dispatch)
         self._updates_lock = Lock()
-        self._dispatch_lock = Lock()
         self._settings_lock = Lock()
         self.ipc = DashboardIPC(
             on_ready_callback=self._on_frontend_ready,
@@ -78,22 +140,46 @@ class DashboardApp:
     def _on_frontend_ready(self) -> None:
         """Mark the frontend ready and forward the queued updates to it.
 
-        Readiness is set under the same lock as the pending snapshot, so an
-        update cannot be stranded by the transition.
+        Readiness is set, and the snapshot posted, under the lock live updates
+        check readiness with, so no update is stranded or overtakes it.
         """
-        with self._dispatch_lock:
-            with self._updates_lock:
-                self.ipc.is_ready = True
-                last_status = self.last_status
-                pending_updates = list(self.pending_updates)
-                self.pending_updates.clear()
-
-            if last_status:
-                self.window.invoke("status-update", last_status)
+        with self._updates_lock:
+            self.ipc.is_ready = True
+            pending_updates = list(self.pending_updates)
+            self.pending_updates.clear()
+            if self.last_status:
+                self._post("status-update", self.last_status)
             if pending_updates:
                 logger.info("Draining %d queued updates.", len(pending_updates))
             for pending_update in pending_updates:
-                self.window.invoke("agent-update", pending_update)
+                self._post("agent-update", pending_update)
+
+    def _dispatch(self, name: str, data: object) -> None:
+        """Send one event to the window. Runs on the UI thread.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        # Shutdown's own Pyloid calls run nested event loops that can reach
+        # events queued before the window closed. Sending one to the deleted
+        # web view makes Pyloid wait forever for a result. Only the UI thread
+        # writes is_ready, so this read needs no lock.
+        if not self.ipc.is_ready:
+            return
+        # A denylist save posted its settings-changed after this update was
+        # posted, so the frontend removes the card before this would revive it.
+        if (
+            name == "agent-update"
+            and isinstance(data, dict)
+            and data["agent"] in settings.dashboard.agent_denylist
+        ):
+            logger.debug("Dropping denylisted agent telemetry: %s", data["agent"])
+            return
+        try:
+            self.window.invoke(name, data)
+        except Exception:
+            logger.exception("Could not send %s to the window", name)
 
     def on_telemetry(self, data: object) -> None:
         """Forward valid telemetry, or queue it until the frontend is ready.
@@ -131,16 +217,7 @@ class DashboardApp:
                     self.pending_updates.append(telemetry)
                     return
 
-            with self._dispatch_lock:
-                # Re-check under the lock _apply_settings dispatches through:
-                # a denylist save racing the check above must not resurrect a
-                # card that save just told the frontend to remove.
-                if telemetry["agent"] in settings.dashboard.agent_denylist:
-                    logger.debug(
-                        "Dropping denylisted agent telemetry: %s", telemetry["agent"]
-                    )
-                    return
-                self.window.invoke("agent-update", telemetry)
+            self._post("agent-update", telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
 
@@ -186,8 +263,7 @@ class DashboardApp:
             with self._updates_lock:
                 is_ready = self.ipc.is_ready
             if is_ready:
-                with self._dispatch_lock:
-                    self.window.invoke("prompt-ack", ack)
+                self._post("prompt-ack", ack)
         except Exception:
             logger.exception("Error in on_ack")
 
@@ -202,8 +278,7 @@ class DashboardApp:
                 self.last_status = message
                 is_ready = self.ipc.is_ready
             if is_ready:
-                with self._dispatch_lock:
-                    self.window.invoke("status-update", message)
+                self._post("status-update", message)
         except Exception:
             logger.exception("Error in on_status")
 
@@ -296,15 +371,14 @@ class DashboardApp:
         with self._updates_lock:
             is_ready = self.ipc.is_ready
         if is_ready:
-            with self._dispatch_lock:
-                self.window.invoke(
-                    "settings-changed",
-                    {
-                        "stale_threshold": settings.dashboard.stale_threshold,
-                        "max_active_agents": settings.dashboard.max_active_agents,
-                        "agent_denylist": settings.dashboard.agent_denylist,
-                    },
-                )
+            self._post(
+                "settings-changed",
+                {
+                    "stale_threshold": settings.dashboard.stale_threshold,
+                    "max_active_agents": settings.dashboard.max_active_agents,
+                    "agent_denylist": settings.dashboard.agent_denylist,
+                },
+            )
         return reconnecting
 
     def _reconnect(self) -> None:

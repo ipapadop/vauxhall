@@ -314,10 +314,19 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   only the newest `pending_update_limit` events (500 by default), dropping the
   oldest. Drop warnings are logged at power-of-two counts and never include
   telemetry.
-- **Readiness**: Marking the frontend ready and taking the pending snapshot
-  happen under one lock, so no event is lost between the MQTT callback and the
-  initial drain. Dispatch is serialized, so live events cannot overtake the
-  queued snapshot. Repeated readiness signals have no effect.
+- **Window events**: Only the UI thread calls `window.invoke()`, because
+  Pyloid's `invoke` makes a caller on another thread wait for the UI thread.
+  MQTT callbacks and settings saves post events through `queue_to_ui_thread`,
+  a queued Qt signal, and return at once, so neither thread waits on the
+  other: a settings save during telemetry, or `loop_stop()` joining the
+  network thread on a broker change or at shutdown, can't deadlock. Events
+  run on the UI thread in the order they were posted. `DashboardApp` takes the
+  queue as `queue_to_ui`, so tests can run events at once or hold them.
+- **Readiness**: Marking the frontend ready, taking the pending snapshot, and
+  posting it happen under the lock live events check readiness with, so no
+  event is lost between the MQTT callback and the initial drain, and no live
+  event is posted ahead of the snapshot. Repeated readiness signals have no
+  effect.
 - **Connection status**: The status line shows `Connecting...`,
   `Connected to Agent Fleet`, retry messages after connection failures or
   disconnects, and `Disconnected` on shutdown.
@@ -334,9 +343,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   hooks file only disables the hooks option. `on_telemetry` drops an event
   whose `agent` is in `dashboard.agent_denylist` before it is queued or
   dispatched, so a denylisted agent's telemetry never reaches the frontend;
-  it rechecks the denylist immediately before dispatch, under the same lock
-  `_apply_settings` dispatches `settings-changed` through, so a denylist save
-  racing a card's telemetry cannot resurrect a card that save just removed.
+  the UI thread rechecks the denylist before sending each event, and a
+  `settings-changed` is posted after any telemetry posted before it, so a
+  denylist save racing a card's telemetry cannot resurrect a card that save
+  just removed.
   `agent_denylist` is a list-valued field; unlike every other setting it isn't
   settable by an environment variable, and it is described separately from
   `DashboardIPC.get_settings()`'s per-field `fields` list (as `agent_denylist`
@@ -369,7 +379,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready and stops the
   MQTT client once. The final `Disconnected` status and any late telemetry are
-  kept instead of being sent to the destroyed window.
+  kept instead of being sent to the destroyed window. Events still queued for
+  the UI thread are dropped: saving the window state calls Pyloid, whose
+  nested event loop can run them, and sending one to the deleted web view
+  makes Pyloid wait forever for a result.
 - **Dialogs**: `vauxhall/dashboard/ui/js/dialog.js` opens and closes both
   modals. `openDialog` prefers `showModal()` and does nothing on an open
   dialog; `closeDialog` prefers `close()`. Without native dialog support both
@@ -380,8 +393,9 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   reads `app.icon` while the window loads and otherwise logs `Icon is not set.`
   The packaged startup test fails if that line appears.
 - **Pyloid**: Pyloid 0.27.2 or newer is required. Its `BrowserWindow` marshals
-  cross-thread commands to the UI thread, so MQTT callbacks call
-  `window.invoke()` directly. Vauxhall does not use Pyloid's private symbols.
+  cross-thread commands to the UI thread and waits for each one to finish,
+  so only the UI thread calls `window.invoke()` (see Window events).
+  Vauxhall does not use Pyloid's private symbols.
   Importing `pyloid` overwrites `QTWEBENGINE_CHROMIUM_FLAGS`, so
   `vauxhall/dashboard/__init__.py` saves the user's value before any
   submodule imports it. Before creating `Pyloid`, `main()` removes Pyloid's

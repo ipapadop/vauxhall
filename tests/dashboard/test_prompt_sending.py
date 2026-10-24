@@ -282,7 +282,10 @@ def make_dashboard(
     Returns:
         The dashboard.
     """
-    dashboard = DashboardApp(SimpleNamespace())  # type: ignore[arg-type]
+    dashboard = DashboardApp(
+        SimpleNamespace(),  # type: ignore[arg-type]
+        queue_to_ui=lambda handler: handler,
+    )
     dashboard.window = window or FakeWindow()
     dashboard.mqtt = subscriber  # type: ignore[assignment]
     return dashboard

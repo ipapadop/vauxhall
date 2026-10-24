@@ -181,6 +181,7 @@ class Message:
 
     topic: str
     payload: bytes
+    retain: bool = False
 
 
 @dataclass
@@ -349,6 +350,57 @@ def test_relay_delivers_a_prompt_for_a_known_session_and_acknowledges(
     assert topic == session_topic("codex", "native:1", ACK_KIND)
     assert qos == 1
     assert parse_ack(payload.encode()) == {"id": "id-1", "status": "delivered"}
+
+
+def test_relay_ignores_a_retained_prompt(
+    prompt_relay: relay.PromptRelay, deliveries: Deliveries
+) -> None:
+    """A retained prompt, replayed on every subscribe, is not typed.
+
+    Args:
+        prompt_relay: The relay under test.
+        deliveries: The delivery recorder.
+    """
+    panes.record_pane("Codex", "native:1", {"TMUX_PANE": "%3"})
+    message = prompt_message("Codex", "native:1")
+    message.retain = True
+
+    receive(prompt_relay, message)
+
+    assert deliveries.calls == []
+    assert published(prompt_relay).published == []
+
+
+def test_relay_survives_an_unexpected_error(
+    prompt_relay: relay.PromptRelay, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An error while handling a prompt is logged, not raised into paho's loop.
+
+    Args:
+        prompt_relay: The relay under test.
+        caplog: Pytest log capture fixture.
+    """
+    panes.record_pane("Codex", "native:1", {"TMUX_PANE": "%3"})
+
+    def failing_delivery(_target: PaneTarget, _message_id: str, _text: str) -> None:
+        """Fail the way an unforeseen bug would.
+
+        Args:
+            _target: The pane.
+            _message_id: The prompt's identifier.
+            _text: The prompt.
+
+        Raises:
+            RuntimeError: Always.
+        """
+        raise RuntimeError
+
+    prompt_relay.deliver = failing_delivery
+
+    receive(prompt_relay, prompt_message("Codex", "native:1"))
+
+    assert "Could not handle a prompt message" in caplog.text
+    assert "hello" not in caplog.text
 
 
 def test_relay_acknowledges_a_failed_delivery(

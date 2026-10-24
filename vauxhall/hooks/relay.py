@@ -189,14 +189,34 @@ class PromptRelay:
     def _on_message(
         self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
-        """Deliver one prompt to its session's pane and acknowledge the result.
+        """Handle one message without letting an error stop the relay.
+
+        paho re-raises callback exceptions out of its network loop, which
+        would end the relay and every later delivery with it.
 
         Args:
             client: The client that received the message.
             userdata: Unused paho user data.
-            msg: The received message; dropped when invalid or for a session
-                that isn't running in tmux on this machine.
+            msg: The received message.
         """
+        try:
+            self._handle_message(client, msg)
+        except Exception:
+            logger.exception("Could not handle a prompt message")
+
+    def _handle_message(self, client: mqtt.Client, msg: mqtt.MQTTMessage) -> None:
+        """Deliver one prompt to its session's pane and acknowledge the result.
+
+        Args:
+            client: The client that received the message.
+            msg: The received message; dropped when retained, invalid, or for
+                a session that isn't running in tmux on this machine.
+        """
+        # The broker replays a retained message on every subscribe, so the
+        # prompt would be typed again each time the relay reconnects.
+        if msg.retain:
+            logger.warning("Dropping a retained prompt message")
+            return
         parsed_topic = parse_session_topic(msg.topic)
         if parsed_topic is None or parsed_topic[2] != PROMPT_KIND:
             return

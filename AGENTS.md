@@ -159,7 +159,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `vauxhall/agents/+/sessions/+/prompt` with the hooks' broker settings. It
   ignores prompts for sessions without a local pane record, so one relay per
   machine can share a broker, and remembers the last 256 message IDs to
-  ignore a QoS 1 redelivery. Delivery checks that the pane's tmux server PID
+  ignore a QoS 1 redelivery. It ignores messages flagged as retained, which
+  the broker sends only when replaying a stored message on subscribe, so a
+  retained prompt is typed once, when published, and not on every
+  reconnect. It logs any error while handling a message
+  instead of letting paho re-raise it out of the network loop, which would
+  end the relay. Delivery checks that the pane's tmux server PID
   still matches the record (pane IDs restart from `%0` after tmux restarts),
   then runs `load-buffer` from standard input, `paste-buffer -p -d` into the
   pane, and, after 0.2 seconds, `send-keys Enter`. Text never appears on a

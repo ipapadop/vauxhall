@@ -82,8 +82,9 @@ never queued for later.
    the card. A prompt with an ID the relay already handled is ignored, so a
    redelivery doesn't submit it twice.
 
-Prompts are never retained by the broker, because a retained prompt would be
-typed again each time a relay reconnects.
+The dashboard never publishes a retained prompt, because the broker would
+replay it each time a relay reconnects. If another client publishes one, the
+relay types it once, like any prompt, and ignores the broker's replays.
 
 ## Troubleshooting
 

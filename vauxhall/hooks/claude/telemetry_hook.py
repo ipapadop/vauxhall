@@ -178,7 +178,7 @@ HANDLERS: dict[str, common.EventHandler] = {
     "SubagentStart": common.subagent_start_telemetry,
     "PreCompact": common.pre_compact_telemetry,
     "PostCompact": common.post_compact_telemetry,
-    "Stop": common.ready_telemetry,
+    "Stop": common.stop_telemetry,
     "StopFailure": _handle_stop_failure,
     "SessionEnd": partial(common.session_end_telemetry, statuses=_SESSION_END_STATUSES),
 }

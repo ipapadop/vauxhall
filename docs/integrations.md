@@ -154,7 +154,7 @@ is percent-encoded. `vauxhall.core.prompts` builds and validates these messages.
 | `SubagentStart` | `Acting` (`tool` is `Agent`, `cmd` is the agent type) |
 | `PreCompact` | `Thinking` (`Compacting context`, with the trigger) |
 | `PostCompact` | `Context compacted`: `Idle` after `manual`, `Thinking` after `auto` |
-| `Stop` | `Idle` (`Ready`) |
+| `Stop` | `Idle` (`Ready`, with `last_assistant_message` when available) |
 | `StopFailure` | `Error` (`API error: <error type>`) |
 | `SessionEnd` | `Idle`, with a normalized reason |
 
@@ -189,7 +189,10 @@ Some signals are intentionally absent:
   only the error type is published, not `error_details` or the error message.
 - `MessageDisplay` batches are assembled in a private temporary file and
   published when the message ends, including messages shown during a turn.
-  The file is then removed. Messages longer than 4,096 characters end with
+  The file is then removed. Claude Code runs the final message's
+  `MessageDisplay` and `Stop` hooks at the same time, so that `Thinking`
+  event can arrive after `Stop`; the dashboard ignores it when it only
+  repeats the message `Stop` published. Messages longer than 4,096 characters end with
   an ellipsis.
 - Tool durations use Claude Code's `duration_ms` when reported. Otherwise they
   use a timing file per session and `tool_use_id` in the system temporary

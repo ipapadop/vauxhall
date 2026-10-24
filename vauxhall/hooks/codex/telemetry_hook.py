@@ -52,22 +52,6 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     )
 
 
-def _handle_stop(input_data: dict[str, Any]) -> common.Telemetry:
-    """Publish the final assistant message with the idle state.
-
-    Args:
-        input_data: The hook event carrying the last assistant message.
-
-    Returns:
-        The idle state, with the final message when the event reports one.
-    """
-    state, details = common.ready_telemetry(input_data)
-    message = common.message_text(input_data.get("last_assistant_message"))
-    if message is not None:
-        details["message"] = message
-    return state, details
-
-
 HANDLERS: dict[str, common.EventHandler] = {
     "SessionStart": common.session_start_telemetry,
     "UserPromptSubmit": common.prompt_submit_telemetry,
@@ -82,7 +66,7 @@ HANDLERS: dict[str, common.EventHandler] = {
     "SubagentStart": common.subagent_start_telemetry,
     "PreCompact": common.pre_compact_telemetry,
     "PostCompact": common.post_compact_telemetry,
-    "Stop": _handle_stop,
+    "Stop": common.stop_telemetry,
     "Interrupt": lambda _: ("Idle", {"status": "interrupted"}),
     # Codex currently reports only the "other" reason.
     "SessionEnd": partial(common.session_end_telemetry, statuses={}),

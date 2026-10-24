@@ -85,3 +85,6 @@ The first release, planned as 0.1.0. It is alpha software; see
   `--allow-insecure-localhost`; the dashboard now removes both, since its UI
   is served over plain HTTP. Flags you set in `QTWEBENGINE_CHROMIUM_FLAGS` are
   kept as given.
+- A deeply nested prompt or acknowledgment message no longer stops
+  `vauxhall-relay` or the dashboard's MQTT connection; it is dropped like any
+  other malformed message.

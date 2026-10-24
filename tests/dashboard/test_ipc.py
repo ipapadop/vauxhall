@@ -3,7 +3,10 @@
 
 """Tests for the IPC bridge."""
 
+import logging
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.ipc import DashboardIPC
@@ -49,6 +52,22 @@ def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
     ipc = DashboardIPC()
     assert ipc.copy_to_clipboard("test text") is True
     mock_copy.assert_called_once_with("test text")
+
+
+@patch("vauxhall.dashboard.ipc.pyperclip.copy")
+def test_ipc_copy_to_clipboard_does_not_log_the_text(
+    mock_copy: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The copied workspace path never appears in the log.
+
+    Args:
+        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
+        caplog: Captures log records.
+    """
+    caplog.set_level(logging.DEBUG, logger="vauxhall.dashboard.ipc")
+    assert DashboardIPC().copy_to_clipboard("/home/alice/secret-project") is True
+    mock_copy.assert_called_once_with("/home/alice/secret-project")
+    assert "secret-project" not in caplog.text
 
 
 @patch("vauxhall.dashboard.ipc.pyperclip.copy")

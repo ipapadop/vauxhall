@@ -9,6 +9,7 @@ import { parseHTML } from 'linkedom';
 import {
     cachedTheme,
     cacheTheme,
+    createDebounce,
     createPreferenceSaver,
     loadPreferences,
     restorePreferences,
@@ -110,6 +111,21 @@ test('flush sends queued changes immediately and only once', (t) => {
     t.mock.timers.tick(500);
 
     assert.deepEqual(payloads, [{ sort: 'recent' }]);
+});
+
+test('a debounce flush runs its action only when a run is scheduled', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    let runs = 0;
+    const debounce = createDebounce(() => { runs += 1; });
+
+    debounce.flush();
+    assert.equal(runs, 0);
+
+    debounce.schedule();
+    debounce.flush();
+    debounce.flush();
+    t.mock.timers.tick(500);
+    assert.equal(runs, 1);
 });
 
 test('a save the bridge reports as failed is logged', async (t) => {

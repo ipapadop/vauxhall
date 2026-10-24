@@ -77,6 +77,13 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The dashboard starts once when Pyloid signals readiness after the page
   loads. Before, it could start twice, registering every event listener and
   the readiness signal two times.
+- A stale card shows its real state again when a raised stale threshold makes
+  it fresh. Before, it kept showing `STALE` until its next event.
+- Closing the dashboard before its remembered cards finish loading no longer
+  saves an empty card list over them.
+- A settings save that both denylists an agent and lowers the card limit
+  removes the denylisted cards before evicting others. Before, it could evict
+  cards that would have fit.
 
 ### Security
 
@@ -85,3 +92,7 @@ The first release, planned as 0.1.0. It is alpha software; see
   `--allow-insecure-localhost`; the dashboard now removes both, since its UI
   is served over plain HTTP. Flags you set in `QTWEBENGINE_CHROMIUM_FLAGS` are
   kept as given.
+- A deeply nested prompt or acknowledgment message no longer stops
+  `vauxhall-relay` or the dashboard's MQTT connection; it is dropped like any
+  other malformed message.
+- The dashboard no longer logs the workspace path it copies to the clipboard.

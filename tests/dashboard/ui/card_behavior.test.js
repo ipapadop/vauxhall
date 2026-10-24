@@ -220,6 +220,18 @@ test('a stale card recovers when its agent reports again', () => {
     assert.equal(card.querySelector('.last-seen-timer').textContent, 'just now');
 });
 
+test('a stale card shows its real state again when a raised threshold makes it fresh', () => {
+    const card = makeCard();
+    updateCard(card, { state: 'Waiting for Input', details: { prompt: 'ok?' } });
+    card.dataset.lastSeen = String(Date.now() - 180000);
+    checkStaleness({ only: card }, 120000);
+
+    checkStaleness({ only: card }, 300000);
+
+    assert.equal(card.classList.contains('stale'), false);
+    assert.equal(card.querySelector('.status-badge').textContent, 'Waiting for Input');
+});
+
 test('moving from Idle into Waiting or Error reports it entered attention', () => {
     const card = makeCard();
     updateCard(card, { state: 'Acting', details: { tool: 'shell' } });

@@ -12,7 +12,8 @@ from unittest.mock import patch
 import pytest
 
 from vauxhall.core.config import MQTTConfig
-from vauxhall.hooks.config import HookConfig
+from vauxhall.core.config_store import user_config_path
+from vauxhall.hooks.config import HookConfig, warn_about_workspace_file
 
 
 def test_hook_config_load_env_only() -> None:
@@ -45,6 +46,9 @@ def test_hooks_ignore_a_workspace_config_file(
 ) -> None:
     """The workspace is not trusted to pick the broker the hooks report to.
 
+    Loading doesn't warn: the dashboard loads hook settings too, and only hook
+    and relay processes call ``warn_about_workspace_file``.
+
     Args:
         isolated_cwd: Empty working directory standing in for the workspace.
         caplog: Pytest log capture fixture.
@@ -59,7 +63,26 @@ def test_hooks_ignore_a_workspace_config_file(
         config = HookConfig.load()
 
     assert config.mqtt.host == "broker.example"
+    assert caplog.records == []
+
+
+def test_warns_about_an_ignored_workspace_file(
+    isolated_cwd: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A workspace file the hooks ignore is named, with the file they read.
+
+    Args:
+        isolated_cwd: Empty working directory standing in for the workspace.
+        caplog: Pytest log capture fixture.
+    """
+    workspace_file = isolated_cwd / "vauxhall_hooks.json"
+    workspace_file.write_text("{}")
+
+    with caplog.at_level("WARNING"):
+        warn_about_workspace_file()
+
     assert f"Ignoring {workspace_file.resolve()}" in caplog.text
+    assert str(user_config_path("vauxhall_hooks.json")) in caplog.text
 
 
 def test_hooks_never_send_a_file_a_workspace_names_as_the_password(
@@ -92,7 +115,7 @@ def test_hooks_never_send_a_file_a_workspace_names_as_the_password(
 
 
 @pytest.mark.usefixtures("isolated_cwd")
-def test_hooks_without_a_workspace_file_do_not_warn(
+def test_no_warning_without_a_workspace_file(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Only a workspace file that would have been read is worth a warning.
@@ -101,6 +124,45 @@ def test_hooks_without_a_workspace_file_do_not_warn(
         caplog: Pytest log capture fixture.
     """
     with caplog.at_level("WARNING"):
-        HookConfig.load()
+        warn_about_workspace_file()
 
     assert caplog.records == []
+
+
+def test_no_warning_when_the_current_directory_holds_the_user_file(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Started from ``~/.config/vauxhall``, the file found there is the one read.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        caplog: Pytest log capture fixture.
+    """
+    user_file = user_config_path("vauxhall_hooks.json")
+    user_file.parent.mkdir(parents=True)
+    user_file.write_text("{}")
+    monkeypatch.chdir(user_file.parent)
+
+    with caplog.at_level("WARNING"):
+        warn_about_workspace_file()
+
+    assert caplog.records == []
+
+
+def test_no_warning_when_the_current_directory_is_gone(
+    isolated_cwd: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Hooks don't read the current directory, so losing it is no error.
+
+    Args:
+        isolated_cwd: Working directory, removed by the test.
+        caplog: Pytest log capture fixture.
+    """
+    isolated_cwd.rmdir()
+
+    with caplog.at_level("WARNING"):
+        warn_about_workspace_file()
+        config = HookConfig.load()
+
+    assert caplog.records == []
+    assert config.mqtt.host == MQTTConfig().host

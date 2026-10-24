@@ -22,6 +22,12 @@ The hooks, and `vauxhall-relay`, read only
 otherwise send telemetry and your broker password to any broker. A hook that
 finds one ignores it and prints a warning on stderr.
 
+`VAUXHALL_*` environment variables still apply, wherever they come from,
+including an agent's project settings in the workspace (such as the `env` of
+Claude Code's `.claude/settings.json`). Settings that can set environment
+variables can also register hooks that run any command, so trust a
+workspace's agent settings the way you trust its code.
+
 The dashboard looks for its file in two places and uses only the first one it
 finds:
 

@@ -455,9 +455,11 @@ if the file is not there, from `~/.config/vauxhall/`. Hooks and the relay read
 workspace, and a file there, such as one in a cloned repository, could name
 any broker and a `password_file` to send it.
 `HookConfig.SEARCHES_CURRENT_DIRECTORY` is `False`, and `field_sources` reads
-the same flag, so the settings editor agrees with the hooks. `HookConfig.load` logs a warning when it ignores a
-workspace file. Environment variables override file values, which
-override defaults. See [configuration.md](docs/configuration.md) for every
+the same flag, so the settings editor agrees with the hooks.
+`warn_about_workspace_file`, called by `run_hook` and the relay's `main` but
+not by `HookConfig.load`, which the dashboard also calls, logs a warning when
+the current directory holds a hooks file other than the per-user one.
+Environment variables override file values, which override defaults. See [configuration.md](docs/configuration.md) for every
 field and environment variable.
 
 Invalid explicit values abort dashboard startup or hook telemetry with an error

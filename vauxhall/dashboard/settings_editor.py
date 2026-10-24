@@ -7,12 +7,11 @@ import re
 from dataclasses import asdict, fields
 from typing import Any
 
-from vauxhall.core.config import ConfigurationError, MQTTConfig
+from vauxhall.core.config import HOOKS_FILE, ConfigurationError, MQTTConfig
 from vauxhall.core.config_store import field_sources, user_config_path
 from vauxhall.dashboard.config import DashboardConfig
 
 DASHBOARD_FILE = "vauxhall_dashboard.json"
-HOOKS_FILE = "vauxhall_hooks.json"
 
 # When a saved change takes effect. Fields that are not listed need a restart.
 APPLY_MODES = {

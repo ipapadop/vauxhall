@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from vauxhall.core.config import (
+    HOOKS_FILE,
     ConfigResolver,
     LoggingConfig,
     MQTTConfig,
@@ -16,8 +17,6 @@ from vauxhall.core.config_store import user_config_path
 from vauxhall.core.logging import get_logger
 
 logger = get_logger(__name__)
-
-HOOKS_FILE = "vauxhall_hooks.json"
 
 
 @dataclass
@@ -49,13 +48,6 @@ class HookConfig:
         Returns:
             HookConfig: The loaded configuration.
         """
-        workspace_file = Path.cwd() / HOOKS_FILE
-        if config_path is None and workspace_file.exists():
-            logger.warning(
-                "Ignoring %s: hooks read only %s",
-                workspace_file.resolve(),
-                user_config_path(HOOKS_FILE),
-            )
         resolver = ConfigResolver(
             HOOKS_FILE,
             config_path,
@@ -65,6 +57,22 @@ class HookConfig:
             mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt"),
             logging=resolver.resolve_dataclass(LoggingConfig, "logging"),
         )
+
+
+def warn_about_workspace_file() -> None:
+    """Log a warning when the current directory holds a hooks file hooks ignore.
+
+    Hook and relay processes call this; the dashboard loads hook settings too
+    and has no use for the warning.
+    """
+    user_file = user_config_path(HOOKS_FILE)
+    try:
+        workspace_file = (Path.cwd() / HOOKS_FILE).resolve()
+        ignored = workspace_file.exists() and workspace_file != user_file.resolve()
+    except OSError:
+        return
+    if ignored:
+        logger.warning("Ignoring %s: hooks read only %s", workspace_file, user_file)
 
 
 hook_settings = HookConfig.load()

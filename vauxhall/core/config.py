@@ -12,6 +12,8 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 
+HOOKS_FILE = "vauxhall_hooks.json"
+
 
 def _field_default(f: Field[Any]) -> Any:  # noqa: ANN401
     """Return a dataclass field's default, calling its factory if it has one.

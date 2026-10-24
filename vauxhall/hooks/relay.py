@@ -288,11 +288,15 @@ class PromptRelay:
 def main() -> None:
     """Run the prompt relay with the hooks' broker settings."""
     try:
-        from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
+        from vauxhall.hooks.config import (  # noqa: PLC0415
+            hook_settings,
+            warn_about_workspace_file,
+        )
     except ConfigurationError as error:
         raise SystemExit(str(error)) from error
 
     setup_logging(level=hook_settings.logging.level)
+    warn_about_workspace_file()
     try:
         relay = PromptRelay(hook_settings.mqtt)
     except OSError as error:

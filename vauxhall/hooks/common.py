@@ -630,9 +630,13 @@ def run_hook(send_telemetry: Callable[[dict[str, Any]], None]) -> None:
     try:
         with redirect_stdout(sys.stderr):
             from vauxhall.core.logging import setup_logging  # noqa: PLC0415
-            from vauxhall.hooks.config import hook_settings  # noqa: PLC0415
+            from vauxhall.hooks.config import (  # noqa: PLC0415
+                hook_settings,
+                warn_about_workspace_file,
+            )
 
             setup_logging(level=hook_settings.logging.level)
+            warn_about_workspace_file()
             input_data = json.load(sys.stdin)
             if isinstance(input_data, dict):
                 send_telemetry(input_data)

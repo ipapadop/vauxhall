@@ -356,8 +356,8 @@ async function init() {
             onSettingsChanged: (changed) => {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
-                closeDialogsFor(evictAgents(maxActiveAgents));
 
+                // Denylisted cards go first, so they don't count toward the limit.
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {
                     if (!denylist.has(cardIdentity(card).agent)) continue;
@@ -365,6 +365,7 @@ async function init() {
                     removeAgent(key);
                     closeDialogsFor([key]);
                 }
+                closeDialogsFor(evictAgents(maxActiveAgents));
 
                 checkStaleness(agents, staleThresholdMs);
                 refreshSummary();

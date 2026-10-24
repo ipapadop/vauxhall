@@ -407,6 +407,20 @@ test('a settings change carrying a denylist removes matching cards', async (t) =
     assert.equal(document.getElementById('agent-grid').children.length, 1);
 });
 
+test('a settings change removes denylisted cards before applying a lowered limit', async (t) => {
+    const { listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'one' });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'three' });
+    agents['["Claude","/home/user/project","one"]'].dataset.lastSeen = '1000';
+    agents['["Codex","/home/user/project","two"]'].dataset.lastSeen = '2000';
+    agents['["Codex","/home/user/project","three"]'].dataset.lastSeen = '3000';
+
+    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 2, agent_denylist: ['Codex'] });
+
+    assert.deepEqual(Object.keys(agents), ['["Claude","/home/user/project","one"]']);
+});
+
 test('denylisting the agent behind an open history modal closes it', async (t) => {
     const { listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });

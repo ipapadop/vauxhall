@@ -141,6 +141,7 @@ def test_directory_is_not_a_readable_file(tmp_path: Path) -> None:
         ({"ca_certs": "ca"}, "^mqtt.ca_certs requires mqtt.tls"),
         ({"certfile": "c", "keyfile": "k"}, "^mqtt.certfile requires mqtt.tls"),
         ({"password_file": "p"}, "^mqtt.username is required"),
+        ({"tls": True, "keepalive": 0}, "^mqtt.keepalive must be at least 1"),
     ],
 )
 def test_incompatible_combinations_name_the_field_to_fix(

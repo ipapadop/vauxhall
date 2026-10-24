@@ -45,7 +45,7 @@ which overrides the default. See `vauxhall_dashboard.json.example` and
 | --- | --- | --- | --- | --- |
 | `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
 | `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
-| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535 |
+| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535; at least 1 with `tls`. Hooks always use 1 (see [integrations.md](integrations.md#python-client)) |
 | `mqtt` | `tls` | `VAUXHALL_MQTT_TLS` | `false` | Boolean |
 | `mqtt` | `ca_certs` | `VAUXHALL_MQTT_CA_CERTS` | empty (system trust store) | Absolute path of a readable file; needs `tls` |
 | `mqtt` | `username` | `VAUXHALL_MQTT_USERNAME` | empty (none) | String |

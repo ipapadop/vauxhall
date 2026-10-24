@@ -62,6 +62,13 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A TLS broker that accepts the connection but stalls the handshake no
+  longer holds each hook for up to `mqtt.keepalive` seconds (60 by default).
+  paho times the handshake with the keepalive, so hooks now connect with a
+  1-second keepalive; their connections last about a second anyway.
+- `mqtt.tls` with `mqtt.keepalive` set to 0 is now a configuration error.
+  The TLS handshake could never finish, so the dashboard and the relay
+  retried forever and hooks never connected.
 - The prompt relay no longer retypes a retained prompt each time it
   reconnects. A prompt another client publishes with the retain flag is
   typed only by a relay connected when it is published.

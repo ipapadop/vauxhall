@@ -21,6 +21,10 @@ logger = get_logger(__name__)
 # Bounds both the connection attempt and the wait for every acknowledgment,
 # so a hook finishes quickly even when the broker is slow or unreachable.
 TIMEOUT_SECONDS = 1.0
+# paho times the TLS handshake with the keepalive rather than the connection
+# timeout, and a hook's connection lasts about a second, so hooks use the
+# shortest keepalive instead of mqtt.keepalive.
+KEEPALIVE_SECONDS = 1
 
 
 def format_message(event: Mapping[str, object]) -> str:
@@ -50,8 +54,9 @@ def publish(
     """Publish telemetry events at QoS 1 over one broker connection.
 
     Each event goes to its agent's activity topic. Invalid events are logged
-    and skipped. Connecting and waiting for all acknowledgments each take at
-    most ``TIMEOUT_SECONDS``. Failures are logged, never raised.
+    and skipped. Connecting, the TLS handshake, and waiting for all
+    acknowledgments each take at most about a second. Failures are logged,
+    never raised.
 
     Args:
         events: Events in the form ``format_message`` takes.
@@ -84,7 +89,7 @@ def publish(
         logger.exception("Could not set up the broker connection")
         return False
     try:
-        client.connect(config.host, config.port, keepalive=config.keepalive)
+        client.connect(config.host, config.port, keepalive=KEEPALIVE_SECONDS)
     except Exception:
         logger.debug("Failed to connect telemetry client")
         return False

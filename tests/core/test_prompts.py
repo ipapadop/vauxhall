@@ -123,6 +123,7 @@ def test_format_prompt_rejects_invalid_input() -> None:
             ).encode(),
             id="oversized",
         ),
+        pytest.param(b"[" * 30000, id="deeply-nested"),
     ],
 )
 def test_parse_prompt_rejects_invalid_messages(payload: bytes) -> None:
@@ -168,6 +169,7 @@ def test_format_ack_rejects_invalid_input() -> None:
             {"schema_version": 1, "id": "a", "status": "failed", "reason": "x"}
         ).encode(),
         pytest.param(b" " * (MAX_MESSAGE_BYTES + 1), id="oversized"),
+        pytest.param(b"[" * 30000, id="deeply-nested"),
     ],
 )
 def test_parse_ack_rejects_invalid_messages(payload: bytes) -> None:

@@ -475,7 +475,7 @@ export function checkStaleness(agents, staleThresholdMs = 120000) {
         const isStale = diff > staleThresholdMs;
         card.classList.toggle('stale', isStale);
         const statusBadge = card.querySelector('.status-badge');
-        if (isStale && statusBadge) statusBadge.textContent = 'STALE';
+        if (statusBadge) statusBadge.textContent = isStale ? 'STALE' : (card.dataset.state || 'Idle');
     });
 }
 

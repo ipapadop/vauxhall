@@ -138,7 +138,7 @@ def parse_prompt(payload: bytes) -> tuple[str, str] | None:
         return None
     try:
         data: Any = json.loads(payload.decode())
-    except ValueError:
+    except (ValueError, RecursionError):  # Deeply nested JSON recurses.
         return None
     if (
         not isinstance(data, dict)
@@ -200,7 +200,7 @@ def parse_ack(payload: bytes) -> dict[str, str] | None:
         return None
     try:
         data: Any = json.loads(payload.decode())
-    except ValueError:
+    except (ValueError, RecursionError):  # Deeply nested JSON recurses.
         return None
     if (
         not isinstance(data, dict)

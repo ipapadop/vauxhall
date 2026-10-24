@@ -99,8 +99,9 @@ class MQTTConfig:
 
         Raises:
             ConfigurationError: If a client certificate lacks its key or the
-                reverse, a CA or client certificate is set without TLS, or a
-                password is set without a username.
+                reverse, a CA or client certificate is set without TLS, TLS
+                is set with a zero keepalive, or a password is set without a
+                username.
         """
         has_password = self.password_file or os.environ.get(PASSWORD_ENV)
         problems = [
@@ -119,6 +120,12 @@ class MQTTConfig:
             (
                 self.certfile and not self.tls,
                 "mqtt.certfile requires mqtt.tls to be true",
+            ),
+            (
+                # paho times the TLS handshake with the keepalive, and a zero
+                # timeout makes the socket non-blocking, so it never connects.
+                self.tls and self.keepalive == 0,
+                "mqtt.keepalive must be at least 1 when mqtt.tls is true",
             ),
             (
                 has_password and not self.username,

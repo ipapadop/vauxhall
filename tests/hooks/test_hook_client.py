@@ -5,6 +5,8 @@
 
 import json
 import logging
+import socket
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -203,7 +205,9 @@ def test_publish_sends_every_event_over_one_connection() -> None:
 
     assert _publish(mqtt_client, EVENT, second)
 
-    assert mqtt_client.connected_to == ("test_host", 1234, 30)
+    # A hook's connection lasts about a second, and paho times the TLS
+    # handshake with the keepalive, so hooks ignore the configured one.
+    assert mqtt_client.connected_to == ("test_host", 1234, 1)
     assert mqtt_client.connect_timeout == 1.0
     assert mqtt_client.published == [
         ("vauxhall/agents/gemini/activity", {"schema_version": 1, **EVENT}, 1),
@@ -351,4 +355,22 @@ def test_publish_uses_hook_settings_by_default(tmp_path: Path) -> None:
     ):
         assert publish([EVENT])
 
-    assert mqtt_client.connected_to == ("hook_host", 9999, 120)
+    assert mqtt_client.connected_to == ("hook_host", 9999, 1)
+
+
+def test_publish_gives_up_on_a_stalled_tls_handshake() -> None:
+    """A broker that accepts the connection but never answers can't hold a hook.
+
+    paho times the TLS handshake with the keepalive, not ``connect_timeout``.
+    """
+    with socket.socket() as silent:
+        silent.bind(("127.0.0.1", 0))
+        silent.listen()
+        config = MQTTConfig(
+            host="127.0.0.1", port=silent.getsockname()[1], keepalive=10, tls=True
+        )
+        start = time.monotonic()
+
+        assert not publish([EVENT], config)
+
+    assert time.monotonic() - start < 5

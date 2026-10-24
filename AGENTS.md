@@ -96,7 +96,9 @@ sequenceDiagram
 3. **The client publishes it.** `publish()` validates each payload against
    schema version 1, publishes the hook's events at QoS 1 over one connection
    to `vauxhall/agents/<agent_name>/activity`, and waits up to one second in
-   total for the broker's acknowledgments. The hook always writes valid protocol JSON on
+   total for the broker's acknowledgments. It connects with a 1-second
+   keepalive, not `mqtt.keepalive`, because paho times the TLS handshake with
+   the keepalive, so a stalled broker can't hold a hook for a minute. The hook always writes valid protocol JSON on
    stdout, even when telemetry fails, so the agent is never blocked.
 4. **The broker routes it.** Mosquitto delivers the message to the dashboard,
    which subscribes to `vauxhall/agents/+/activity`.

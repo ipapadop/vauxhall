@@ -449,9 +449,14 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 
 ## Configuration
 
-The dashboard reads `vauxhall_dashboard.json` and hooks read
-`vauxhall_hooks.json`, from the current directory or, if the file is not there,
-from `~/.config/vauxhall/`. Environment variables override file values, which
+The dashboard reads `vauxhall_dashboard.json` from the current directory or,
+if the file is not there, from `~/.config/vauxhall/`. Hooks and the relay read
+`vauxhall_hooks.json` only from `~/.config/vauxhall/`: they run in the agent's
+workspace, and a file there, such as one in a cloned repository, could name
+any broker and a `password_file` to send it.
+`HookConfig.SEARCHES_CURRENT_DIRECTORY` is `False`, and `field_sources` reads
+the same flag, so the settings editor agrees with the hooks. `HookConfig.load` logs a warning when it ignores a
+workspace file. Environment variables override file values, which
 override defaults. See [configuration.md](docs/configuration.md) for every
 field and environment variable.
 
@@ -483,8 +488,8 @@ writing JSON directly. `save_user_config` writes only
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
 `field_sources` reports each field's source (`environment`, `file`, or
 `default`) and whether it is editable. Fields set by `VAUXHALL_*` environment
-variables are read-only, and so is every field when a configuration file exists
-in the current directory. Saving a read-only or unknown field, or saving to a
+variables are read-only, and so is every field when a `vauxhall_dashboard.json`
+exists in the current directory. Saving a read-only or unknown field, or saving to a
 malformed file, raises `ConfigurationError` without writing. See
 [configuration.md](docs/configuration.md) for details.
 

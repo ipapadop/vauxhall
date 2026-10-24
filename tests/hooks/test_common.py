@@ -483,7 +483,9 @@ def test_hook_reports_invalid_configuration_without_breaking_protocol(
         expected: The source and the value the error must name.
     """
     if file_payload is not None:
-        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
+        user_file = Path.home() / ".config" / "vauxhall" / "vauxhall_hooks.json"
+        user_file.parent.mkdir(parents=True)
+        user_file.write_text(json.dumps(file_payload))
     environment = {
         key: value
         for key, value in os.environ.items()

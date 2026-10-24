@@ -103,25 +103,12 @@ def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
     Returns:
         tuple[dict[str, Any] | None, str | None]: The hooks' MQTT values and no
             error, or no values and the reason saving to the hooks file would
-            fail or have no effect.
+            fail.
     """
     try:
-        hook_type = hook_config_type()
-        sources = field_sources(HOOKS_FILE, hook_type)
-        hooks_mqtt = _synced_mqtt(hook_type.load().mqtt)
+        hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
     except ConfigurationError as error:
         return None, str(error)
-    # Hooks read a hooks file in the current directory instead of the per-user
-    # file, so saving to the per-user file would have no effect.
-    if any(
-        not source.editable and source.kind != "environment"
-        for source in sources.values()
-    ):
-        message = (
-            f"A {HOOKS_FILE} in the current directory takes precedence over "
-            f"{user_config_path(HOOKS_FILE)}"
-        )
-        return None, message
     return hooks_mqtt, None
 
 

@@ -102,6 +102,14 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- Hooks and `vauxhall-relay` no longer read a `vauxhall_hooks.json` in the
+  agent's workspace, only `~/.config/vauxhall/vauxhall_hooks.json`. A
+  workspace file, for example one committed to a cloned repository, could
+  point the hooks at any broker and send it your telemetry and broker
+  password, or any file you can read as `password_file`. A hook that finds
+  one ignores it and prints a warning; move its settings to the per-user
+  file. The dashboard still reads `vauxhall_dashboard.json` from its current
+  directory.
 - The prompt relay no longer types a prompt into a shell. An agent that
   exited without ending its session, for example after a crash, left the
   shell in its tmux pane, and the relay pasted the prompt there, where it ran

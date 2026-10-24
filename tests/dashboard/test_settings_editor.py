@@ -154,10 +154,10 @@ def test_describe_settings_reports_hooks_file_error() -> None:
     assert len(described["fields"]) == 20
 
 
-def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
+def test_describe_settings_ignores_a_hooks_file_in_the_current_directory(
     isolated_cwd: Path,
 ) -> None:
-    """A hooks file in the current directory makes saving to the user file pointless.
+    """Hooks never read a current-directory file, so it can't hide the user file.
 
     Args:
         isolated_cwd: Empty working directory holding no configuration file.
@@ -166,8 +166,8 @@ def test_describe_settings_disables_hooks_hidden_by_current_directory_file(
 
     described = describe_settings(dashboard_settings)
 
-    assert described["hooks_mqtt"] is None
-    assert "current directory takes precedence" in described["hooks_error"]
+    assert described["hooks_error"] is None
+    assert described["hooks_mqtt"]["host"] == MQTTConfig().host
 
 
 def test_describe_settings_marks_agent_denylist_read_only_behind_a_cwd_file(

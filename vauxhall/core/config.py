@@ -202,16 +202,24 @@ def load_config_data(config_path: Path) -> dict[str, Any]:
     return data
 
 
-def find_config_file(filename: str) -> Path | None:
+def find_config_file(
+    filename: str, *, search_current_directory: bool = True
+) -> Path | None:
     """Search for config file in CWD and then ~/.config/vauxhall/.
 
     Args:
         filename: Name of the configuration file to look for.
+        search_current_directory: Whether to look in the current directory
+            before ``~/.config/vauxhall/``.
 
     Returns:
-        The first path that exists, or ``None`` when neither directory has it.
+        The first path that exists, or ``None`` when no searched directory
+        has it.
     """
-    for directory in (Path.cwd(), Path.home() / ".config" / "vauxhall"):
+    directories = [Path.home() / ".config" / "vauxhall"]
+    if search_current_directory:
+        directories.insert(0, Path.cwd())
+    for directory in directories:
         config_path = directory / filename
         if config_path.exists():
             return config_path
@@ -222,23 +230,33 @@ class ConfigResolver:
     """Tiered configuration resolver with lazy JSON loading."""
 
     def __init__(
-        self, default_filename: str, override_path: Path | None = None
+        self,
+        default_filename: str,
+        override_path: Path | None = None,
+        *,
+        search_current_directory: bool = True,
     ) -> None:
         """Initialize the resolver.
 
         Args:
             default_filename: The name of the config file to search for.
             override_path: Optional explicit path to a config file.
+            search_current_directory: Whether the search for
+                ``default_filename`` includes the current directory.
         """
         self.default_filename = default_filename
         self.override_path = override_path
+        self.search_current_directory = search_current_directory
         self._json_data: dict[str, Any] | None = None
         self.config_path: Path | None = None
 
     def _ensure_json_loaded(self) -> None:
         """Lazily load JSON data if not already loaded."""
         if self._json_data is None:
-            config_path = self.override_path or find_config_file(self.default_filename)
+            config_path = self.override_path or find_config_file(
+                self.default_filename,
+                search_current_directory=self.search_current_directory,
+            )
             if config_path is None:
                 self._json_data = {}
                 return

@@ -62,7 +62,9 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
         ConfigurationError: If the loaded configuration file is malformed or a
             known section is not an object.
     """
-    loaded_path = find_config_file(filename)
+    loaded_path = find_config_file(
+        filename, search_current_directory=config_type.SEARCHES_CURRENT_DIRECTORY
+    )
     data = load_config_data(loaded_path) if loaded_path else {}
     location = str(loaded_path.resolve()) if loaded_path else None
     # The loader reads only one file, so a file in the current directory hides

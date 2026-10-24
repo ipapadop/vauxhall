@@ -83,8 +83,9 @@ never queued for later.
    redelivery doesn't submit it twice.
 
 The dashboard never publishes a retained prompt, because the broker would
-replay it each time a relay reconnects. If another client publishes one, the
-relay types it once, like any prompt, and ignores the broker's replays.
+replay it each time a relay reconnects. If another client publishes one, a relay
+connected at that moment types it once, like any prompt; the broker's later
+replays are ignored, so a relay that connects afterwards never types it.
 
 ## Troubleshooting
 

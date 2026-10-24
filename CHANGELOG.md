@@ -77,6 +77,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The dashboard starts once when Pyloid signals readiness after the page
   loads. Before, it could start twice, registering every event listener and
   the readiness signal two times.
+- The dashboard no longer freezes when telemetry arrives while settings are
+  being saved, and no longer hangs when you change the broker or close the
+  window while telemetry is arriving.
 - A stale card shows its real state again when a raised stale threshold makes
   it fresh. Before, it kept showing `STALE` until its next event.
 - Closing the dashboard before its remembered cards finish loading no longer

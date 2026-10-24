@@ -52,7 +52,7 @@ def dashboard() -> DashboardApp:
     Returns:
         The dashboard.
     """
-    app = DashboardApp(MagicMock())
+    app = DashboardApp(MagicMock(), queue_to_ui=lambda handler: handler)
     app.window = MagicMock()
     app.ipc.is_ready = True
     return app

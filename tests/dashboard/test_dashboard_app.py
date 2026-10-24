@@ -5,9 +5,8 @@
 
 import unittest
 from copy import deepcopy
-from threading import Event, Thread
 from typing import Any
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 
@@ -26,6 +25,7 @@ sys_modules_patch.start()
 from vauxhall.dashboard.app import (  # noqa: E402
     ICON_FILE,
     DashboardApp,
+    WindowEvent,
     _set_chromium_flags,
 )
 
@@ -46,6 +46,56 @@ def valid_event(**overrides: object) -> dict[str, object]:
     }
     event.update(overrides)
     return event
+
+
+def run_now(handler: WindowEvent) -> WindowEvent:
+    """Stand in for the UI-thread queue by running each event at once.
+
+    Args:
+        handler: The dashboard's window-event handler.
+
+    Returns:
+        The handler itself.
+    """
+    return handler
+
+
+class DeferredQueue:
+    """Stand in for the UI-thread queue, holding events until ``run``."""
+
+    def __init__(self) -> None:
+        """Start with nothing queued."""
+        self.handler: WindowEvent | None = None
+        self.queued: list[tuple[str, object]] = []
+        self.posted: list[str] = []
+
+    def wrap(self, handler: WindowEvent) -> WindowEvent:
+        """Keep the dashboard's handler and return a poster that queues.
+
+        Args:
+            handler: The dashboard's window-event handler.
+
+        Returns:
+            A poster that records each event without running it.
+        """
+        self.handler = handler
+        return self.post
+
+    def post(self, name: str, data: object) -> None:
+        """Queue one event.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        self.posted.append(name)
+        self.queued.append((name, data))
+
+    def run(self) -> None:
+        """Run the queued events in order, as the UI thread would."""
+        assert self.handler is not None
+        while self.queued:
+            self.handler(*self.queued.pop(0))
 
 
 class TestDashboardComponents(unittest.TestCase):
@@ -69,7 +119,7 @@ class TestDashboardComponents(unittest.TestCase):
     def setUp(self) -> None:
         """Set up the test environment."""
         self.mock_app = MagicMock()
-        self.dashboard = DashboardApp(self.mock_app)
+        self.dashboard = DashboardApp(self.mock_app, queue_to_ui=run_now)
         self.dashboard.window = MagicMock()
 
     def test_ipc_notify_shows_a_system_tray_notification(self) -> None:
@@ -271,27 +321,23 @@ class TestDashboardComponents(unittest.TestCase):
 
         self.dashboard.window.invoke.assert_called_once_with("agent-update", valid_data)
 
-    def test_on_telemetry_rechecks_denylist_before_dispatch(self) -> None:
-        """A denylist save landing between the two checks still drops the telemetry."""
-        self.dashboard.ipc.is_ready = True
+    def test_on_telemetry_rechecks_denylist_on_the_ui_thread(self) -> None:
+        """A denylist save landing after telemetry is posted still drops it."""
+        queue = DeferredQueue()
+        dashboard = DashboardApp(self.mock_app, queue_to_ui=queue.wrap)
+        dashboard.window = MagicMock()
+        dashboard.ipc.is_ready = True
         denylist: list[str] = []
-
-        class RacingLock:
-            """Simulates a concurrent denylist save completing at the dispatch lock."""
-
-            def __enter__(self) -> None:
-                denylist.append("TestAgent")
-
-            def __exit__(self, *args: object) -> None:
-                return None
 
         with patch(
             "vauxhall.dashboard.app.settings.dashboard.agent_denylist", denylist
         ):
-            self.dashboard._dispatch_lock = RacingLock()
-            self.dashboard.on_telemetry(self.valid_telemetry())
+            dashboard.on_telemetry(self.valid_telemetry())
+            denylist.append("TestAgent")
+            queue.run()
 
-        self.dashboard.window.invoke.assert_not_called()
+        assert queue.posted == ["agent-update"]
+        dashboard.window.invoke.assert_not_called()
 
 
 def test_pending_updates_discards_oldest_when_not_ready(
@@ -306,7 +352,7 @@ def test_pending_updates_discards_oldest_when_not_ready(
     monkeypatch.setattr(
         "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
     )
-    dashboard = DashboardApp(MagicMock())
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=run_now)
     dashboard.window = MagicMock()
     dashboard.ipc.is_ready = False
 
@@ -344,7 +390,7 @@ def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
     monkeypatch.setattr(
         "vauxhall.dashboard.app.settings.dashboard.pending_update_limit", 3
     )
-    dashboard = DashboardApp(MagicMock())
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=run_now)
     dashboard.window = MagicMock()
     dashboard.ipc.is_ready = False
 
@@ -362,161 +408,102 @@ def test_pending_updates_retains_configured_tail_of_ten_thousand_events(
     assert [record.args[0] for record in warnings] == [2**i for i in range(14)]
 
 
-def test_readiness_transition_cannot_strand_a_pending_update() -> None:
-    """An event racing frontend readiness must be delivered exactly once."""
-    dashboard = DashboardApp(MagicMock())
+def test_update_posted_before_readiness_but_run_after_it_is_sent_once() -> None:
+    """Telemetry still queued when the frontend becomes ready follows the backlog."""
+    queue = DeferredQueue()
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=queue.wrap)
     dashboard.window = MagicMock()
-    readiness_read = Event()
-    continue_read = Event()
-    readiness_started = Event()
-    original_ready_callback = dashboard.ipc.on_ready_callback
+    dashboard.on_telemetry(valid_event(session_id="held"))
+    queue.run()
+    dashboard.on_telemetry(valid_event(session_id="in-flight"))
 
-    class CoordinatedIPC:
-        """Stub IPC that blocks the first readiness read until the test releases it."""
+    dashboard.ipc.set_ready()
+    queue.run()
 
-        def __init__(self) -> None:
-            """Start out not ready."""
-            self._is_ready = False
-
-        @property
-        def is_ready(self) -> bool:
-            """Report readiness, pausing the first read that observes not ready.
-
-            Returns:
-                Whether the frontend is ready.
-
-            Raises:
-                TimeoutError: If the test does not release the read in time.
-            """
-            observed = self._is_ready
-            if not observed:
-                readiness_read.set()
-                if not continue_read.wait(timeout=2):
-                    raise TimeoutError
-            return observed
-
-        @is_ready.setter
-        def is_ready(self, value: bool) -> None:
-            """Set readiness.
-
-            Args:
-                value: Whether the frontend is ready.
-            """
-            self._is_ready = value
-
-        def set_ready(self) -> bool:
-            """Become ready and run the real readiness callback.
-
-            Returns:
-                Always ``True``.
-            """
-            self._is_ready = True
-            readiness_started.set()
-            assert original_ready_callback is not None
-            original_ready_callback()
-            return True
-
-    dashboard.ipc = CoordinatedIPC()  # type: ignore[assignment]
-    telemetry_thread = Thread(target=dashboard.on_telemetry, args=(valid_event(),))
-    ready_thread = Thread(target=dashboard.ipc.set_ready)
-
-    telemetry_thread.start()
-    assert readiness_read.wait(timeout=2)
-    ready_thread.start()
-    assert readiness_started.wait(timeout=2)
-    continue_read.set()
-    telemetry_thread.join(timeout=2)
-    ready_thread.join(timeout=2)
-
-    assert not telemetry_thread.is_alive()
-    assert not ready_thread.is_alive()
     assert not dashboard.pending_updates
-    dashboard.window.invoke.assert_called_once_with("agent-update", valid_event())
+    sent = [
+        sent.args[1]["session_id"] for sent in dashboard.window.invoke.call_args_list
+    ]
+    assert sent == ["held", "in-flight"]
 
 
-def test_readiness_flush_delivers_queued_update_before_newer_live_update() -> None:
-    """A live update cannot overtake the queued readiness snapshot."""
-    dashboard = DashboardApp(MagicMock())
-    queued_event = valid_event(state="Thinking")
-    live_event = valid_event(state="Acting")
-    dashboard.on_telemetry(queued_event)
-    queued_dispatch_started = Event()
-    continue_queued_dispatch = Event()
-    live_saw_ready = Event()
-    deliveries: list[str] = []
-    original_ready_callback = dashboard.ipc.on_ready_callback
+def test_events_still_queued_at_shutdown_are_not_sent_to_the_closed_window() -> None:
+    """Shutdown's own Pyloid calls can run queued events; they must be dropped.
 
-    class ReadinessObservingIPC:
-        """Stub IPC that signals when a caller observes the ready state."""
+    Sending one to the deleted web view makes Pyloid wait forever for a result.
+    """
+    queue = DeferredQueue()
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=queue.wrap)
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = True
+    dashboard.on_telemetry(valid_event())
+    dashboard.on_status("Connected to Agent Fleet")
 
-        def __init__(self) -> None:
-            """Start out not ready."""
-            self._is_ready = False
+    dashboard.ipc.is_ready = False
+    queue.run()
 
-        @property
-        def is_ready(self) -> bool:
-            """Report readiness, signalling when a caller observes it as ready.
+    assert queue.posted == ["agent-update", "status-update"]
+    dashboard.window.invoke.assert_not_called()
 
-            Returns:
-                Whether the frontend is ready.
-            """
-            if self._is_ready:
-                live_saw_ready.set()
-            return self._is_ready
 
-        @is_ready.setter
-        def is_ready(self, value: bool) -> None:
-            """Set readiness.
+def test_readiness_posts_the_last_status_before_queued_updates() -> None:
+    """A ready frontend gets the connection status, then the queued updates."""
+    queue = DeferredQueue()
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=queue.wrap)
+    dashboard.window = MagicMock()
+    dashboard.on_status("Connecting...")
+    dashboard.on_telemetry(valid_event())
+    dashboard.on_status("Connected to Agent Fleet")
+    queue.run()
+    dashboard.window.invoke.assert_not_called()
 
-            Args:
-                value: Whether the frontend is ready.
-            """
-            self._is_ready = value
+    dashboard.ipc.set_ready()
 
-        def set_ready(self) -> bool:
-            """Run the real readiness callback, then become ready.
+    assert dashboard.window.invoke.call_args_list == [
+        call("status-update", "Connected to Agent Fleet"),
+        call("agent-update", valid_event()),
+    ]
 
-            Returns:
-                Always ``True``.
-            """
-            assert original_ready_callback is not None
-            original_ready_callback()
-            if not self._is_ready:
-                self._is_ready = True
-            return True
 
-    def invoke(_channel: str, event: dict[str, object]) -> None:
-        """Record each delivery, holding the queued one until the test releases it.
+def test_events_run_by_a_nested_event_loop_wait_for_the_outbox() -> None:
+    """An update run inside invoke() is sent after the backlog, not nested in it.
+
+    Pyloid's invoke() waits for its result in a nested event loop, which runs
+    the next posted event before invoke() returns. Nesting a send per event
+    would deepen the stack with every event in a flood.
+    """
+    queue = DeferredQueue()
+    dashboard = DashboardApp(MagicMock(), queue_to_ui=queue.wrap)
+    dashboard.window = MagicMock()
+    dashboard.on_telemetry(valid_event(session_id="queued-1"))
+    dashboard.on_telemetry(valid_event(session_id="queued-2"))
+    queue.run()
+    dashboard.on_telemetry(valid_event(session_id="live"))
+    depth = 0
+    deepest = 0
+
+    def invoke_with_nested_loop(_name: str, _data: object) -> None:
+        """Run posted events while this send is in progress, as Pyloid does.
 
         Args:
-            event: The telemetry event being delivered.
-
-        Raises:
-            TimeoutError: If the test does not release the queued delivery in time.
+            _name: The window event name.
+            _data: The event payload.
         """
-        if event["state"] == "Thinking":
-            queued_dispatch_started.set()
-            if not continue_queued_dispatch.wait(timeout=2):
-                raise TimeoutError
-        deliveries.append(str(event["state"]))
+        nonlocal depth, deepest
+        depth += 1
+        deepest = max(deepest, depth)
+        queue.run()
+        depth -= 1
 
-    dashboard.ipc = ReadinessObservingIPC()  # type: ignore[assignment]
-    dashboard.window = MagicMock()
-    dashboard.window.invoke.side_effect = invoke
-    ready_thread = Thread(target=dashboard.ipc.set_ready)
-    live_thread = Thread(target=dashboard.on_telemetry, args=(live_event,))
+    dashboard.window.invoke.side_effect = invoke_with_nested_loop
 
-    ready_thread.start()
-    assert queued_dispatch_started.wait(timeout=2)
-    live_thread.start()
-    assert live_saw_ready.wait(timeout=2)
-    continue_queued_dispatch.set()
-    ready_thread.join(timeout=2)
-    live_thread.join(timeout=2)
+    dashboard.ipc.set_ready()
 
-    assert not ready_thread.is_alive()
-    assert not live_thread.is_alive()
-    assert deliveries == ["Thinking", "Acting"]
+    sent = [
+        sent.args[1]["session_id"] for sent in dashboard.window.invoke.call_args_list
+    ]
+    assert sent == ["queued-1", "queued-2", "live"]
+    assert deepest == 1
 
 
 @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
@@ -548,7 +535,7 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
         mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
     """
     app = MagicMock()
-    dashboard = DashboardApp(app)
+    dashboard = DashboardApp(app, queue_to_ui=run_now)
 
     def close_ready_window() -> None:
         """Mark the window ready, then end the UI loop as a close would.

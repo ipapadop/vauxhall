@@ -7,14 +7,14 @@ import logging
 import os
 import sys
 from collections import deque
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from contextlib import suppress
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
+from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.config_store import check_user_config, save_user_config
@@ -47,21 +47,82 @@ logger = get_logger(__name__)
 UI_DIR = (Path(__file__).parent / "ui").resolve()
 ICON_FILE = UI_DIR / "icon.png"
 
+WindowEvent = Callable[[str, object], None]
+
+
+class _UIThreadQueue(QObject):
+    """Runs window events on the thread that created it, in the order posted."""
+
+    _posted = Signal(str, object)
+
+    def __init__(self, handler: WindowEvent) -> None:
+        """Connect the queue to its handler.
+
+        Args:
+            handler: Called on this object's thread with each posted event.
+        """
+        super().__init__()
+        self._handler = handler
+        # Queued even when posted from this thread, so every event keeps its
+        # place in one order.
+        self._posted.connect(self._run, Qt.ConnectionType.QueuedConnection)
+
+    def post(self, name: str, data: object) -> None:
+        """Queue an event and return without waiting for it to run.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        self._posted.emit(name, data)
+
+    @Slot(str, object)
+    def _run(self, name: str, data: object) -> None:
+        """Hand a queued event to the handler.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        self._handler(name, data)
+
+
+def queue_to_ui_thread(handler: WindowEvent) -> WindowEvent:
+    """Return a non-blocking poster that runs ``handler`` on the UI thread.
+
+    Args:
+        handler: The function that sends one event to the window.
+
+    Returns:
+        WindowEvent: Queues an event for ``handler`` and returns at once.
+    """
+    return _UIThreadQueue(handler).post
+
 
 class DashboardApp:
     """Encapsulates the Dashboard application state and logic."""
 
-    def __init__(self, app: Pyloid) -> None:
+    def __init__(
+        self,
+        app: Pyloid,
+        queue_to_ui: Callable[[WindowEvent], WindowEvent] = queue_to_ui_thread,
+    ) -> None:
         """Initialize the Dashboard application.
+
+        Must run on the UI thread, which then runs every window event.
 
         Args:
             app: The Pyloid application instance.
+            queue_to_ui: Wraps the window-event handler in a poster that runs
+                it on the UI thread without waiting.
         """
         self.app = app
         self.window: Any = None
-        self._updates_lock = Lock()
-        self._dispatch_lock = Lock()
-        self._settings_lock = Lock()
+        # Pyloid's window.invoke() waits for the UI thread, so only the UI
+        # thread calls it; everyone else posts and moves on. The UI thread
+        # alone reads and writes readiness, the pending updates, the last
+        # status, and the outbox, so they need no lock.
+        self._post = queue_to_ui(self._dispatch)
         self.ipc = DashboardIPC(
             on_ready_callback=self._on_frontend_ready,
             on_save_settings=self.save_settings,
@@ -73,30 +134,95 @@ class DashboardApp:
         )
         self.discarded_pending_updates = 0
         self.last_status: str | None = None
+        self._outbox: deque[tuple[str, object]] = deque()
+        self._sending = False
         self.mqtt: DashboardSubscriber | None = None
 
     def _on_frontend_ready(self) -> None:
-        """Mark the frontend ready and forward the queued updates to it.
+        """Mark the frontend ready and send it the last status and queued updates.
 
-        Readiness is set under the same lock as the pending snapshot, so an
-        update cannot be stranded by the transition.
+        Runs on the UI thread, like every event, so no event can run between
+        marking the frontend ready and queuing the backlog ahead of it.
         """
-        with self._dispatch_lock:
-            with self._updates_lock:
-                self.ipc.is_ready = True
-                last_status = self.last_status
-                pending_updates = list(self.pending_updates)
-                self.pending_updates.clear()
+        self.ipc.is_ready = True
+        if self.last_status:
+            self._outbox.append(("status-update", self.last_status))
+        if self.pending_updates:
+            logger.info("Draining %d queued updates.", len(self.pending_updates))
+        self._outbox.extend(("agent-update", update) for update in self.pending_updates)
+        self.pending_updates.clear()
+        self._send_outbox()
 
-            if last_status:
-                self.window.invoke("status-update", last_status)
-            if pending_updates:
-                logger.info("Draining %d queued updates.", len(pending_updates))
-            for pending_update in pending_updates:
-                self.window.invoke("agent-update", pending_update)
+    def _dispatch(self, name: str, data: object) -> None:
+        """Send one posted event to the window, or hold it. Runs on the UI thread.
+
+        Args:
+            name: The window event name.
+            data: The event payload.
+        """
+        if name == "status-update" and isinstance(data, str):
+            self.last_status = data
+        # Before readiness, and after the window closes, only telemetry is
+        # kept; the frontend gets the last status when it becomes ready.
+        if not self.ipc.is_ready:
+            if name == "agent-update" and isinstance(data, dict):
+                self._hold(data)
+            return
+        self._outbox.append((name, data))
+        self._send_outbox()
+
+    def _hold(self, telemetry: dict[str, Any]) -> None:
+        """Keep telemetry until the frontend is ready, dropping the oldest.
+
+        Args:
+            telemetry: The validated telemetry.
+        """
+        logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
+        if len(self.pending_updates) == self.pending_updates.maxlen:
+            self.discarded_pending_updates += 1
+            discarded = self.discarded_pending_updates
+            if discarded & (discarded - 1) == 0:
+                logger.warning(
+                    "Discarded oldest pending telemetry update; total discarded: %d",
+                    discarded,
+                )
+        self.pending_updates.append(telemetry)
+
+    def _send_outbox(self) -> None:
+        """Send the outbox to the window in order. Runs on the UI thread."""
+        # window.invoke() runs a nested event loop that can run the next
+        # posted event. That event only joins the outbox, so sends never nest
+        # and leave in the order they were queued.
+        if self._sending:
+            return
+        self._sending = True
+        try:
+            # Shutdown's own Pyloid calls run nested event loops that can
+            # reach events posted before the window closed. Sending one to
+            # the deleted web view makes Pyloid wait forever for a result.
+            while self._outbox and self.ipc.is_ready:
+                name, data = self._outbox.popleft()
+                # A denylist save posted its settings-changed after this
+                # update, so the frontend removes the card before this would
+                # revive it.
+                if (
+                    name == "agent-update"
+                    and isinstance(data, dict)
+                    and data["agent"] in settings.dashboard.agent_denylist
+                ):
+                    logger.debug(
+                        "Dropping denylisted agent telemetry: %s", data["agent"]
+                    )
+                    continue
+                try:
+                    self.window.invoke(name, data)
+                except Exception:
+                    logger.exception("Could not send %s to the window", name)
+        finally:
+            self._sending = False
 
     def on_telemetry(self, data: object) -> None:
-        """Forward valid telemetry, or queue it until the frontend is ready.
+        """Post valid telemetry to the UI thread, which holds it until ready.
 
         Args:
             data: The telemetry payload received from MQTT.
@@ -116,31 +242,7 @@ class DashboardApp:
                 )
                 return
 
-            with self._updates_lock:
-                if not self.ipc.is_ready:
-                    logger.debug("Queuing telemetry for agent: %s", telemetry["agent"])
-                    if len(self.pending_updates) == self.pending_updates.maxlen:
-                        self.discarded_pending_updates += 1
-                        discarded = self.discarded_pending_updates
-                        if discarded & (discarded - 1) == 0:
-                            logger.warning(
-                                "Discarded oldest pending telemetry update; "
-                                "total discarded: %d",
-                                discarded,
-                            )
-                    self.pending_updates.append(telemetry)
-                    return
-
-            with self._dispatch_lock:
-                # Re-check under the lock _apply_settings dispatches through:
-                # a denylist save racing the check above must not resurrect a
-                # card that save just told the frontend to remove.
-                if telemetry["agent"] in settings.dashboard.agent_denylist:
-                    logger.debug(
-                        "Dropping denylisted agent telemetry: %s", telemetry["agent"]
-                    )
-                    return
-                self.window.invoke("agent-update", telemetry)
+            self._post("agent-update", telemetry)
         except Exception:
             logger.exception("Error in on_telemetry")
 
@@ -183,27 +285,18 @@ class DashboardApp:
                 ready, since no card can be waiting on it then.
         """
         try:
-            with self._updates_lock:
-                is_ready = self.ipc.is_ready
-            if is_ready:
-                with self._dispatch_lock:
-                    self.window.invoke("prompt-ack", ack)
+            self._post("prompt-ack", ack)
         except Exception:
             logger.exception("Error in on_ack")
 
     def on_status(self, message: str) -> None:
-        """Record an MQTT status and forward it when the frontend is ready.
+        """Post an MQTT status to the UI thread, which records and forwards it.
 
         Args:
             message: The status to show.
         """
         try:
-            with self._updates_lock:
-                self.last_status = message
-                is_ready = self.ipc.is_ready
-            if is_ready:
-                with self._dispatch_lock:
-                    self.window.invoke("status-update", message)
+            self._post("status-update", message)
         except Exception:
             logger.exception("Error in on_status")
 
@@ -223,40 +316,39 @@ class DashboardApp:
         Returns:
             dict[str, Any]: The outcome for the settings editor.
         """
-        with self._settings_lock:
-            file = "dashboard"
-            hook_changes: dict[str, dict[str, object]] = {}
+        file = "dashboard"
+        hook_changes: dict[str, dict[str, object]] = {}
+        try:
+            check_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+            if update_hooks:
+                file = "hooks"
+                hook_changes = hook_changes_for(changes, settings.mqtt)
+                if hook_changes:
+                    check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                file = "dashboard"
+            if changes:
+                save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
+            new_config = DashboardConfig.load()
+        except (ConfigurationError, OSError) as error:
+            logger.warning("Settings not saved: %s", error)
+            return {
+                "ok": False,
+                "error": str(error),
+                # The named field belongs to the hooks file, not the form.
+                "field": error_field(str(error)) if file == "dashboard" else None,
+                "file": file,
+            }
+
+        hooks_error = None
+        if hook_changes:
             try:
-                check_user_config(DASHBOARD_FILE, DashboardConfig, changes)
-                if update_hooks:
-                    file = "hooks"
-                    hook_changes = hook_changes_for(changes, settings.mqtt)
-                    if hook_changes:
-                        check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
-                    file = "dashboard"
-                if changes:
-                    save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
-                new_config = DashboardConfig.load()
+                save_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
             except (ConfigurationError, OSError) as error:
-                logger.warning("Settings not saved: %s", error)
-                return {
-                    "ok": False,
-                    "error": str(error),
-                    # The named field belongs to the hooks file, not the form.
-                    "field": error_field(str(error)) if file == "dashboard" else None,
-                    "file": file,
-                }
+                logger.warning("Hooks configuration not saved: %s", error)
+                hooks_error = str(error)
 
-            hooks_error = None
-            if hook_changes:
-                try:
-                    save_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
-                except (ConfigurationError, OSError) as error:
-                    logger.warning("Hooks configuration not saved: %s", error)
-                    hooks_error = str(error)
-
-            changed = changed_fields(settings, new_config)
-            reconnecting = self._apply_settings(new_config, changed)
+        changed = changed_fields(settings, new_config)
+        reconnecting = self._apply_settings(new_config, changed)
 
         return {
             "ok": True,
@@ -293,18 +385,14 @@ class DashboardApp:
         if reconnecting:
             self._reconnect()
 
-        with self._updates_lock:
-            is_ready = self.ipc.is_ready
-        if is_ready:
-            with self._dispatch_lock:
-                self.window.invoke(
-                    "settings-changed",
-                    {
-                        "stale_threshold": settings.dashboard.stale_threshold,
-                        "max_active_agents": settings.dashboard.max_active_agents,
-                        "agent_denylist": settings.dashboard.agent_denylist,
-                    },
-                )
+        self._post(
+            "settings-changed",
+            {
+                "stale_threshold": settings.dashboard.stale_threshold,
+                "max_active_agents": settings.dashboard.max_active_agents,
+                "agent_denylist": settings.dashboard.agent_denylist,
+            },
+        )
         return reconnecting
 
     def _reconnect(self) -> None:
@@ -380,9 +468,8 @@ class DashboardApp:
                 self.window.maximize()
             self.app.run()
         finally:
-            # The window is gone once the UI loop exits; queue any late updates.
-            with self._updates_lock:
-                self.ipc.is_ready = False
+            # The window is gone once the UI loop exits; hold any late updates.
+            self.ipc.is_ready = False
             self._save_window_state(saved_window)
             self.mqtt.stop()
             logger.info("Vauxhall Dashboard shutting down...")

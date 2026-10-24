@@ -93,15 +93,25 @@ def deliver_prompt(
     """
     try:
         # The pane id alone can name an unrelated pane after tmux restarts.
-        server = _tmux(
-            target, "display-message", "-p", "-t", target.pane, "#{pid}", run=run
+        pane = _tmux(
+            target,
+            "display-message",
+            "-p",
+            "-t",
+            target.pane,
+            "#{pid}\t#{pane_current_command}",
+            run=run,
         )
     except (OSError, subprocess.SubprocessError):
         return "pane-unavailable"
-    if (
-        target.server_pid is not None
-        and server.stdout.strip() != str(target.server_pid).encode()
-    ):
+    server_pid, _, command = (
+        pane.stdout.decode(errors="replace").strip().partition("\t")
+    )
+    if target.server_pid is not None and server_pid != str(target.server_pid):
+        return "pane-unavailable"
+    # An agent that exited without ending its session leaves its shell in
+    # the pane, which would run the prompt as a command.
+    if target.command is not None and command != target.command:
         return "pane-unavailable"
 
     buffer = "vauxhall-" + hashlib.sha256(message_id.encode()).hexdigest()[:16]

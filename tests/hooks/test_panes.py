@@ -6,6 +6,7 @@
 import json
 import os
 import stat
+import subprocess
 import time
 
 import pytest
@@ -22,6 +23,94 @@ def test_record_pane_stores_pane_socket_and_server() -> None:
     assert panes.load_pane("codex", "native:1") == panes.PaneTarget(
         "%3", "/run/tmux-1000/default", 4242
     )
+
+
+def test_record_pane_stores_the_foreground_command() -> None:
+    """The agent's command is kept, to tell it from a shell left behind."""
+    panes.record_pane("codex", "native:1", TMUX_ENV, command="node")
+
+    assert panes.load_pane("codex", "native:1") == panes.PaneTarget(
+        "%3", "/run/tmux-1000/default", 4242, "node"
+    )
+
+
+def test_foreground_command_asks_the_session_tmux_server() -> None:
+    """The query names the pane and the server the hook runs under."""
+    commands: list[list[str]] = []
+
+    def tmux(
+        command: list[str], **_options: object
+    ) -> "subprocess.CompletedProcess[bytes]":
+        """Answer like tmux for a pane running Claude Code.
+
+        Args:
+            command: The command line.
+            **_options: The ``subprocess.run`` options.
+
+        Returns:
+            A completed process.
+        """
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, b"claude\n", b"")
+
+    assert panes.foreground_command(TMUX_ENV, tmux) == "claude"
+    assert commands == [
+        [
+            "tmux",
+            "-S",
+            "/run/tmux-1000/default",
+            "display-message",
+            "-p",
+            "-t",
+            "%3",
+            "#{pane_current_command}",
+        ]
+    ]
+
+
+@pytest.mark.parametrize(
+    "environment", [{}, {"TMUX_PANE": "%3"}, {"TMUX_PANE": "x", "TMUX": "/s,1,0"}]
+)
+def test_foreground_command_is_unknown_outside_tmux(
+    environment: dict[str, str],
+) -> None:
+    """Without a pane and its server there is nothing to ask.
+
+    Args:
+        environment: An environment without a usable pane or server.
+    """
+
+    def tmux(_command: list[str], **_options: object) -> None:
+        """Fail the test if tmux is run.
+
+        Args:
+            _command: The command line.
+            **_options: The ``subprocess.run`` options.
+
+        Raises:
+            AssertionError: Always.
+        """
+        raise AssertionError
+
+    assert panes.foreground_command(environment, tmux) is None
+
+
+def test_foreground_command_is_unknown_when_tmux_fails() -> None:
+    """A tmux error leaves the command unknown instead of failing the hook."""
+
+    def tmux(command: list[str], **_options: object) -> None:
+        """Fail like a tmux server that went away.
+
+        Args:
+            command: The command line.
+            **_options: The ``subprocess.run`` options.
+
+        Raises:
+            subprocess.CalledProcessError: Always.
+        """
+        raise subprocess.CalledProcessError(1, command)
+
+    assert panes.foreground_command(TMUX_ENV, tmux) is None
 
 
 @pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")
@@ -126,7 +215,8 @@ def test_load_pane_drops_malformed_optional_fields() -> None:
     panes.record_pane("codex", "native:1", TMUX_ENV)
     (record,) = panes.panes_directory().glob("*.json")
     record.write_text(
-        json.dumps({"pane": "%3", "socket": 5, "server_pid": True}), encoding="utf-8"
+        json.dumps({"pane": "%3", "socket": 5, "server_pid": True, "command": 7}),
+        encoding="utf-8",
     )
 
     assert panes.load_pane("codex", "native:1") == panes.PaneTarget("%3", None, None)

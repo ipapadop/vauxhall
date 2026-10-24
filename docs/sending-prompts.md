@@ -46,7 +46,7 @@ while the agent is idle.
 | --- | --- |
 | `Prompt sent, waiting for the relay…` | Published to the broker; no relay has answered yet |
 | `Prompt delivered` | The relay pasted the prompt into the pane and pressed Enter |
-| `Prompt not delivered: its tmux pane is no longer available` | The pane closed, or tmux restarted since the session started |
+| `Prompt not delivered: its tmux pane is no longer available` | The pane closed, tmux restarted, or the agent exited since the session started |
 | `Prompt not delivered: tmux could not type it in` | A tmux command failed |
 | `No relay acknowledged the prompt` | Nothing answered within 10 seconds |
 
@@ -63,9 +63,10 @@ never queued for later.
 
 1. At `SessionStart`, each hook records the session's tmux pane in
    `~/.config/vauxhall/panes/`: the pane ID (`$TMUX_PANE`), the tmux server
-   socket, and the server's process ID (both from `$TMUX`). It is deleted at
-   `SessionEnd`, and a session that starts outside tmux has any earlier record
-   removed. Nothing about the pane is published over MQTT.
+   socket, the server's process ID (both from `$TMUX`), and the name of the
+   command running in the pane's foreground, normally the agent. It is
+   deleted at `SessionEnd`, and a session that starts outside tmux has any
+   earlier record removed. Nothing about the pane is published over MQTT.
 2. The dashboard publishes `{"schema_version": 1, "id": "...", "text": "..."}`
    at QoS 1, not retained, to
    `vauxhall/agents/<agent>/sessions/<session_id>/prompt`. The agent name is
@@ -73,10 +74,13 @@ never queued for later.
 3. Every relay subscribed to `vauxhall/agents/+/sessions/+/prompt` looks the
    session up in its own records. A relay that doesn't know the session stays
    silent, so one broker can serve relays on several machines.
-4. The relay checks that the recorded tmux server is still the one running,
-   then loads the text into a private tmux buffer, pastes it into the pane as
-   a bracketed paste, and presses Enter. It never puts the text on a command
-   line, so shell and tmux syntax in a prompt isn't interpreted.
+4. The relay checks that the recorded tmux server is still the one running
+   and that the pane still runs the recorded command. An agent that crashed
+   without ending its session leaves a shell in the pane, which would run the
+   prompt as a command, so the relay refuses. It then loads the text into a
+   private tmux buffer, pastes it into the pane as a bracketed paste, and
+   presses Enter. It never puts the text on a command line, so shell and tmux
+   syntax in a prompt isn't interpreted.
 5. It publishes `{"schema_version": 1, "id": "...", "status": "delivered"}`
    (or `"failed"` with a `reason`) to `.../ack`, and the dashboard shows it on
    the card. A prompt with an ID the relay already handled is ignored, so a

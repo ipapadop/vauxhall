@@ -11,7 +11,8 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import Mapping
+import subprocess
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from vauxhall.hooks.files import remove_old_files
 
 _PANE_PATTERN = re.compile(r"%\d+")
 _MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+TMUX_TIMEOUT_SECONDS = 1
 
 
 @dataclass(frozen=True)
@@ -30,11 +32,16 @@ class PaneTarget:
         socket: Path of the tmux server's socket, or ``None`` for the default.
         server_pid: Process ID of the tmux server the pane belonged to, used to
             tell that pane from an unrelated one after the server restarts.
+        command: The pane's foreground command when the session started, such
+            as ``claude`` or ``node``, used to tell the agent from the shell
+            left behind when it exits without ending its session; ``None``
+            when unknown.
     """
 
     pane: str
     socket: str | None
     server_pid: int | None
+    command: str | None = None
 
 
 def panes_directory() -> Path:
@@ -77,8 +84,51 @@ def _server_details(tmux: str) -> tuple[str | None, int | None]:
     return parts[0], int(parts[1]) if parts[1].isdecimal() else None
 
 
+def foreground_command(
+    environment: Mapping[str, str] | None = None,
+    run: Callable[..., "subprocess.CompletedProcess[bytes]"] = subprocess.run,
+) -> str | None:
+    """Return the name of the command running in the foreground of this pane.
+
+    Args:
+        environment: Environment to read ``TMUX_PANE`` and ``TMUX`` from,
+            defaulting to the process environment.
+        run: Function that runs tmux, ``subprocess.run`` by default.
+
+    Returns:
+        The command name, or ``None`` outside tmux or when tmux can't say.
+    """
+    source = os.environ if environment is None else environment
+    pane = source.get("TMUX_PANE", "")
+    socket, _ = _server_details(source.get("TMUX", ""))
+    if not _PANE_PATTERN.fullmatch(pane) or socket is None:
+        return None
+    try:
+        result = run(
+            [
+                "tmux",
+                "-S",
+                socket,
+                "display-message",
+                "-p",
+                "-t",
+                pane,
+                "#{pane_current_command}",
+            ],
+            capture_output=True,
+            timeout=TMUX_TIMEOUT_SECONDS,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.decode(errors="replace").strip() or None
+
+
 def record_pane(
-    agent: str, session_id: str, environment: Mapping[str, str] | None = None
+    agent: str,
+    session_id: str,
+    environment: Mapping[str, str] | None = None,
+    command: str | None = None,
 ) -> None:
     """Remember the tmux pane a session started in, or forget a stale one.
 
@@ -90,6 +140,7 @@ def record_pane(
         session_id: The session identity.
         environment: Environment to read ``TMUX_PANE`` and ``TMUX`` from,
             defaulting to the process environment.
+        command: The pane's foreground command, from ``foreground_command``.
 
     Raises:
         OSError: If the record cannot be written.
@@ -104,7 +155,15 @@ def record_pane(
     temporary = path.with_suffix(".tmp")
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        json.dump({"pane": pane, "socket": socket, "server_pid": server_pid}, handle)
+        json.dump(
+            {
+                "pane": pane,
+                "socket": socket,
+                "server_pid": server_pid,
+                "command": command,
+            },
+            handle,
+        )
     temporary.replace(path)
     remove_old_files(path.parent, "*.json", _MAX_AGE_SECONDS)
 
@@ -138,10 +197,11 @@ def load_pane(agent: str, session_id: str) -> PaneTarget | None:
         return None
     if not isinstance(data, dict):
         return None
-    pane, socket, server_pid = (
+    pane, socket, server_pid, command = (
         data.get("pane"),
         data.get("socket"),
         data.get("server_pid"),
+        data.get("command"),
     )
     if not isinstance(pane, str) or not _PANE_PATTERN.fullmatch(pane):
         return None
@@ -149,4 +209,6 @@ def load_pane(agent: str, session_id: str) -> PaneTarget | None:
         socket = None
     if isinstance(server_pid, bool) or not isinstance(server_pid, int):
         server_pid = None
-    return PaneTarget(pane, socket, server_pid)
+    if not isinstance(command, str) or not command:
+        command = None
+    return PaneTarget(pane, socket, server_pid, command)

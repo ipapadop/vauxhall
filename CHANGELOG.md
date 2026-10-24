@@ -102,6 +102,13 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- The prompt relay no longer types a prompt into a shell. An agent that
+  exited without ending its session, for example after a crash, left the
+  shell in its tmux pane, and the relay pasted the prompt there, where it ran
+  as a command. Hooks now record the pane's foreground command at session
+  start, and the relay refuses delivery (`pane-unavailable`) when the pane
+  runs something else. Sessions started before upgrading keep the old
+  behavior until they start again.
 - The dashboard window checks HTTPS certificates. Pyloid turns those checks
   off for every page with `--ignore-certificate-errors` and
   `--allow-insecure-localhost`; the dashboard now removes both, since its UI

@@ -483,7 +483,9 @@ def test_hook_reports_invalid_configuration_without_breaking_protocol(
         expected: The source and the value the error must name.
     """
     if file_payload is not None:
-        (tmp_path / "vauxhall_hooks.json").write_text(json.dumps(file_payload))
+        user_file = Path.home() / ".config" / "vauxhall" / "vauxhall_hooks.json"
+        user_file.parent.mkdir(parents=True)
+        user_file.write_text(json.dumps(file_payload))
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -510,6 +512,40 @@ def test_hook_reports_invalid_configuration_without_breaking_protocol(
     assert completed.stdout == "{}\n"
     assert all(text in completed.stderr for text in expected)
     assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize("hook", HOOKS)
+def test_hook_warns_about_a_workspace_hooks_file(tmp_path: Path, hook: str) -> None:
+    """A hook names the workspace file it ignores, and stdout stays valid.
+
+    Args:
+        tmp_path: Pytest temporary directory, the hook's workspace.
+        hook: The hook module.
+    """
+    (tmp_path / "vauxhall_hooks.json").write_text('{"mqtt": {"host": "x.example"}}')
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("VAUXHALL_")
+    }
+    project_root = str(Path(__file__).resolve().parents[2])
+    environment["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (project_root, environment.get("PYTHONPATH")))
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-m", hook],
+        input="{}",
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "{}\n"
+    assert completed.stderr.count("Ignoring ") == 1
 
 
 @pytest.mark.parametrize("hook", HOOKS)

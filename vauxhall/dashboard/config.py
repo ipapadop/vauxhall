@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from vauxhall.core.config import (
     ConfigResolver,
@@ -46,6 +47,8 @@ class DashboardConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     dashboard: UIConfig = field(default_factory=UIConfig)
 
+    SEARCHES_CURRENT_DIRECTORY: ClassVar[bool] = True
+
     @classmethod
     def load(cls, config_path: Path | None = None) -> "DashboardConfig":
         """Load configuration from environment or file.
@@ -56,7 +59,11 @@ class DashboardConfig:
         Returns:
             DashboardConfig: The loaded configuration.
         """
-        resolver = ConfigResolver("vauxhall_dashboard.json", config_path)
+        resolver = ConfigResolver(
+            "vauxhall_dashboard.json",
+            config_path,
+            search_current_directory=cls.SEARCHES_CURRENT_DIRECTORY,
+        )
 
         return cls(
             mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt"),

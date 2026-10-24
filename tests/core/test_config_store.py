@@ -256,3 +256,20 @@ def test_sources_current_directory_file_hides_user_file() -> None:
         "file", str(cwd_file.resolve()), editable=False
     )
     assert sources["mqtt.port"] == FieldSource("default", None, editable=False)
+
+
+def test_sources_ignore_a_hooks_file_in_the_current_directory() -> None:
+    """Hooks never read a current-directory file, so it hides nothing."""
+    user_file = user_config_path(HOOKS_FILE)
+    user_file.parent.mkdir(parents=True)
+    user_file.write_text('{"mqtt": {"port": 1884}}', encoding="utf-8")
+    (Path.cwd() / HOOKS_FILE).write_text(
+        '{"mqtt": {"host": "local"}}', encoding="utf-8"
+    )
+
+    sources = field_sources(HOOKS_FILE, HookConfig)
+
+    assert sources["mqtt.port"] == FieldSource(
+        "file", str(user_file.resolve()), editable=True
+    )
+    assert sources["mqtt.host"] == FieldSource("default", None, editable=True)

@@ -15,13 +15,24 @@ the dashboard and the agents. Everything below is optional.
 | Dashboard | `vauxhall_dashboard.json` | `mqtt`, `logging`, `dashboard` |
 | Hooks | `vauxhall_hooks.json` | `mqtt`, `logging` |
 
-Each component looks for its file in two places and uses only the first one
-it finds:
+The hooks, and `vauxhall-relay`, read only
+`~/.config/vauxhall/vauxhall_hooks.json` (on Windows,
+`%USERPROFILE%\.config\vauxhall\`). They run in the agent's workspace, and a
+`vauxhall_hooks.json` there, for example one in a cloned repository, could
+otherwise send telemetry and your broker password to any broker. A hook that
+finds one ignores it and prints a warning on stderr.
 
-1. The current directory. For hooks this is the directory the agent runs them
-   from, normally the workspace, so a workspace can point its hooks at a
-   different broker.
-2. `~/.config/vauxhall/` (on Windows, `%USERPROFILE%\.config\vauxhall\`).
+`VAUXHALL_*` environment variables still apply, wherever they come from,
+including an agent's project settings in the workspace (such as the `env` of
+Claude Code's `.claude/settings.json`). Settings that can set environment
+variables can also register hooks that run any command, so trust a
+workspace's agent settings the way you trust its code.
+
+The dashboard looks for its file in two places and uses only the first one it
+finds:
+
+1. The current directory.
+2. `~/.config/vauxhall/`.
 
 The files are not merged: a file in the current directory hides the per-user
 file entirely. For each field, an environment variable overrides the file,
@@ -115,8 +126,8 @@ for other tools:
   change it.
 
 A field can't be saved when an environment variable sets it, or when a
-configuration file exists in the current directory, because that file hides the
-per-user file entirely. Unknown or read-only fields, malformed files, and
+`vauxhall_dashboard.json` exists in the current directory, because that file
+hides the per-user file entirely. Unknown or read-only fields, malformed files, and
 invalid values raise `ConfigurationError` and leave the file unchanged.
 
 ## Settings dialog
@@ -124,9 +135,9 @@ invalid values raise `ConfigurationError` and leave the file unchanged.
 The ⚙️ toolbar button opens a dialog with one row per field. Each row shows
 where the value comes from (default, file, or environment) and has a reset
 button. Fields set by an environment variable, and every field when a
-configuration file exists in the current directory, are read-only. Values are
-checked as you type and again when saving; if anything is invalid, nothing is
-saved.
+`vauxhall_dashboard.json` exists in the current directory, are read-only.
+Values are checked as you type and again when saving; if anything is invalid,
+nothing is saved.
 
 Saved changes take effect as follows:
 
@@ -145,10 +156,8 @@ are unchanged. The user name, password file, and client certificate are never
 copied, because the dashboard and the hooks should use different broker
 identities. Both files are validated
 before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
-environment variables, run in a workspace with its own `vauxhall_hooks.json`, or
-run on another machine. The option is unavailable, with the reason shown, when
-the hooks configuration is malformed or a `vauxhall_hooks.json` in the current
-directory takes precedence over the per-user file.
+environment variables or run on another machine. The option is unavailable,
+with the reason shown, when the hooks configuration is malformed.
 
 ### Denylisted agents
 

@@ -44,9 +44,10 @@ it first.
 
 **Hooks report `Failed to connect telemetry client`.** The same checks apply
 on the agent machine. The hooks read their own configuration, not the
-dashboard's: check `VAUXHALL_MQTT_HOST` and `VAUXHALL_MQTT_PORT`, a
-`vauxhall_hooks.json` in the workspace, and `~/.config/vauxhall/vauxhall_hooks.json`,
-in that order. If the dashboard's settings dialog changed the broker, check
+dashboard's: check `VAUXHALL_MQTT_HOST` and `VAUXHALL_MQTT_PORT`, then
+`~/.config/vauxhall/vauxhall_hooks.json`. A `vauxhall_hooks.json` in the
+workspace is ignored, with an `Ignoring ...` warning on stderr; move its
+settings to the per-user file. If the dashboard's settings dialog changed the broker, check
 **Also update hooks configuration** to copy the change to the hooks.
 
 ## Dashboard startup

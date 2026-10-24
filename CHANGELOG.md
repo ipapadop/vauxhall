@@ -79,6 +79,8 @@ The first release, planned as 0.1.0. It is alpha software; see
   the readiness signal two times.
 - A stale card shows its real state again when a raised stale threshold makes
   it fresh. Before, it kept showing `STALE` until its next event.
+- Closing the dashboard before its remembered cards finish loading no longer
+  saves an empty card list over them.
 
 ### Security
 

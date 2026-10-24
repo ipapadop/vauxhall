@@ -74,8 +74,9 @@ export async function loadPreferences(ipc) {
 
 /**
  * Creates a timer that runs an action a pause after the last schedule() call,
- * or immediately via flush(). Shared by anything that batches frontend state
- * before sending it through the Python bridge.
+ * or immediately via flush(), which does nothing when no run is scheduled.
+ * Shared by anything that batches frontend state before sending it through
+ * the Python bridge.
  * @param {() => void} action - The action to run.
  * @param {number} [delayMs] - The pause before running.
  * @returns {{schedule: () => void, flush: () => void}} Schedules, or forces, a run.
@@ -84,6 +85,7 @@ export function createDebounce(action, delayMs = SAVE_DELAY_MS) {
     let timer = null;
 
     const flush = () => {
+        if (timer === null) return;
         clearTimeout(timer);
         timer = null;
         action();

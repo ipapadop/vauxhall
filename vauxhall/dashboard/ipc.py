@@ -346,7 +346,7 @@ class DashboardIPC(PyloidIPC):
         """
         try:
             pyperclip.copy(text)
-            logger.info("Copied to clipboard: %s...", text[:50])
+            logger.info("Copied to clipboard")
         except Exception:
             logger.exception("Failed to copy to clipboard")
             return False

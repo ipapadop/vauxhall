@@ -88,3 +88,4 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A deeply nested prompt or acknowledgment message no longer stops
   `vauxhall-relay` or the dashboard's MQTT connection; it is dropped like any
   other malformed message.
+- The dashboard no longer logs the workspace path it copies to the clipboard.

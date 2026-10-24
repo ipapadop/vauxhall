@@ -12,6 +12,7 @@ import json
 from functools import partial
 from typing import Any
 
+from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
 from vauxhall.hooks import common
 from vauxhall.hooks.identity import resolve_session_id
 
@@ -105,11 +106,13 @@ def _handle_before_tool(input_data: dict[str, Any]) -> common.Telemetry:
     tool_input = input_data.get("tool_input", {})
     if input_data.get("tool_name") == "ask_user":
         return "Waiting for Input", {"prompt": common.question_prompt(tool_input)}
-    return "Acting", {
-        "cmd": "",
-        "args": json.dumps(tool_input),
-        **common.tool_details(input_data, _COMMAND_FIELDS),
-    }
+    details: dict[str, Any] = {"cmd": ""}
+    args = json.dumps(tool_input)
+    # Truncating would publish the start of a large input, such as a file's
+    # contents; leave it out instead.
+    if len(args) <= MAX_DETAIL_STRING_LENGTH:
+        details["args"] = args
+    return "Acting", {**details, **common.tool_details(input_data, _COMMAND_FIELDS)}
 
 
 def _handle_after_tool(input_data: dict[str, Any]) -> common.Telemetry:

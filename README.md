@@ -75,8 +75,9 @@ session as a card in a grid.
 - **Claude Code, Codex, and Gemini CLI hooks**: Installers register hooks that
   report prompts, assistant messages, tool activity, permission waits, tool
   outcomes (completed, failed, cancelled, or result unavailable), and idle
-  state. Tool results are never published. Messages are limited to 4,096
-  characters per event; longer messages end with an ellipsis.
+  state. Tool results are never published. Text fields are limited to 4,096
+  characters per event; longer text, such as a long prompt or command, ends
+  with an ellipsis.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
   and never turned into shell commands. Hooks always return valid protocol JSON,
   even when telemetry fails.

@@ -733,3 +733,34 @@ def test_unfinished_tool_call_does_not_inflate_later_duration(tmp_path: Path) ->
 
     assert published.call_args.kwargs["duration"] == 3.0
     assert len(list(tmp_path.rglob("*.time"))) == 1
+
+
+def test_before_tool_leaves_out_tool_input_too_long_to_publish() -> None:
+    """A large write is reported without its contents, not cut off or dropped.
+
+    Truncating ``args`` would publish the start of the file; leaving the event
+    out entirely would lose the tool call.
+    """
+    hook_data = {
+        "hook_event_name": "BeforeTool",
+        "tool_name": "write_file",
+        "tool_input": {"file_path": "/workspace/big.txt", "content": "x" * 5000},
+        "session_id": "session-123",
+        "cwd": "/workspace",
+    }
+
+    with (
+        record_published() as published,
+        patch("sys.stdin", io.StringIO(json.dumps(hook_data))),
+        patch("sys.stdout", new=io.StringIO()),
+    ):
+        main()
+
+        published.assert_called_once_with(
+            agent="Gemini",
+            workspace="/workspace",
+            session_id="native:session-123",
+            state="Acting",
+            tool="write_file",
+            cmd="/workspace/big.txt",
+        )

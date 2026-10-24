@@ -16,7 +16,10 @@ from unittest.mock import patch
 
 import pytest
 
+from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
 from vauxhall.hooks import common
+from vauxhall.hooks.claude import telemetry_hook as claude_hook
+from vauxhall.hooks.client import format_message
 from vauxhall.hooks.panes import PaneTarget, load_pane, record_pane
 
 IDENTITY = ["session-123", "call-123"]
@@ -285,6 +288,45 @@ def test_publish_telemetry_sends_messages_and_event_in_one_batch() -> None:
             {**identity, "state": "Idle", "details": {"status": "done"}},
         ]
     ]
+
+
+@pytest.mark.parametrize(
+    ("event", "key"),
+    [
+        ({"hook_event_name": "UserPromptSubmit", "prompt": "p" * 5000}, "prompt"),
+        (
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "c" * 5000},
+            },
+            "cmd",
+        ),
+    ],
+)
+def test_publish_telemetry_truncates_a_detail_too_long_to_publish(
+    event: dict[str, Any], key: str
+) -> None:
+    """A long prompt or command is shortened instead of dropping the event.
+
+    Args:
+        event: The hook event carrying the long value.
+        key: The detail holding it.
+    """
+    publisher = RecordingPublisher()
+
+    common.publish_telemetry(
+        {**event, "session_id": "one", "cwd": "/workspace"},
+        "Claude",
+        claude_hook.HANDLERS,
+        publish=publisher,
+    )
+
+    [[payload]] = publisher.batches
+    value = payload["details"][key]
+    assert len(value) == MAX_DETAIL_STRING_LENGTH
+    assert value.endswith("…")
+    format_message(payload)
 
 
 def test_publish_telemetry_records_the_pane_at_session_start(

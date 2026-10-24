@@ -104,7 +104,14 @@ producers should generate a UUID when the session starts.
 
 The built-in hooks take the session ID from the agent's native session ID, then
 a hash of the transcript path, then the `VAUXHALL_SESSION_ID` environment
-variable. If none is available, the hook skips the event.
+variable. If none is available, the hook skips the event. An ID that would
+exceed 256 characters is replaced by its SHA-256 hash, keeping the source
+prefix (`native:sha256:<hex>`), so it stays stable and distinct.
+
+The built-in hooks also shorten any `details` string over 4,096 characters,
+such as a long prompt or command, to its start and an ellipsis, so the event
+is still published. Gemini CLI's `args` is the exception: an input too long
+to publish is left out, because its start could be a file's contents.
 
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid

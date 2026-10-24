@@ -38,6 +38,9 @@ TMUX_TIMEOUT_SECONDS = 5.0
 # The agent's terminal input needs a moment to take the paste before Enter.
 SUBMIT_DELAY_SECONDS = 0.2
 _SEEN_LIMIT = 256
+# A recorded shell means a wrapper started the agent, so the shell left behind
+# when the agent exits passes the command check.
+_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh", "fish", "csh", "tcsh"})
 
 Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
 
@@ -113,6 +116,13 @@ def deliver_prompt(
     # the pane, which would run the prompt as a command.
     if target.command is not None and command != target.command:
         return "pane-unavailable"
+    if target.command is None or target.command in _SHELLS:
+        logger.warning(
+            "Cannot tell whether pane %s still runs the agent: its command at "
+            "session start was %s",
+            target.pane,
+            target.command or "unknown",
+        )
 
     buffer = "vauxhall-" + hashlib.sha256(message_id.encode()).hexdigest()[:16]
     try:

@@ -171,8 +171,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   still matches the record (pane IDs restart from `%0` after tmux restarts)
   and, when the record has a `command`, that the pane still runs it: an agent
   that exited without `SessionEnd` leaves its shell in the foreground, which
-  would run the prompt as a command. Records from older hooks have no
-  `command` and skip that check. It then runs `load-buffer` from standard
+  would run the prompt as a command. A record without a `command` (from an
+  older hook, or when tmux couldn't say) skips that check, and a recorded
+  shell (an agent started by a wrapper script) passes it for the shell left
+  behind; in both cases it delivers and logs a warning. It then runs `load-buffer` from standard
   input, `paste-buffer -p -d` into the pane, and, after 0.2 seconds,
   `send-keys Enter`. Text never appears on a command line. It acknowledges
   `delivered` or `failed` (`pane-unavailable` or `delivery-failed`) without

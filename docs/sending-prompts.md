@@ -77,10 +77,13 @@ never queued for later.
 4. The relay checks that the recorded tmux server is still the one running
    and that the pane still runs the recorded command. An agent that crashed
    without ending its session leaves a shell in the pane, which would run the
-   prompt as a command, so the relay refuses. It then loads the text into a
-   private tmux buffer, pastes it into the pane as a bracketed paste, and
-   presses Enter. It never puts the text on a command line, so shell and tmux
-   syntax in a prompt isn't interpreted.
+   prompt as a command, so the relay refuses. If the session's command is
+   unknown (it started before this check existed, or tmux didn't answer) or
+   is a shell (a wrapper script started the agent without `exec`), the relay
+   can't tell the agent from a shell: it delivers and logs a warning. It then
+   loads the text into a private tmux buffer, pastes it into the pane as a
+   bracketed paste, and presses Enter. It never puts the text on a command
+   line, so shell and tmux syntax in a prompt isn't interpreted.
 5. It publishes `{"schema_version": 1, "id": "...", "status": "delivered"}`
    (or `"failed"` with a `reason`) to `.../ack`, and the dashboard shows it on
    the card. A prompt with an ID the relay already handled is ignored, so a

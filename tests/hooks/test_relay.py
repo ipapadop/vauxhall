@@ -180,6 +180,43 @@ def test_deliver_skips_the_command_check_for_an_older_record() -> None:
     assert relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None) is None
 
 
+@pytest.mark.parametrize("recorded", [None, "bash", "zsh"])
+def test_deliver_warns_when_it_cannot_tell_the_agent_from_a_shell(
+    recorded: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unknown command, or a wrapper's shell, makes the command check moot.
+
+    Args:
+        recorded: The command recorded at session start.
+        caplog: Pytest log capture fixture.
+    """
+    tmux = FakeTmux(command=recorded or "bash")
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, recorded)
+
+    with caplog.at_level("WARNING"):
+        result = relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None)
+
+    assert result is None
+    assert "Cannot tell whether pane %3 still runs the agent" in caplog.text
+    assert "hi" not in caplog.text
+
+
+def test_deliver_does_not_warn_for_a_recorded_agent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A recorded agent command is checked, so there is nothing to warn about.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
+
+    with caplog.at_level("WARNING"):
+        relay.deliver_prompt(target, "id-1", "hi", FakeTmux(), lambda _: None)
+
+    assert caplog.records == []
+
+
 def test_deliver_reports_a_missing_pane() -> None:
     """A pane tmux no longer knows is unavailable."""
     tmux = FakeTmux(fail_on=frozenset({"display-message"}))

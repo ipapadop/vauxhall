@@ -104,9 +104,10 @@ The dashboard's ✉️ button publishes the text you type, exactly as typed, to
 `.../ack` with a message ID and a status, never text. Like telemetry, prompts
 are readable by anyone who can subscribe to the broker. They are published at
 QoS 1 without the retain flag, so the broker doesn't keep them. The dashboard
-doesn't store them, and `vauxhall-relay` logs only agent names, pane IDs, and
-outcomes. Once typed into a pane, the agent handles the text like any other
-prompt you enter. See [sending-prompts.md](sending-prompts.md).
+doesn't store them, and `vauxhall-relay` logs only agent names, pane IDs, the
+pane's recorded command name, and outcomes. Once typed into a pane, the agent
+handles the text like any other prompt you enter. See
+[sending-prompts.md](sending-prompts.md).
 
 ## Retention
 
@@ -138,7 +139,8 @@ prompt you enter. See [sending-prompts.md](sending-prompts.md).
 ### On disk
 
 The hooks also record, for each session started inside tmux, its tmux pane
-ID, tmux server socket path, and server process ID in
+ID, tmux server socket path, server process ID, and the name of the command
+running in the pane's foreground (normally the agent, such as `claude`) in
 `~/.config/vauxhall/panes/`, readable only by you. These are used only by
 `vauxhall-relay` on the same machine and are never published. They are deleted
 when the session ends, and any left behind are removed after 30 days.

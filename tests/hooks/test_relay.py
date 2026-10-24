@@ -39,18 +39,24 @@ class FakeTmux:
     """Records tmux commands and answers like a healthy server."""
 
     def __init__(
-        self, server_pid: str = "4242", fail_on: frozenset[str] = frozenset()
+        self,
+        server_pid: str = "4242",
+        fail_on: frozenset[str] = frozenset(),
+        command: str = "claude",
     ) -> None:
         """Create the fake.
 
         Args:
             server_pid: What ``display-message`` reports as the server PID.
             fail_on: The tmux subcommands that fail.
+            command: What ``display-message`` reports as the pane's
+                foreground command.
         """
         self.commands: list[list[str]] = []
         self.inputs: list[bytes | None] = []
         self.server_pid = server_pid
         self.fail_on = fail_on
+        self.command = command
 
     def __call__(
         self, command: list[str], **options: object
@@ -75,7 +81,11 @@ class FakeTmux:
         name = command_name(command)
         if name in self.fail_on:
             raise subprocess.CalledProcessError(1, command)
-        stdout = f"{self.server_pid}\n".encode() if name == "display-message" else b""
+        stdout = (
+            f"{self.server_pid}\t{self.command}\n".encode()
+            if name == "display-message"
+            else b""
+        )
         return subprocess.CompletedProcess(command, 0, stdout, b"")
 
 
@@ -140,6 +150,71 @@ def test_deliver_refuses_a_pane_of_a_restarted_server() -> None:
 
     assert result == "pane-unavailable"
     assert names(tmux) == ["display-message"]
+
+
+def test_deliver_refuses_a_pane_whose_agent_exited() -> None:
+    """An agent that died without ending its session leaves a shell behind."""
+    tmux = FakeTmux(command="bash")
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
+
+    result = relay.deliver_prompt(target, "id-1", "rm -rf ~", tmux, lambda _: None)
+
+    assert result == "pane-unavailable"
+    assert names(tmux) == ["display-message"]
+
+
+def test_deliver_types_into_the_agent_the_session_started_with() -> None:
+    """The pane still runs the recorded command, so the prompt is delivered."""
+    tmux = FakeTmux(command="claude")
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
+
+    assert relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None) is None
+    assert names(tmux)[0] == "display-message"
+    assert names(tmux)[1:] == ["load-buffer", "paste-buffer", "send-keys"]
+
+
+def test_deliver_skips_the_command_check_for_an_older_record() -> None:
+    """A record written before commands were recorded still receives prompts."""
+    tmux = FakeTmux(command="bash")
+
+    assert relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None) is None
+
+
+@pytest.mark.parametrize("recorded", [None, "bash", "zsh"])
+def test_deliver_warns_when_it_cannot_tell_the_agent_from_a_shell(
+    recorded: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unknown command, or a wrapper's shell, makes the command check moot.
+
+    Args:
+        recorded: The command recorded at session start.
+        caplog: Pytest log capture fixture.
+    """
+    tmux = FakeTmux(command=recorded or "bash")
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, recorded)
+
+    with caplog.at_level("WARNING"):
+        result = relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None)
+
+    assert result is None
+    assert "Cannot tell whether pane %3 still runs the agent" in caplog.text
+    assert "hi" not in caplog.text
+
+
+def test_deliver_does_not_warn_for_a_recorded_agent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A recorded agent command is checked, so there is nothing to warn about.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
+
+    with caplog.at_level("WARNING"):
+        relay.deliver_prompt(target, "id-1", "hi", FakeTmux(), lambda _: None)
+
+    assert caplog.records == []
 
 
 def test_deliver_reports_a_missing_pane() -> None:

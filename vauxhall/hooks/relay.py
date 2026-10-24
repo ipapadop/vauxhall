@@ -38,6 +38,9 @@ TMUX_TIMEOUT_SECONDS = 5.0
 # The agent's terminal input needs a moment to take the paste before Enter.
 SUBMIT_DELAY_SECONDS = 0.2
 _SEEN_LIMIT = 256
+# A recorded shell means a wrapper started the agent, so the shell left behind
+# when the agent exits passes the command check.
+_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh", "fish", "csh", "tcsh"})
 
 Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
 
@@ -93,16 +96,33 @@ def deliver_prompt(
     """
     try:
         # The pane id alone can name an unrelated pane after tmux restarts.
-        server = _tmux(
-            target, "display-message", "-p", "-t", target.pane, "#{pid}", run=run
+        pane = _tmux(
+            target,
+            "display-message",
+            "-p",
+            "-t",
+            target.pane,
+            "#{pid}\t#{pane_current_command}",
+            run=run,
         )
     except (OSError, subprocess.SubprocessError):
         return "pane-unavailable"
-    if (
-        target.server_pid is not None
-        and server.stdout.strip() != str(target.server_pid).encode()
-    ):
+    server_pid, _, command = (
+        pane.stdout.decode(errors="replace").strip().partition("\t")
+    )
+    if target.server_pid is not None and server_pid != str(target.server_pid):
         return "pane-unavailable"
+    # An agent that exited without ending its session leaves its shell in
+    # the pane, which would run the prompt as a command.
+    if target.command is not None and command != target.command:
+        return "pane-unavailable"
+    if target.command is None or target.command in _SHELLS:
+        logger.warning(
+            "Cannot tell whether pane %s still runs the agent: its command at "
+            "session start was %s",
+            target.pane,
+            target.command or "unknown",
+        )
 
     buffer = "vauxhall-" + hashlib.sha256(message_id.encode()).hexdigest()[:16]
     try:

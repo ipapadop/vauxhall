@@ -150,11 +150,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   limit every valid prompt fits under even at four UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
-  0700 directory) holding `pane`, `socket`, and `server_pid`. It is written
-  by `common.track_pane`, called from `publish_telemetry` on `SessionStart`
-  and deleted on `SessionEnd`; a `SessionStart` outside tmux removes any old
-  record, records older than 30 days are swept, and failures are logged and
-  ignored. It is never published.
+  0700 directory) holding `pane`, `socket`, `server_pid`, and `command`, the
+  pane's foreground command (`#{pane_current_command}`, such as `claude` or
+  `node`) when the session started, or `null` when tmux can't say. It is
+  written by `common.track_pane`, called from `publish_telemetry` on
+  `SessionStart`, and deleted on `SessionEnd`; a `SessionStart` outside tmux
+  removes any old record, records older than 30 days are swept, and failures
+  are logged and ignored. It is never published.
 - **Relay**: `vauxhall.hooks.relay` (`vauxhall-relay`) subscribes at QoS 1 to
   `vauxhall/agents/+/sessions/+/prompt` with the hooks' broker settings. It
   ignores prompts for sessions without a local pane record, so one relay per
@@ -166,12 +168,18 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `failed` (`delivery-failed`), and any other error while handling a message
   is logged instead of letting paho re-raise it out of the network loop,
   which would end the relay. Delivery checks that the pane's tmux server PID
-  still matches the record (pane IDs restart from `%0` after tmux restarts),
-  then runs `load-buffer` from standard input, `paste-buffer -p -d` into the
-  pane, and, after 0.2 seconds, `send-keys Enter`. Text never appears on a
-  command line. It acknowledges `delivered` or `failed` (`pane-unavailable`
-  or `delivery-failed`) without waiting for the broker, since it runs in the
-  network loop's callback. It logs no prompt text.
+  still matches the record (pane IDs restart from `%0` after tmux restarts)
+  and, when the record has a `command`, that the pane still runs it: an agent
+  that exited without `SessionEnd` leaves its shell in the foreground, which
+  would run the prompt as a command. A record without a `command` (from an
+  older hook, or when tmux couldn't say) skips that check, and a recorded
+  shell (an agent started by a wrapper script) passes it for the shell left
+  behind; in both cases it delivers and logs a warning. It then runs `load-buffer` from standard
+  input, `paste-buffer -p -d` into the pane, and, after 0.2 seconds,
+  `send-keys Enter`. Text never appears on a command line. It acknowledges
+  `delivered` or `failed` (`pane-unavailable` or `delivery-failed`) without
+  waiting for the broker, since it runs in the network loop's callback. It
+  logs no prompt text.
 - **Dashboard**: `DashboardSubscriber.send_prompt` publishes at QoS 1 with
   `retain=False` (a retained prompt would be retyped on every relay
   reconnect) and refuses when the broker isn't connected rather than queueing.

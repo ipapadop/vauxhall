@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { ACK_TIMEOUT_MS, handleAck, sendPrompt } from '../../../vauxhall/dashboard/ui/js/prompt.js';
+import { ACK_TIMEOUT_MS, handleAck, sendPrompt, showRejected } from '../../../vauxhall/dashboard/ui/js/prompt.js';
 import { createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
@@ -140,6 +140,14 @@ test('a rejected prompt returns the error and leaves the card alone', async () =
 
     assert.deepEqual(result, { ok: false, error: 'Prompt must not be empty' });
     assert.equal(status(card), '');
+});
+
+test('a rejection shown on the card says the prompt was not sent and why', () => {
+    const card = makeCard();
+
+    showRejected(card, 'Not connected to the broker');
+
+    assert.equal(status(card), 'Prompt not sent: Not connected to the broker');
 });
 
 test('a rejection without an error message gets a generic one', async () => {

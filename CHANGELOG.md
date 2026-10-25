@@ -136,6 +136,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A settings save that both denylists an agent and lowers the card limit
   removes the denylisted cards before evicting others. Before, it could evict
   cards that would have fit.
+- A prompt send that finishes after you reopen the prompt dialog for another
+  card no longer closes that dialog, clears its text, or shows the old send's
+  error in it. A send rejected after its dialog closed or moved to another
+  card now shows `Prompt not sent` and the reason on its own card, where
+  before the reason was lost or shown in the wrong dialog.
 
 ### Security
 

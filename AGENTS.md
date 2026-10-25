@@ -91,8 +91,11 @@ sequenceDiagram
    `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
    `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and
    resolves the session ID from the agent's own session ID, a hash of the
-   transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
-   skipped.
+   transcript path, or `VAUXHALL_SESSION_ID`; an ID that would exceed 256
+   characters becomes `<source>-sha256:<hex>`. Without a session ID the event
+   is skipped. `publish_telemetry` cuts each `details` string over 4,096
+   characters to fit, so the event isn't rejected; Gemini's `args`, which can
+   hold file contents, is left out instead.
 3. **The client publishes it.** `publish()` validates each payload against
    schema version 1, publishes the hook's events at QoS 1 over one connection
    to `vauxhall/agents/<agent_name>/activity`, and waits up to one second in
@@ -366,8 +369,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   a failed start is logged, and the saved settings stay. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
   card limit, and agent denylist; the frontend removes any card whose agent is
-  newly denylisted. `vauxhall.hooks.config` is imported lazily, so a malformed
-  hooks file only disables the hooks option. `on_telemetry` drops an event
+  newly denylisted. `vauxhall.hooks.config` loads `hook_settings` on first
+  access (a module `__getattr__`), not on import, so importing `HookConfig`
+  applies neither the dashboard's environment nor a malformed hooks file,
+  which only disables the hooks option. `on_telemetry` drops an event
   whose `agent` is in `dashboard.agent_denylist` before it is queued or
   dispatched, so a denylisted agent's telemetry never reaches the frontend;
   the UI thread rechecks the denylist before sending each event, and a
@@ -491,7 +496,12 @@ writing JSON directly. `save_user_config` writes only
 `~/.config/vauxhall/<filename>`, validates with the unchanged
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
 `field_sources` reports each field's source (`environment`, `file`, or
-`default`) and whether it is editable. Fields set by `VAUXHALL_*` environment
+`default`) and whether it is editable. Both, and the settings editor's
+`hooks_mqtt`, read the environment only when the config type's
+`SAVER_ENVIRONMENT_APPLIES` is true: `DashboardConfig` yes, `HookConfig` no,
+because hooks run in the agents' environments, so the hooks file is
+validated on its own (`ConfigResolver` and `MQTTConfig.validate` take an
+`environment`). Fields set by `VAUXHALL_*` environment
 variables are read-only, and so is every field when a `vauxhall_dashboard.json`
 exists in the current directory. Saving a read-only or unknown field, or saving to a
 malformed file, raises `ConfigurationError` without writing. See

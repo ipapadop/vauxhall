@@ -91,11 +91,15 @@ class MQTTConfig:
     certfile: str = field(default="", metadata={"readable_file": True})
     keyfile: str = field(default="", metadata={"readable_file": True})
 
-    def validate(self) -> None:
+    def validate(self, environment: Mapping[str, str] | None = None) -> None:
         """Reject combinations of options that cannot work together.
 
         The loader calls this, not the constructor: the password check reads
         the environment, and default configurations are built without it.
+
+        Args:
+            environment: The environment the password check reads, defaulting
+                to the process environment.
 
         Raises:
             ConfigurationError: If a client certificate lacks its key or the
@@ -103,7 +107,8 @@ class MQTTConfig:
                 is set with a zero keepalive, or a password is set without a
                 username.
         """
-        has_password = self.password_file or os.environ.get(PASSWORD_ENV)
+        environment = os.environ if environment is None else environment
+        has_password = self.password_file or environment.get(PASSWORD_ENV)
         problems = [
             (
                 self.certfile and not self.keyfile,
@@ -244,6 +249,7 @@ class ConfigResolver:
         override_path: Path | None = None,
         *,
         search_current_directory: bool = True,
+        environment: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize the resolver.
 
@@ -252,10 +258,13 @@ class ConfigResolver:
             override_path: Optional explicit path to a config file.
             search_current_directory: Whether the search for
                 ``default_filename`` includes the current directory.
+            environment: The environment variables that override the file,
+                defaulting to the process environment.
         """
         self.default_filename = default_filename
         self.override_path = override_path
         self.search_current_directory = search_current_directory
+        self.environment = os.environ if environment is None else environment
         self._json_data: dict[str, Any] | None = None
         self.config_path: Path | None = None
 
@@ -290,8 +299,8 @@ class ConfigResolver:
         Raises:
             ConfigurationError: If the section is present but is not an object.
         """
-        if env_var in os.environ:
-            return os.environ[env_var], env_var
+        if env_var in self.environment:
+            return self.environment[env_var], env_var
 
         self._ensure_json_loaded()
         assert self._json_data is not None
@@ -329,7 +338,7 @@ class ConfigResolver:
             }
         )
         if validate := getattr(config, "validate", None):
-            validate()
+            validate(self.environment)
         return config
 
     def _resolve(

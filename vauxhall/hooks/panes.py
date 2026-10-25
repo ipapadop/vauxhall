@@ -65,7 +65,9 @@ def _record_path(agent: str, session_id: str) -> Path:
     Returns:
         A path named by a hash, since a session identity is not a safe file name.
     """
-    key = hashlib.sha256(f"{agent.lower()}\0{session_id}".encode()).hexdigest()
+    # Hook input is JSON, which can carry a lone surrogate.
+    identity = f"{agent.lower()}\0{session_id}".encode(errors="surrogatepass")
+    key = hashlib.sha256(identity).hexdigest()
     return panes_directory() / f"{key}.json"
 
 

@@ -8,7 +8,11 @@ from dataclasses import asdict, fields
 from typing import Any
 
 from vauxhall.core.config import HOOKS_FILE, ConfigurationError, MQTTConfig
-from vauxhall.core.config_store import field_sources, user_config_path
+from vauxhall.core.config_store import (
+    field_sources,
+    saver_environment,
+    user_config_path,
+)
 from vauxhall.dashboard.config import DashboardConfig
 
 DASHBOARD_FILE = "vauxhall_dashboard.json"
@@ -54,9 +58,8 @@ def apply_mode(key: str) -> str:
 def hook_config_type() -> type[Any]:
     """Import the hook configuration type on first use.
 
-    Importing ``vauxhall.hooks.config`` loads the hooks configuration and raises
-    ``ConfigurationError`` if that file is malformed. Importing it lazily keeps
-    a broken hooks file from stopping the dashboard.
+    Importing ``vauxhall.hooks.config`` no longer loads the hooks file (its
+    ``hook_settings`` loads on first access), so this only defers the import.
 
     Returns:
         The ``HookConfig`` dataclass.
@@ -64,6 +67,19 @@ def hook_config_type() -> type[Any]:
     from vauxhall.hooks.config import HookConfig  # noqa: PLC0415
 
     return HookConfig
+
+
+def _load_hook_config() -> Any:  # noqa: ANN401
+    """Load the hooks file as hooks read it, without the dashboard's environment.
+
+    Returns:
+        The loaded ``HookConfig``.
+
+    Raises:
+        ConfigurationError: If the hooks file is malformed or invalid.
+    """
+    config_type = hook_config_type()
+    return config_type.load(environment=saver_environment(config_type))
 
 
 def _field_type(default: object) -> str:
@@ -105,7 +121,7 @@ def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
             fail.
     """
     try:
-        hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
+        hooks_mqtt = _synced_mqtt(_load_hook_config().mqtt)
     except ConfigurationError as error:
         return None, str(error)
     return hooks_mqtt, None
@@ -210,7 +226,7 @@ def hook_changes_for(
         ConfigurationError: If the dashboard or hooks configuration is malformed.
     """
     sources = field_sources(DASHBOARD_FILE, DashboardConfig)
-    hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
+    hooks_mqtt = _synced_mqtt(_load_hook_config().mqtt)
     form = {**asdict(current_mqtt), **changes.get("mqtt", {})}
     differing = {
         key: value

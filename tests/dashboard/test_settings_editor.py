@@ -694,3 +694,44 @@ def test_ipc_save_settings_reports_callback_failure() -> None:
     response = json.loads(ipc.save_settings('{"changes": {}}'))
 
     assert response == {"ok": False, "error": "Settings could not be saved"}
+
+
+def test_update_hooks_refuses_a_file_valid_only_in_the_dashboard_environment(
+    dashboard: DashboardApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hooks don't see the dashboard's variables, so its TLS flag can't vouch.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+        tmp_path: Pytest temporary directory.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("VAUXHALL_MQTT_TLS", "true")
+    ca_file = tmp_path / "ca.pem"
+    ca_file.write_text("ca", encoding="utf-8")
+
+    result = dashboard.save_settings(
+        {"mqtt": {"ca_certs": str(ca_file)}}, update_hooks=True
+    )
+
+    assert result["ok"] is False
+    assert result["file"] == "hooks"
+    assert "mqtt.ca_certs requires mqtt.tls" in result["error"]
+    assert not user_config_path(HOOKS_FILE).exists()
+
+
+def test_describe_settings_reports_hooks_mqtt_without_the_dashboard_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The hooks' values come from their file, not the dashboard's variables.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("VAUXHALL_MQTT_HOST", "dashboard-broker")
+    write_user_file(HOOKS_FILE, '{"mqtt": {"port": 1884}}')
+
+    described = describe_settings(dashboard_settings)
+
+    assert described["hooks_mqtt"]["host"] == MQTTConfig().host
+    assert described["hooks_mqtt"]["port"] == 1884

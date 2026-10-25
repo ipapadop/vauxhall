@@ -62,11 +62,18 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- **Also update hooks configuration** no longer validates the hooks file
+  with the dashboard's `VAUXHALL_*` environment variables, which the hooks
+  may not have. A dashboard given `VAUXHALL_MQTT_TLS=true` could write
+  `ca_certs` without `tls`, a file that hooks without that variable
+  rejected. Those variables also no longer make hooks fields read-only.
 - A prompt, command, or other text over 4,096 characters no longer stops
   hooks from publishing the event; it is cut off with an ellipsis, as
-  assistant messages already were. Gemini CLI's tool input (`args`) is left
-  out instead, so no file contents are sent that weren't before. A session ID
-  that would exceed 256 characters is replaced by its SHA-256 hash.
+  assistant messages already were, so a long shell command, such as a
+  heredoc that writes a file, now publishes its start. Gemini CLI's tool
+  input (`args`) is left out instead, because it holds the complete input
+  of every tool call. A session ID that would exceed 256 characters is
+  replaced by its SHA-256 hash.
 - A TLS broker that accepts the connection but stalls the handshake no
   longer holds each hook for up to `mqtt.keepalive` seconds (60 by default).
   paho times the handshake with the keepalive, so hooks now connect with a
@@ -114,6 +121,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- A shell command over 4,096 characters, such as a heredoc that writes a
+  file, is now published cut to its first 4,096 characters; before, the
+  whole event was dropped. Short commands were always published in full.
+  See [privacy](https://github.com/ipapadop/vauxhall/blob/main/docs/privacy.md).
 - Hooks and `vauxhall-relay` no longer read a `vauxhall_hooks.json` in the
   agent's workspace, only `~/.config/vauxhall/vauxhall_hooks.json`. A
   workspace file, for example one committed to a cloned repository, could

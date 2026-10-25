@@ -3,6 +3,7 @@
 
 """Dashboard configuration for Vauxhall."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -48,13 +49,20 @@ class DashboardConfig:
     dashboard: UIConfig = field(default_factory=UIConfig)
 
     SEARCHES_CURRENT_DIRECTORY: ClassVar[bool] = True
+    SAVER_ENVIRONMENT_APPLIES: ClassVar[bool] = True
 
     @classmethod
-    def load(cls, config_path: Path | None = None) -> "DashboardConfig":
+    def load(
+        cls,
+        config_path: Path | None = None,
+        environment: Mapping[str, str] | None = None,
+    ) -> "DashboardConfig":
         """Load configuration from environment or file.
 
         Args:
             config_path: Optional path to the configuration file.
+            environment: The environment variables that override the file,
+                defaulting to the process environment.
 
         Returns:
             DashboardConfig: The loaded configuration.
@@ -63,6 +71,7 @@ class DashboardConfig:
             "vauxhall_dashboard.json",
             config_path,
             search_current_directory=cls.SEARCHES_CURRENT_DIRECTORY,
+            environment=environment,
         )
 
         return cls(

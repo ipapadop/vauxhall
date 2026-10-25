@@ -28,20 +28,24 @@ def _non_empty_string(value: object) -> str | None:
 def _publishable(source: str, identifier: str) -> str:
     """Prefix an identifier with its source, hashing it if too long to publish.
 
-    Truncating instead could give two sessions the same identity.
+    Truncating instead could give two sessions the same identity. The digest
+    form uses ``<source>-sha256:`` so it can't equal a short identifier's
+    ``<source>:<identifier>``.
 
     Args:
         source: The source the identifier came from.
         identifier: The identifier.
 
     Returns:
-        ``<source>:<identifier>``, or ``<source>:sha256:<digest>`` when that
+        ``<source>:<identifier>``, or ``<source>-sha256:<digest>`` when that
         exceeds the telemetry limit.
     """
     session_id = f"{source}:{identifier}"
     if len(session_id) <= MAX_SESSION_ID_LENGTH:
         return session_id
-    return f"{source}:sha256:{hashlib.sha256(identifier.encode()).hexdigest()}"
+    # Hook input is JSON, which can carry a lone surrogate.
+    digest = hashlib.sha256(identifier.encode(errors="surrogatepass")).hexdigest()
+    return f"{source}-sha256:{digest}"
 
 
 def resolve_session_id(
@@ -64,7 +68,9 @@ def resolve_session_id(
         return _publishable("native", native_id)
     transcript_path = _non_empty_string(input_data.get("transcript_path"))
     if transcript_path is not None:
-        digest = hashlib.sha256(transcript_path.encode()).hexdigest()
+        digest = hashlib.sha256(
+            transcript_path.encode(errors="surrogatepass")
+        ).hexdigest()
         return f"transcript:{digest}"
     source = os.environ if environment is None else environment
     configured_id = _non_empty_string(source.get("VAUXHALL_SESSION_ID"))

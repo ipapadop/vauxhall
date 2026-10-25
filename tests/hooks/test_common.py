@@ -101,6 +101,76 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("*.claimed"))
 
 
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"),
+    reason="Windows ignores creation modes, and its temporary directory is per account",
+)
+def test_record_tool_start_creates_an_owner_only_directory(tmp_path: Path) -> None:
+    """Tool start times are kept where no other account can list or read them.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    previous_umask = os.umask(0o022)
+    try:
+        with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+            common.record_tool_start("test", IDENTITY)
+    finally:
+        os.umask(previous_umask)
+
+    directory = tmp_path / f"vauxhall-test{common._USER_SUFFIX}"
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert len(list(directory.glob("*.time"))) == 1
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"),
+    reason="Windows has no mode bits to plant, and its temporary directory is "
+    "per account",
+)
+def test_tool_timing_ignores_a_directory_another_account_could_reach(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A timing directory others can write to is neither written nor read.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        caplog: Pytest log capture fixture.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.record_tool_start("test", IDENTITY)
+        [spoofed] = tmp_path.rglob("*.time")
+        spoofed.write_text("0")
+        spoofed.parent.chmod(0o777)
+
+        common.record_tool_start("test", IDENTITY)
+        duration = common.claim_tool_duration("test", IDENTITY)
+
+    assert duration is None
+    assert list(spoofed.parent.iterdir()) == [spoofed]
+    assert "is not a private directory" in caplog.text
+
+
+def test_record_tool_start_writes_nothing_through_a_planted_symlink(
+    tmp_path: Path,
+) -> None:
+    """Tool start times never reach a directory another account redirected.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    elsewhere = tmp_path / "attacker"
+    elsewhere.mkdir()
+    (tmp_path / f"vauxhall-test{common._USER_SUFFIX}").symlink_to(elsewhere)
+
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.record_tool_start("test", IDENTITY)
+        duration = common.claim_tool_duration("test", IDENTITY)
+
+    assert duration is None
+    assert not list(elsewhere.iterdir())
+
+
 def test_private_directory_allows_a_platform_without_posix_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

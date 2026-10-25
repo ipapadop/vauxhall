@@ -70,6 +70,10 @@ The first release, planned as 0.1.0. It is alpha software; see
   the agent settings. Before, each run replaced it with the previous run's
   output, losing the original settings. A copy that fails partway no
   longer leaves a partial backup behind.
+- Prompt and acknowledgment messages with a `schema_version` other than the
+  integer 1 (such as `true` or `1.0`), or a message ID that holds control
+  characters, are now dropped like other invalid messages, as telemetry
+  already was for its `schema_version`. Before, both were accepted.
 - Saving a broker change in the settings dialog no longer freezes the
   window for up to 5 seconds while the old connection is still trying to
   reach its broker. The old connection now closes in the background.
@@ -144,6 +148,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A settings save that both denylists an agent and lowers the card limit
   removes the denylisted cards before evicting others. Before, it could evict
   cards that would have fit.
+- A prompt send that finishes after you reopen the prompt dialog for another
+  card no longer closes that dialog, clears its text, or shows the old send's
+  error in it. A send rejected after its dialog closed or moved to another
+  card now shows `Prompt not sent` and the reason on its own card, where
+  before the reason was lost or shown in the wrong dialog.
 
 ### Security
 
@@ -177,3 +186,10 @@ The first release, planned as 0.1.0. It is alpha software; see
   `vauxhall-relay` or the dashboard's MQTT connection; it is dropped like any
   other malformed message.
 - The dashboard no longer logs the workspace path it copies to the clipboard.
+- Hooks keep tool start times in an owner-only directory, as
+  [privacy](https://github.com/ipapadop/vauxhall/blob/main/docs/privacy.md#on-disk)
+  describes. The directory was readable by other accounts, and one that
+  another account created first, or a symlink, was used as found, so that
+  account could read tool timing or plant start times that faked a tool's
+  duration. Such a directory is now refused with a warning, and the duration
+  left out.

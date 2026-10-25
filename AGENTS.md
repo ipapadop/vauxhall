@@ -151,8 +151,11 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   both messages. Prompt text is 1..4,096 characters with no control
   characters except newline and tab, because a raw escape could end the
   terminal's bracketed paste early and turn the rest into keystrokes. Both the
-  dashboard and the relay validate it. Messages over 32 KiB are dropped, a
-  limit every valid prompt fits under even at four UTF-8 bytes per character.
+  dashboard and the relay validate it. A message ID is 1..64 characters with
+  no control characters. As in telemetry, `schema_version` must be the
+  integer 1, so a JSON `true` (equal to 1 in Python) is rejected. Messages
+  over 32 KiB are dropped, a limit every valid prompt fits under even at four
+  UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
   0700 directory) holding `pane`, `socket`, `server_pid`, and `command`, the
@@ -205,7 +208,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   outcome, and a send also forgets the prompts of cards that have left the
   page. An acknowledgment that beats the bridge's reply is kept briefly and
   matched afterwards. The dialog closes when its card is evicted,
-  cleared, or denylisted.
+  cleared, or denylisted. A send's reply closes the dialog on success,
+  or shows the error in it, only while the dialog still targets the sending
+  card. Otherwise, because it was closed or reopened for another card while
+  the send was pending, success clears the text only if it is still the sent
+  text, and a rejection shows `Prompt not sent: <error>` on the sending
+  card's `.prompt-status` and forgets the card's previous prompt, like a
+  successful send.
 - **Security**: Anyone who can publish to the broker can send prompts, and a
   prompt can make an agent run commands, unless the broker's ACL restricts
   who may publish to `sessions/+/prompt` (see

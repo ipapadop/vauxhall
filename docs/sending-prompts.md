@@ -48,6 +48,7 @@ while the agent is idle.
 | `Prompt delivered` | The relay pasted the prompt into the pane and pressed Enter |
 | `Prompt not delivered: its tmux pane is no longer available` | The pane closed, tmux restarted, or the agent exited since the session started |
 | `Prompt not delivered: tmux could not type it in` | A tmux command failed |
+| `Prompt not sent: <reason>` | The dashboard couldn't publish it, for example when not connected to the broker; shown on the card only if you closed the dialog before the answer came, since otherwise the dialog stays open with the reason |
 | `No relay acknowledged the prompt` | Nothing answered within 10 seconds; a later answer replaces this text, unless you sent another prompt from the card since |
 
 **Delivered** means the text was typed into the pane, not that the agent has

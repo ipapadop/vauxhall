@@ -112,6 +112,18 @@ export async function sendPrompt(dashboardIpc, card, text) {
 }
 
 /**
+ * Shows on a card that its prompt was rejected, for a rejection whose dialog
+ * has closed or moved to another card. The rejection becomes the card's
+ * latest outcome, so an earlier prompt can't overwrite it.
+ * @param {HTMLElement} card - The agent card the prompt was for.
+ * @param {string} error - Why the prompt was not sent.
+ */
+export function showRejected(card, error) {
+    forgetReplaced(card);
+    setCardStatus(card, `Prompt not sent: ${error}`);
+}
+
+/**
  * Applies a relay's acknowledgment to the card that sent the prompt.
  * @param {{id: string, status: string, reason?: string}} ack - The acknowledgment.
  */

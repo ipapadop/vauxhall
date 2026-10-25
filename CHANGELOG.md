@@ -62,6 +62,14 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Saving settings, view state, or cards writes through a symlinked file in
+  `~/.config/vauxhall` and keeps the link. Before, the link was replaced by
+  a regular file, so a configuration kept in a dotfiles repository silently
+  stopped updating.
+- Running `vauxhall-hook-install` again keeps the existing `.bak` backup of
+  the agent settings. Before, each run replaced it with the previous run's
+  output, losing the original settings. A copy that fails partway no
+  longer leaves a partial backup behind.
 - Saving a broker change in the settings dialog no longer freezes the
   window for up to 5 seconds while the old connection is still trying to
   reach its broker. The old connection now closes in the background.

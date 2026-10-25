@@ -109,4 +109,4 @@ def save_cards(cards: object) -> None:
     """
     path = user_config_path(STATE_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_json_atomically(path, {"cards": clean_cards(cards)})
+    write_json_atomically(path, {"cards": clean_cards(cards)}, follow_symlinks=True)

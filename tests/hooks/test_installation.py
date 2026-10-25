@@ -6,7 +6,9 @@
 import base64
 import importlib
 import json
+import os
 import shlex
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
@@ -193,6 +195,107 @@ def test_load_hook_settings_backs_up_existing_file(tmp_path: Path) -> None:
     assert settings_file.with_suffix(".json.bak").read_text() == (
         settings_file.read_text()
     )
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")
+def test_load_hook_settings_backup_keeps_the_file_mode(tmp_path: Path) -> None:
+    """The backup is as private as the settings file it copies.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text("{}")
+    settings_file.chmod(0o600)
+
+    installation.load_hook_settings(settings_file, "Agent")
+
+    mode = settings_file.with_suffix(".json.bak").stat().st_mode
+    assert stat.S_IMODE(mode) == 0o600
+
+
+def test_load_hook_settings_keeps_an_existing_backup(tmp_path: Path) -> None:
+    """A later load must not replace the backup of the original settings.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text('{"original": true}')
+    installation.load_hook_settings(settings_file, "Agent")
+    settings_file.write_text('{"modified": true}')
+
+    assert installation.load_hook_settings(settings_file, "Agent") == {"modified": True}
+    assert settings_file.with_suffix(".json.bak").read_text() == '{"original": true}'
+
+
+def test_load_hook_settings_writes_nothing_through_a_backup_symlink(
+    tmp_path: Path,
+) -> None:
+    """A dangling symlink at the backup path is not followed.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text('{"existing": "value"}')
+    elsewhere = tmp_path / "elsewhere"
+    try:
+        settings_file.with_suffix(".json.bak").symlink_to(elsewhere)
+    except OSError:
+        pytest.skip("creating symlinks needs a privilege on this platform")
+
+    installation.load_hook_settings(settings_file, "Agent")
+
+    assert not elsewhere.exists()
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="needs POSIX permissions that bind the current user",
+)
+def test_load_hook_settings_removes_a_partial_backup(tmp_path: Path) -> None:
+    """A failed copy leaves no backup for a later run to keep.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text("{}")
+    settings_file.chmod(0)
+
+    with pytest.raises(PermissionError):
+        installation.load_hook_settings(settings_file, "Agent")
+
+    assert not settings_file.with_suffix(".json.bak").exists()
+
+
+def test_install_replaces_a_symlinked_workspace_settings_file(
+    tmp_path: Path,
+) -> None:
+    """A workspace symlink is replaced, never written through.
+
+    A cloned repository controls the workspace, so a link there could point
+    the installer at any of the user's files.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}")
+    workspace = tmp_path / "workspace"
+    settings_file = _settings_file(claude_install, workspace)
+    settings_file.parent.mkdir(parents=True)
+    try:
+        settings_file.symlink_to(outside)
+    except OSError:
+        pytest.skip("creating symlinks needs a privilege on this platform")
+
+    _install(claude_install, workspace)
+
+    assert outside.read_text() == "{}"
+    assert not settings_file.is_symlink()
+    assert json.loads(settings_file.read_text())["hooks"]
 
 
 def test_load_hook_settings_returns_empty_settings_when_missing(
@@ -546,9 +649,8 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
             {"type": "command", "command": f"echo -m {installer.HOOK_MODULE}"},
         ],
     }
-    settings_file.write_text(
-        json.dumps({"theme": "dark", "hooks": {"CustomEvent": [user_group]}})
-    )
+    original = {"theme": "dark", "hooks": {"CustomEvent": [user_group]}}
+    settings_file.write_text(json.dumps(original))
     venv_python = str(Path("/opt/Vauxhall $(touch marker)/bin/python").absolute())
 
     _install(installer, tmp_path, venv_python)
@@ -567,7 +669,7 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
         ]
         assert commands == [[venv_python, "-m", installer.HOOK_MODULE]]
     assert not list(settings_file.parent.glob("*.tmp"))
-    assert json.loads(settings_file.with_suffix(".json.bak").read_text()) == settings
+    assert json.loads(settings_file.with_suffix(".json.bak").read_text()) == original
 
 
 @INSTALLERS

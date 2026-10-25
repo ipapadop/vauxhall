@@ -131,7 +131,7 @@ def save_user_config(
     """
     path, data = _prepare(filename, config_type, changes)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_json_atomically(path, data)
+    write_json_atomically(path, data, follow_symlinks=True)
     return path
 
 
@@ -258,13 +258,22 @@ def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
             raise ConfigurationError(message) from None
 
 
-def write_json_atomically(path: Path, data: dict[str, Any]) -> None:
+def write_json_atomically(
+    path: Path, data: dict[str, Any], *, follow_symlinks: bool = False
+) -> None:
     """Replace a JSON file so readers see either the old or the new content.
 
     Args:
         path: The file to replace.
         data: The data to serialize into it.
+        follow_symlinks: Replace a symlink's target, in the target's
+            directory, and keep the link, instead of replacing the link. Pass
+            it only for paths the user controls, never for a workspace file
+            a cloned repository could point elsewhere.
     """
+    if follow_symlinks:
+        # Unlike Path.resolve, realpath never raises, even on a symlink loop.
+        path = Path(os.path.realpath(path))
     temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         with temporary_path.open("x", encoding="utf-8") as file:

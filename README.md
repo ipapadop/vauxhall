@@ -293,7 +293,8 @@ In each workspace where you installed hooks:
    `Remove-Item -Recurse -Force .vauxhall-venv` in PowerShell. Do this after
    step 1; otherwise the agent reports a failing hook on every event.
 3. **Restart the agent.** Delete the `.bak` backups once you no longer need
-   them.
+   them. The installer never replaces an existing backup, so a reinstall
+   keeps the original settings.
 
 ### Vauxhall
 

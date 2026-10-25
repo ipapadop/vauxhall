@@ -219,8 +219,14 @@ written here; see [privacy.md](privacy.md#retention).
 | `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
 | `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities: agent, workspace, session ID, last known state, env, last-seen time |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
-| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the previous file |
+| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the file; an existing `.bak` is never replaced |
 | `vauxhall-*` directories in the system temporary directory | Hooks | Tool start times and partial assistant messages; see [privacy.md](privacy.md#on-disk) |
+
+Each JSON file above is replaced atomically. A file in `~/.config/vauxhall`
+that is a symlink, for example into a dotfiles repository, has its target
+replaced, and the link is kept. A symlinked agent settings file in a
+workspace is replaced by a regular file instead, because a cloned repository
+could point the link at any of your files.
 
 Telemetry content (prompts, messages, commands, tool arguments, errors,
 tokens, duration, activity history) is never written to disk by Vauxhall;

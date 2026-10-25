@@ -214,7 +214,9 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   an older prompt's timeout or late acknowledgment can't overwrite the newer
   outcome, and a send also forgets the prompts of cards that have left the
   page. An acknowledgment that beats the bridge's reply is kept briefly and
-  matched afterwards. The dialog closes when its card is evicted,
+  matched afterwards; one for a message ID the bridge already returned (a
+  replaced prompt's, or a duplicate) is dropped instead, so it can't push
+  out one still to be matched. The dialog closes when its card is evicted,
   cleared, or denylisted. A send's reply shows an error in the dialog only
   while the dialog still targets the sending card, and closes the dialog on
   success only if it was not closed or reopened meanwhile, since a reopened

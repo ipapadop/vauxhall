@@ -120,6 +120,20 @@ test('early acknowledgments are kept only up to a limit', async (t) => {
     handleAck({ id: 'early-0', status: 'delivered' });
 });
 
+test('acknowledgments of replaced prompts do not push out an early one', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const card = makeCard();
+    for (let index = 0; index < 25; index++) {
+        await sendPrompt(bridge({ ok: true, id: `old-${index}` }).ipc, card, 'hello');
+    }
+    handleAck({ id: 'next', status: 'delivered' });
+    for (let index = 0; index < 24; index++) handleAck({ id: `old-${index}`, status: 'delivered' });
+
+    await sendPrompt(bridge({ ok: true, id: 'next' }).ipc, card, 'hello');
+
+    assert.equal(status(card), 'Prompt delivered');
+});
+
 test('malformed acknowledgments leave a waiting prompt waiting', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const card = makeCard();
@@ -246,6 +260,4 @@ test('a prompt from a card that left the page is forgotten', async (t) => {
 
     assert.equal(status(removed), 'No relay acknowledged the prompt');
     handleAck({ id: 'other-1', status: 'delivered' });
-    // The forgotten prompt's acknowledgment is now held as an early one; use it up.
-    await sendPrompt(bridge({ ok: true, id: 'gone-1' }).ipc, other, 'hello');
 });

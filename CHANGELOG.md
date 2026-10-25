@@ -62,6 +62,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A prompt whose acknowledgment arrives before the dashboard has the
+  prompt's message ID is no longer left waiting when acknowledgments of
+  earlier, replaced prompts arrive around the same time.
 - The prompt dialog's **Send** button is no longer disabled for one card
   while another card's prompt is still being sent, and text typed for one
   card is no longer left in the dialog when it opens for another card,

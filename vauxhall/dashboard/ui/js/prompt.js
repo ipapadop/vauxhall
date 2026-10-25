@@ -17,6 +17,7 @@ const FAILURE_REASONS = {
     'delivery-failed': 'tmux could not type it in',
 };
 const MAX_UNMATCHED_ACKS = 20;
+const MAX_KNOWN_IDS = 256;
 
 /**
  * Each card's latest prompt still without an acknowledgment: message id -> the
@@ -26,6 +27,12 @@ const MAX_UNMATCHED_ACKS = 20;
 const prompts = new Map();
 /** Acknowledgments that beat the bridge's reply carrying their message id. */
 const unmatched = new Map();
+/**
+ * The latest message ids the bridge returned, so an acknowledgment of one no
+ * longer tracked (replaced, or a duplicate) isn't held as an early one, where
+ * it would push out an acknowledgment still to be matched.
+ */
+const known = new Set();
 
 /**
  * Stops tracking a prompt.
@@ -92,6 +99,8 @@ export async function sendPrompt(dashboardIpc, card, text) {
 
     forgetReplaced(card);
     card.latestPromptId = result.id;
+    known.add(result.id);
+    if (known.size > MAX_KNOWN_IDS) known.delete(known.values().next().value);
     const early = unmatched.get(result.id);
     if (early) {
         unmatched.delete(result.id);
@@ -131,6 +140,7 @@ export function handleAck(ack) {
     if (!ack || typeof ack.id !== 'string') return;
     const entry = prompts.get(ack.id);
     if (!entry) {
+        if (known.has(ack.id)) return;
         unmatched.set(ack.id, ack);
         if (unmatched.size > MAX_UNMATCHED_ACKS) unmatched.delete(unmatched.keys().next().value);
         return;

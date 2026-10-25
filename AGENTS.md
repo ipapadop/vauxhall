@@ -425,8 +425,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.
   Frontend saves and the shutdown window save both run on the UI thread, so
-  neither can discard the other's fields. Two dashboard processes saving at
-  once can still lose one update.
+  neither can discard the other's fields. A second dashboard process can't
+  discard them either: see Single instance.
   `save_ui_state` accepts only `theme`, `sort`, `history_filter`,
   `attention_first`, and `notify`, the last two as booleans; only Python
   writes `window`. `run()` creates the window with the saved size, calls
@@ -451,6 +451,14 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
+- **Single instance**: `main()` holds a `QLockFile` on
+  `~/.config/vauxhall/dashboard.lock` (`INSTANCE_LOCK_FILE`) before creating
+  `Pyloid`, because two dashboards would overwrite each other's view and card
+  state. A lock held by a live process makes `main()` log its PID, host, and
+  the lock path and exit with status 1; a lock whose process has exited is
+  taken over (`setStaleLockTime(0)` relies on the PID check alone, not age).
+  If the lock can't be created at all, such as on a read-only home, the
+  dashboard logs a warning and runs without it.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready, closes the
   MQTT client, and waits up to `SHUTDOWN_CLOSE_SECONDS` (1 second) for every

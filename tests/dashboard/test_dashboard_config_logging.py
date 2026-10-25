@@ -6,8 +6,11 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+from vauxhall.dashboard.app import INSTANCE_LOCK_FILE, _lock_dashboard
 
 
 def test_dashboard_main_initializes_configured_logging() -> None:
@@ -128,3 +131,85 @@ vauxhall.dashboard.app.main()
     )
     assert lines["rhi"] == expected_rhi
     assert lines["flags"].split()[-1] == expected_last_flag
+
+
+def test_dashboard_main_refuses_to_run_beside_another_dashboard(
+    isolated_home: Path,
+) -> None:
+    """A second dashboard exits before starting, naming the lock to delete.
+
+    Args:
+        isolated_home: The temporary home the dashboard locks under.
+    """
+    code = """
+import vauxhall.dashboard.app
+
+def stop(*_, **__):
+    print("started")
+    raise SystemExit(0)
+
+vauxhall.dashboard.app.Pyloid = stop
+vauxhall.dashboard.app.main()
+"""
+    path = isolated_home / ".config" / "vauxhall" / INSTANCE_LOCK_FILE
+    lock = _lock_dashboard(path)
+    try:
+        refused = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        )
+    finally:
+        lock.unlock()
+    started = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+
+    assert refused.returncode == 1
+    assert "started" not in refused.stdout
+    assert "Another Vauxhall Dashboard is already running" in refused.stdout
+    assert str(path) in refused.stdout
+    assert "started" in started.stdout
+    assert not path.exists()
+
+
+def test_lock_dashboard_takes_over_a_lock_left_by_an_exited_process(
+    tmp_path: Path,
+) -> None:
+    """A lock naming a process that no longer runs doesn't block startup.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    code = """
+import os, sys
+from PySide6.QtCore import QLockFile
+
+lock = QLockFile(sys.argv[1])
+assert lock.tryLock(0)
+os._exit(0)
+"""
+    path = tmp_path / INSTANCE_LOCK_FILE
+    subprocess.run([sys.executable, "-c", code, str(path)], check=True)
+    assert path.exists()
+
+    lock = _lock_dashboard(path)
+
+    assert lock.isLocked()
+    lock.unlock()
+
+
+def test_lock_dashboard_runs_unlocked_when_the_lock_cant_be_created(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unusable lock path is logged instead of stopping the dashboard.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        caplog: Captures the warning.
+    """
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("")
+
+    lock = _lock_dashboard(blocker / INSTANCE_LOCK_FILE)
+
+    assert not lock.isLocked()
+    assert "a second dashboard would not be refused" in caplog.text

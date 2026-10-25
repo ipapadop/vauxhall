@@ -62,6 +62,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A second dashboard for the same user exits with `Another Vauxhall Dashboard
+  is already running` instead of running beside the first, where each would
+  overwrite the other's saved view and cards.
 - Telemetry with long non-ASCII details, such as a prompt of 4,096 emoji,
   is no longer dropped as oversized. Hooks escaped every non-ASCII
   character, which made such an event about three times larger than its

@@ -6,6 +6,7 @@
 import json
 import uuid
 from collections.abc import Callable
+from threading import Thread
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -136,8 +137,11 @@ class DashboardSubscriber:
         Args:
             client: The client that received the message.
             userdata: Unused paho user data.
-            msg: The received message, dropped when oversized or invalid.
+            msg: The received message, dropped when oversized or invalid, or
+                once the subscriber is stopping.
         """
+        if self._stopping:
+            return
         payload = msg.payload
         if len(payload) > settings.dashboard.max_payload_bytes:
             logger.warning(
@@ -247,8 +251,37 @@ class DashboardSubscriber:
             return
         logger.info("Disconnecting from MQTT broker...")
         try:
+            self._close()
+        finally:
+            self.status_callback("Disconnected")
+
+    def discard(self) -> None:
+        """Stop all callbacks now and disconnect on a background thread.
+
+        Used when a new subscriber replaces this one. ``loop_stop()`` joins the
+        network thread, which can be inside a connect attempt for up to paho's
+        5-second connect timeout, and the caller is the UI thread. No status is
+        reported, because the replacement reports its own.
+        """
+        if self._stopping:
+            return
+        self._stopping = True
+        if self._loop_started:
+            Thread(
+                target=self._close_quietly, name="vauxhall-mqtt-discard", daemon=True
+            ).start()
+
+    def _close(self) -> None:
+        """Disconnect, then wait for the network loop to end."""
+        try:
             self.client.disconnect()
         finally:
             self.client.loop_stop()
             self._loop_started = False
-            self.status_callback("Disconnected")
+
+    def _close_quietly(self) -> None:
+        """Close a discarded connection, logging rather than raising errors."""
+        try:
+            self._close()
+        except Exception:
+            logger.exception("Could not close the replaced MQTT connection")

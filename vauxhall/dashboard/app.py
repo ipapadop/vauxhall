@@ -398,7 +398,7 @@ class DashboardApp:
     def _reconnect(self) -> None:
         """Replace the MQTT subscriber with one using the current broker settings."""
         assert self.mqtt is not None
-        self.mqtt.stop()
+        self.mqtt.discard()
         self.mqtt = DashboardSubscriber(
             self.on_telemetry,
             self.on_status,

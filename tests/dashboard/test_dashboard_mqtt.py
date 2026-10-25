@@ -5,6 +5,7 @@
 
 import json
 from threading import Event, Thread
+from threading import enumerate as enumerate_threads
 from typing import Any
 from unittest.mock import MagicMock, call, patch
 
@@ -374,3 +375,97 @@ def test_dashboard_subscriber_uses_settings_by_default() -> None:
 
     assert subscriber.host == settings.mqtt.host
     assert subscriber.port == settings.mqtt.port
+
+
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
+def test_discard_returns_before_the_network_loop_stops(
+    mock_client_class: MagicMock,
+) -> None:
+    """Discarding doesn't wait for a network thread stuck in a connect attempt.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
+    release_loop = Event()
+    loop_stopped = Event()
+
+    def stuck_join() -> None:
+        """Wait, as loop_stop() does for a thread inside connect()."""
+        assert release_loop.wait(timeout=5)
+        loop_stopped.set()
+
+    client = mock_client_class.return_value
+    client.loop_stop.side_effect = stuck_join
+    statuses: list[str] = []
+    subscriber = DashboardSubscriber(MagicMock(), statuses.append)
+    subscriber._loop_started = True
+
+    subscriber.discard()
+
+    assert not loop_stopped.is_set()
+    release_loop.set()
+    assert loop_stopped.wait(timeout=5)
+    client.disconnect.assert_called_once_with()
+    assert statuses == []
+
+
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
+def test_discard_logs_a_failed_disconnect_and_still_stops_the_loop(
+    mock_client_class: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A disconnect error on the background thread is logged, not raised.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+        caplog: Captures the logged error.
+    """
+    client = mock_client_class.return_value
+    client.disconnect.side_effect = RuntimeError("disconnect failed")
+    subscriber = DashboardSubscriber(MagicMock(), MagicMock())
+    subscriber._loop_started = True
+
+    subscriber.discard()
+    for thread in enumerate_threads():
+        if thread.name == "vauxhall-mqtt-discard":
+            thread.join(timeout=5)
+
+    client.loop_stop.assert_called_once_with()
+    assert "Could not close the replaced MQTT connection" in caplog.text
+
+
+@patch("vauxhall.dashboard.mqtt_client.mqtt.Client")
+def test_discard_without_a_loop_touches_nothing(mock_client_class: MagicMock) -> None:
+    """A subscriber that never started its loop has nothing to close.
+
+    Args:
+        mock_client_class: Mock replacing
+            ``vauxhall.dashboard.mqtt_client.mqtt.Client``.
+    """
+    subscriber = DashboardSubscriber(MagicMock(), MagicMock())
+
+    subscriber.discard()
+    subscriber.discard()
+
+    mock_client_class.return_value.disconnect.assert_not_called()
+    mock_client_class.return_value.loop_stop.assert_not_called()
+
+
+def test_messages_after_stopping_are_dropped() -> None:
+    """A stopping client forwards neither telemetry nor acknowledgments."""
+    callback, ack_callback = MagicMock(), MagicMock()
+    subscriber = DashboardSubscriber(callback, MagicMock(), ack_callback=ack_callback)
+    subscriber.discard()
+
+    telemetry = MagicMock(topic="vauxhall/agents/codex/activity")
+    telemetry.payload = json.dumps(valid_event()).encode()
+    ack = MagicMock(topic="vauxhall/agents/codex/sessions/session-1/ack")
+    ack.payload = json.dumps(
+        {"schema_version": 1, "id": "a1", "status": "delivered"}
+    ).encode()
+    subscriber._on_message(subscriber.client, None, telemetry)
+    subscriber._on_message(subscriber.client, None, ack)
+
+    callback.assert_not_called()
+    ack_callback.assert_not_called()

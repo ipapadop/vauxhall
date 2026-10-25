@@ -347,7 +347,7 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   MQTT callbacks and settings saves post events through `queue_to_ui_thread`,
   a queued Qt signal, and return at once, so neither thread waits on the
   other: a settings save during telemetry, or `loop_stop()` joining the
-  network thread on a broker change or at shutdown, can't deadlock. Events
+  network thread at shutdown, can't deadlock. Events
   run on the UI thread in the order they were posted. `DashboardApp` takes the
   queue as `queue_to_ui`, so tests can run events at once or hold them.
   Readiness, the pending updates, the last status, and the outbox of events
@@ -367,9 +367,14 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   saves never overlap. It checks the dashboard file and, when requested, the
   hooks file with `check_user_config` before writing either one. It then reloads
   `DashboardConfig`, replaces the running `mqtt`, `logging`, and `dashboard`
-  settings, and sets the root log level if it changed. Broker changes stop the
-  current `DashboardSubscriber` and start a new one with the new host and port;
-  a failed start is logged, and the saved settings stay. If the frontend is
+  settings, and sets the root log level if it changed. Broker changes call
+  `discard()` on the current `DashboardSubscriber` and start a new one with
+  the new host and port; a failed start is logged, and the saved settings
+  stay. `discard()` stops the old client's callbacks and status reports at
+  once and disconnects it on a daemon thread, because `loop_stop()` joins a
+  network thread that can be inside a connect attempt for up to paho's
+  5-second connect timeout, and the save runs on the UI thread. Shutdown
+  still calls `stop()`, which waits and reports `Disconnected`. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
   card limit, and agent denylist; the frontend removes any card whose agent is
   newly denylisted. `vauxhall.hooks.config` loads `hook_settings` on first

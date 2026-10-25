@@ -69,4 +69,19 @@ def claim(path: Path) -> Path:
     """
     claimed = path.with_name(f"{path.name}.{os.urandom(8).hex()}.claimed")
     path.rename(claimed)
+    # A rename keeps the old modification time, so an age sweep could
+    # otherwise remove the file while this process works on it.
+    os.utime(claimed)
     return claimed
+
+
+def unique_name(prefix: str) -> str:
+    """Return a file name no other process uses, ordered by creation time.
+
+    Args:
+        prefix: The start of the name.
+
+    Returns:
+        The prefix, a nanosecond timestamp, and a random suffix.
+    """
+    return f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"

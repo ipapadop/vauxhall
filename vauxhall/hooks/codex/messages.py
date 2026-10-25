@@ -6,12 +6,14 @@
 import hashlib
 import json
 import os
-from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from vauxhall.core.logging import get_logger
 from vauxhall.hooks.common import message_text, private_directory
 from vauxhall.hooks.files import NOFOLLOW, claim, remove_old_files, write_atomically
+
+logger = get_logger(__name__)
 
 _MAX_READ_BYTES = 1_048_576
 # Claimed cursors and temporary files are left only by a hook that died.
@@ -139,10 +141,9 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         return []
     try:
         transcript = Path(transcript_path)
-        size = transcript.stat().st_size
         cursor = _cursor_path(session_id, transcript_path)
         if input_data.get("hook_event_name") == "UserPromptSubmit":
-            write_atomically(cursor, str(size))
+            write_atomically(cursor, str(transcript.stat().st_size))
             # Cursors are named by a bare hash; only leftovers have a suffix.
             remove_old_files(cursor.parent, "*.*", _LEFTOVER_MAX_AGE_SECONDS)
             return []
@@ -156,10 +157,13 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         # Hooks run as separate processes. Renaming the cursor claims it, so a
         # concurrent event neither reports the same records nor moves the
         # cursor back. While it is claimed, or before UserPromptSubmit writes
-        # it, the rename fails and the event reports nothing; the next one
-        # catches up.
+        # it, the rename fails and the event reports nothing; a later event in
+        # the turn catches up.
         claimed = claim(cursor)
         try:
+            # Sized after claiming: an event that claimed it first may have
+            # read past an earlier size, which would look like a new record.
+            size = transcript.stat().st_size
             messages, next_offset = _read_from_cursor(
                 claimed, transcript, size, turn_id
             )
@@ -167,8 +171,10 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         except BaseException:
             claimed.replace(cursor)
             raise
-        with suppress(OSError):
+        try:
             claimed.unlink()
+        except OSError as error:
+            logger.warning("Could not remove a claimed Codex cursor: %s", error)
     except (OSError, ValueError):
         return []
     else:

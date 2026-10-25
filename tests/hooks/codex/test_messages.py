@@ -101,6 +101,34 @@ def test_concurrent_events_report_each_message_once(tmp_path: Path) -> None:
     assert sorted(reported) == ["first", "second"]
 
 
+def test_event_overtaken_before_its_claim_does_not_reread(tmp_path: Path) -> None:
+    """An event that another overtakes before claiming reports nothing again.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    messages.new_messages(_event(transcript, "UserPromptSubmit"))
+    transcript.write_text(_commentary("first"), encoding="utf-8")
+    reported: list[str] = []
+    real_claim = messages.claim
+    pending = [lambda: reported.extend(messages.new_messages(_event(transcript)))]
+
+    def claim_after_other_event(path: Path) -> Path:
+        # Another event grows the record past this one's view and reads it all.
+        while pending:
+            with transcript.open("a", encoding="utf-8") as output:
+                output.write(_commentary("second"))
+            pending.pop()()
+        return real_claim(path)
+
+    with patch.object(messages, "claim", claim_after_other_event):
+        reported.extend(messages.new_messages(_event(transcript)))
+
+    assert sorted(reported) == ["first", "second"]
+
+
 def _cursor_directory(tempdir: Path) -> Path:
     """Return the Codex cursor directory.
 

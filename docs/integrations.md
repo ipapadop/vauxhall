@@ -341,7 +341,7 @@ not registered, for the same reasons as for Claude Code.
   and its writes may lag. The reader keeps only a private byte cursor in the
   system temporary directory and limits each read to 1 MiB. One hook reads at
   a time: a hook that runs while another reads publishes no commentary, and
-  the next one publishes it. Messages over
+  a later hook in the same turn publishes it. Messages over
   4,096 characters end with an ellipsis.
 - Tool durations use a timing file per session and `tool_use_id` in the system
   temporary directory, so concurrent tool calls do not overwrite each other.

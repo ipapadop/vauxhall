@@ -18,7 +18,13 @@ from typing import Any
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
-from vauxhall.hooks.files import NOFOLLOW, claim, remove_old_files, write_atomically
+from vauxhall.hooks.files import (
+    NOFOLLOW,
+    claim,
+    remove_old_files,
+    unique_name,
+    write_atomically,
+)
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
 from vauxhall.hooks.panes import foreground_command, forget_pane, record_pane
 
@@ -184,18 +190,6 @@ def private_directory(name: str) -> Path:
     return directory
 
 
-def _unique_name(prefix: str) -> str:
-    """Return a file name no other hook process uses, ordered by creation time.
-
-    Args:
-        prefix: The start of the name.
-
-    Returns:
-        The prefix, a nanosecond timestamp, and a random suffix.
-    """
-    return f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"
-
-
 def _hashed_location(name: str, identity: object) -> tuple[Path, str]:
     """Return a private directory and a file name prefix for one identity.
 
@@ -235,7 +229,9 @@ def collect_message_chunk(
 
     Each chunk is stored in its own file, because chunk hooks can run at once
     and a shared file would lose one of two concurrent updates. The final
-    chunk joins them in name order, which is creation order.
+    chunk joins them in the order their hooks stored them. Hooks that run at
+    once have no defined order, and a chunk still being stored when the final
+    one arrives is left out.
 
     Args:
         agent: The agent whose message directory is used.
@@ -251,14 +247,13 @@ def collect_message_chunk(
         return None
     try:
         directory, prefix = _hashed_location(f"vauxhall-messages-{agent}", identity)
+        remove_old_files(directory, "*", _MESSAGE_MAX_AGE_SECONDS)
         if not final:
             if delta:
                 # Text past the detail limit is cut when published anyway.
                 text = delta[: MAX_DETAIL_STRING_LENGTH + 1]
-                write_atomically(directory / f"{_unique_name(prefix)}.chunk", text)
+                write_atomically(directory / f"{unique_name(prefix)}.chunk", text)
             return None
-        # Swept here rather than per chunk, which would stat every pending chunk.
-        remove_old_files(directory, "*", _MESSAGE_MAX_AGE_SECONDS)
         parts: list[str] = []
         length = 0
         for path in sorted(directory.glob(f"{prefix}*.chunk")):
@@ -461,7 +456,7 @@ def record_tool_start(agent: str, identity: object) -> None:
     """
     with suppress(OSError):
         directory, prefix = _hashed_location(f"vauxhall-{agent}", identity)
-        write_atomically(directory / f"{_unique_name(prefix)}.time", str(time.time()))
+        write_atomically(directory / f"{unique_name(prefix)}.time", str(time.time()))
 
 
 def claim_tool_duration(agent: str, identity: object) -> float | None:

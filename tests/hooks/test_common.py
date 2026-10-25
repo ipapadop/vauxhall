@@ -255,7 +255,7 @@ def test_discard_message_chunks_prevents_next_turn_contamination(
 def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
     tmp_path: Path,
 ) -> None:
-    """Text of a response unfinished for over a day is removed when one ends.
+    """Text of a response unfinished for over a day is removed on the next chunk.
 
     Args:
         tmp_path: Pytest temporary directory.
@@ -269,7 +269,7 @@ def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
         day_ago = time.time() - 25 * 60 * 60
         os.utime(old, (day_ago, day_ago))
 
-        common.collect_message_chunk("codex", ["new"], "new", final=True)
+        common.collect_message_chunk("codex", ["new"], "new", final=False)
 
     assert not old.exists()
     assert recent.exists()

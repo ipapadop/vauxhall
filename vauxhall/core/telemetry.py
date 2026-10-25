@@ -15,9 +15,10 @@ _ALLOWED_FIELDS = frozenset(
 )
 MAX_SESSION_ID_LENGTH: Final = 256
 MAX_DETAIL_STRING_LENGTH: Final = 4096
+MAX_WORKSPACE_LENGTH: Final = 4096
 _IDENTITY_FIELD_LIMITS = {
     "agent": 128,
-    "workspace": 4096,
+    "workspace": MAX_WORKSPACE_LENGTH,
     "session_id": MAX_SESSION_ID_LENGTH,
     "state": 32,
     "env": 16,

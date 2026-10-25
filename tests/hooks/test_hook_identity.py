@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Tests for stable built-in hook session identity."""
+"""Tests for stable built-in hook session and workspace identity."""
+
+import hashlib
 
 import pytest
 
-from vauxhall.core.telemetry import MAX_SESSION_ID_LENGTH
-from vauxhall.hooks.identity import resolve_session_id
+from vauxhall.core.telemetry import MAX_SESSION_ID_LENGTH, MAX_WORKSPACE_LENGTH
+from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
 
 
 @pytest.mark.parametrize(
@@ -104,3 +106,29 @@ def test_resolve_session_id_hashes_a_transcript_path_with_a_lone_surrogate() -> 
 
     assert session_id is not None
     assert session_id.startswith("transcript:")
+
+
+def test_publishable_workspace_keeps_a_path_at_the_limit() -> None:
+    """A workspace that fits the limit is published unchanged."""
+    workspace = "/" + "w" * (MAX_WORKSPACE_LENGTH - 1)
+
+    assert publishable_workspace(workspace) == workspace
+
+
+def test_publishable_workspace_keeps_both_ends_and_a_digest() -> None:
+    """A long workspace keeps its drive letter, its last directory, and a digest."""
+    workspace = "C:\\" + "a\\" * 3000 + "project"
+    digest = hashlib.sha256(workspace.encode()).hexdigest()
+
+    published = publishable_workspace(workspace)
+
+    assert published == (
+        "C:\\" + "a\\" * 10 + "a…\\" + "a\\" * 20 + f"project [sha256:{digest[:16]}]"
+    )
+
+
+def test_publishable_workspace_hashes_a_lone_surrogate() -> None:
+    """A long workspace with a lone surrogate from JSON input still hashes."""
+    published = publishable_workspace("/home/" + "\ud800" * MAX_WORKSPACE_LENGTH)
+
+    assert published.startswith("/home/")

@@ -159,7 +159,7 @@ def update_ui_state(changes: object) -> dict[str, Any]:
     state.update(clean_ui_state(changes))
     path = user_config_path(STATE_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_json_atomically(path, state)
+    write_json_atomically(path, state, follow_symlinks=True)
     return state
 
 
@@ -198,7 +198,14 @@ def window_geometry(window: Any, previous: Mapping[str, Any]) -> dict[str, Any]:
     Returns:
         dict[str, Any]: The window's size, position, and maximized state. A
             maximized window keeps its previously saved normal size and position.
+            A size outside the configured limits is clamped to them, because
+            loading drops it, which would reopen the window at the default size.
     """
     if window.is_maximized():
         return {**previous, "maximized": True}
-    return {**window.get_size(), **window.get_position(), "maximized": False}
+    size = window.get_size()
+    clamped = {
+        key: min(max(size[key], minimum), maximum)
+        for key, (minimum, maximum) in _SIZE_LIMITS.items()
+    }
+    return {**clamped, **window.get_position(), "maximized": False}

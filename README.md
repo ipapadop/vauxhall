@@ -77,7 +77,8 @@ session as a card in a grid.
   outcomes (completed, failed, cancelled, or result unavailable), and idle
   state. Tool results are never published. Text fields are limited to 4,096
   characters per event; longer text, such as a long prompt or command, ends
-  with an ellipsis.
+  with an ellipsis, and a longer workspace path keeps its start and end and a
+  hash.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
   and never turned into shell commands. Hooks always return valid protocol JSON,
   even when telemetry fails.
@@ -293,7 +294,8 @@ In each workspace where you installed hooks:
    `Remove-Item -Recurse -Force .vauxhall-venv` in PowerShell. Do this after
    step 1; otherwise the agent reports a failing hook on every event.
 3. **Restart the agent.** Delete the `.bak` backups once you no longer need
-   them.
+   them. The installer never replaces an existing backup, so a reinstall
+   keeps the original settings.
 
 ### Vauxhall
 

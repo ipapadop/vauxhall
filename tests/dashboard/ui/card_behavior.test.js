@@ -154,6 +154,44 @@ test('the activity log keeps the five newest events, newest first', () => {
     assert.equal(card.querySelector('.log-area').textContent.includes('Ready...'), false);
 });
 
+/**
+ * Returns the log message one event produces on a fresh card, without its
+ * timestamp.
+ * @param {object} data - The telemetry data.
+ * @returns {string|undefined} The message, or undefined when nothing is logged.
+ */
+function logMessage(data) {
+    const card = makeCard();
+    updateCard(card, data);
+    return logLines(card)[0]?.replace(/^\[[^\]]*\] /, '');
+}
+
+test('the activity log message follows the documented precedence', () => {
+    const all = { prompt: 'p', message: 'm', error: 'e', tool: 'shell', cmd: 'ls', status: 's' };
+    const without = (...keys) => Object.fromEntries(Object.entries(all).filter(([key]) => !keys.includes(key)));
+    const cases = [
+        // A waiting state shows its prompt, else its message, above everything else.
+        ['Waiting for Input', all, 'Prompt: p'],
+        ['Waiting for Input', without('prompt'), 'm'],
+        ['Error', all, 'Error: e'],
+        ['Thinking', without('prompt'), 'Error: e'],
+        ['Thinking', without('error'), 'Agent: m'],
+        ['Acting', without('error', 'message'), 'Running: shell ls'],
+        ['Thinking', { ...without('error', 'message'), status: 'completed' }, 'Completed: shell'],
+        // A placeholder tool name yields to the prompt, then the status.
+        ['Acting', { ...without('error', 'message'), tool: 'unknown' }, 'Prompt: p'],
+        ['Acting', { ...without('error', 'message', 'prompt'), tool: 'unknown_tool' }, 's'],
+        ['Acting', { tool: 'unknown' }, 'Running: unknown'],
+        ['Thinking', without('error', 'message', 'tool'), 'Prompt: p'],
+        ['Idle', { status: 's' }, 's'],
+        ['Idle', {}, undefined],
+    ];
+
+    for (const [state, details, expected] of cases) {
+        assert.equal(logMessage({ state, details }), expected, `${state} ${JSON.stringify(details)}`);
+    }
+});
+
 test('an event repeating the previous message is not logged again', () => {
     const card = makeCard();
 

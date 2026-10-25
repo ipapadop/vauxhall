@@ -67,6 +67,23 @@ The first release, planned as 0.1.0. It is alpha software; see
   could drop part of a message, concurrent Codex hooks could publish the same
   interim message twice, and two `SessionStart` hooks for one session could
   fail to record its tmux pane.
+- A dashboard window closed narrower than 320 pixels, or wider than 16,384,
+  now reopens where it was. Before, its width was not saved, and the window
+  reopened at the default position and size. A window size outside these
+  limits, in either direction, is now saved as the nearest limit.
+- Saving settings, view state, or cards writes through a symlinked file in
+  `~/.config/vauxhall` and keeps the link. Before, the link was replaced by
+  a regular file, so a configuration kept in a dotfiles repository silently
+  stopped updating.
+- Running `vauxhall-hook-install` again keeps the existing `.bak` backup of
+  the agent settings. Before, each run replaced it with the previous run's
+  output, losing the original settings. A copy that fails partway no
+  longer leaves a partial backup behind.
+- A prompt sent to a session whose tmux pane is in copy mode is now
+  submitted whole. Copy mode took the relay's Enter for itself and dropped
+  the paste's brackets, so a multi-line prompt's first line was submitted
+  alone and the rest never was, while the dashboard reported it delivered.
+  The relay now leaves the pane's mode first (tmux 3.1a or later).
 - Prompt and acknowledgment messages with a `schema_version` other than the
   integer 1 (such as `true` or `1.0`), or a message ID that holds control
   characters, are now dropped like other invalid messages, as telemetry
@@ -101,6 +118,11 @@ The first release, planned as 0.1.0. It is alpha software; see
   input (`args`) is left out instead, because it holds the complete input
   of every tool call. A session ID that would exceed 256 characters is
   replaced by its SHA-256 hash.
+- A workspace path over 4,096 characters no longer stops hooks from
+  publishing the event. It is shortened to its first 24 and last 48
+  characters around an ellipsis, followed by `[sha256:<16 hex digits>]` of
+  the full path, so workspaces that differ only in the middle keep separate
+  cards; clicking the card copies that shortened text, not a usable path.
 - A TLS broker that accepts the connection but stalls the handshake no
   longer holds each hook for up to `mqtt.keepalive` seconds (60 by default).
   paho times the handshake with the keepalive, so hooks now connect with a

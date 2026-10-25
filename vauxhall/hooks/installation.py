@@ -4,6 +4,7 @@
 """Helpers shared by the built-in agent hook installers."""
 
 import base64
+import contextlib
 import importlib.metadata
 import json
 import os
@@ -164,6 +165,9 @@ def load_hook_settings(
 ) -> dict[str, Any]:
     """Back up, validate, and load an existing hook settings file.
 
+    An existing backup is kept, so a reinstall can't replace the original
+    settings with its own earlier output.
+
     Args:
         path: Path to the agent's JSON settings file.
         agent: Agent name used in error messages.
@@ -173,10 +177,10 @@ def load_hook_settings(
         The existing valid settings, or an empty dictionary when absent.
 
     Raises:
-        OSError: If the settings directory cannot be created, or the existing
-            file cannot be copied to its backup. The backup is made before the
-            file is read, so an unreadable file fails here.
-        ValueError: If the backed-up file cannot be read or parsed.
+        OSError: If the settings directory cannot be created, or a new backup
+            cannot be written, in which case the partial backup is removed.
+            Without an existing backup, an unreadable file fails here.
+        ValueError: If the settings file cannot be read or parsed.
         TypeError: If the existing settings have an unexpected shape.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,8 +189,25 @@ def load_hook_settings(
 
     print(f"Reading existing settings from {path}")
     backup_path = path.with_suffix(".json.bak")
-    shutil.copy(path, backup_path)
-    print(f"Backup created at {backup_path}")
+    # A symlink planted at the backup path is never written through. On POSIX
+    # "x" mode refuses it; Windows would create a dangling link's target, so
+    # any existing entry counts.
+    backup = None
+    if not os.path.lexists(backup_path):
+        with contextlib.suppress(FileExistsError):
+            backup = backup_path.open("xb")
+    if backup is None:
+        print(f"Keeping the existing backup at {backup_path}")
+    else:
+        try:
+            with backup, path.open("rb") as source:
+                shutil.copyfileobj(source, backup)
+            shutil.copymode(path, backup_path)
+        except BaseException:
+            # Every later run would keep a partial backup as the original.
+            backup_path.unlink(missing_ok=True)
+            raise
+        print(f"Backup created at {backup_path}")
     try:
         with path.open() as file:
             settings = json.load(file)

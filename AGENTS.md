@@ -93,7 +93,9 @@ sequenceDiagram
    resolves the session ID from the agent's own session ID, a hash of the
    transcript path, or `VAUXHALL_SESSION_ID`; an ID that would exceed 256
    characters becomes `<source>-sha256:<hex>`. Without a session ID the event
-   is skipped. `publish_telemetry` cuts each `details` string over 4,096
+   is skipped. A workspace over 4,096 characters becomes
+   `<24 chars>…<48 chars> [sha256:<16 hex>]` (`identity.publishable_workspace`).
+   `publish_telemetry` cuts each `details` string over 4,096
    characters to fit, so the event isn't rejected; Gemini's `args`, which can
    hold file contents, is left out instead.
 3. **The client publishes it.** `publish()` validates each payload against
@@ -182,7 +184,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   would run the prompt as a command. A record without a `command` (from an
   older hook, or when tmux couldn't say) skips that check, and a recorded
   shell (an agent started by a wrapper script) passes it for the shell left
-  behind; in both cases it delivers and logs a warning. It then runs `load-buffer` from standard
+  behind; in both cases it delivers and logs a warning. It leaves any pane
+  mode, such as copy mode, with `copy-mode -q` before pasting and again
+  before Enter: a mode takes `send-keys Enter` for itself and drops the
+  paste's brackets, which would submit a multi-line prompt line by line.
+  `copy-mode -q` does nothing outside a mode and needs tmux 3.1a; when it
+  fails, delivery goes ahead with a debug log. It then runs `load-buffer` from standard
   input, `paste-buffer -p -d` into the pane, and, after 0.2 seconds,
   `send-keys Enter`. Text never appears on a command line. It acknowledges
   `delivered` or `failed` (`pane-unavailable` or `delivery-failed`) without
@@ -262,10 +269,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   while a card stays in an attention state.
 - **Activity log**: Each card shows its last 5 events, newest first, with
   `[HH:mm:ss]` timestamps. An event whose message matches the previous one is
-  not repeated. The message is, in order of precedence: the prompt for waiting
-  states, `Error: <error>`, `Agent: <message>`, `Running: <tool> <cmd>` (or
-  `Completed: <tool>` for a completed `Thinking` event), `Prompt: <prompt>`,
-  or the status.
+  not repeated. The message is, in order of precedence: for a waiting state,
+  `Prompt: <prompt>` or else the bare `<message>`; `Error: <error>`;
+  `Agent: <message>`; `Running: <tool> <cmd>` (or `Completed: <tool>` for a
+  `Thinking` event with status `completed`), except that a placeholder tool
+  (`unknown` or `unknown_tool`) yields to `Prompt: <prompt>`, then the status;
+  `Prompt: <prompt>`; or the status. `tests/dashboard/ui/card_behavior.test.js`
+  pins this order.
 - **Late final message**: A `Thinking` event whose only detail is a `message`
   equal to the message of the card's latest event, when that event is `Idle`,
   is ignored. Claude Code runs the final message's `MessageDisplay` hook and
@@ -416,10 +426,15 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `attention_first`, and `notify`, the last two as booleans; only Python
   writes `window`. `run()` creates the window with the saved size, calls
   `set_position` only when `visible_position` finds the top edge on a monitor's
-  available area, and maximizes after showing the window. When the UI loop
+  available area, and maximizes after showing the window. The check uses the
+  width the window is created with, saved or configured, because older
+  versions saved no width for a window narrower than 320 pixels (Qt sets no
+  minimum size), and a maximized close keeps that state. When the UI loop
   exits, it saves the size and position from Pyloid's public `get_size`,
-  `get_position`, and `is_maximized`. A maximized window keeps its previous
-  normal size, and a save failure is logged without blocking shutdown.
+  `get_position`, and `is_maximized`, clamping the size to the
+  `dashboard.width` and `dashboard.height` limits, since loading drops an
+  out-of-range size. A maximized window keeps its previous normal size, and a
+  save failure is logged without blocking shutdown.
 - **Card state**: `vauxhall.dashboard.card_state` reads and writes
   `~/.config/vauxhall/dashboard_cards.json` as `{"cards": [...]}`. Each entry
   keeps only `agent`, `workspace`, `session_id`, `state` (one of
@@ -520,6 +535,20 @@ To change configuration from code, use `vauxhall.core.config_store` rather than
 writing JSON directly. `save_user_config` writes only
 `~/.config/vauxhall/<filename>`, validates with the unchanged
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
+`write_json_atomically` takes `follow_symlinks`: `save_user_config` and the
+view and card state pass it, so a symlinked file in `~/.config/vauxhall` has
+its target replaced in the target's directory and the link survives. The hook
+installer doesn't: a cloned repository controls the workspace, and a link
+there could point it at any of the user's files, so the link itself is
+replaced. `os.path.realpath`, not `Path.resolve`, resolves the link, because
+the latter raises `RuntimeError` on a symlink loop before Python 3.13. The
+installer's `load_hook_settings` creates
+the `.bak` backup exclusively (`open("xb")`): an existing backup is kept, so a
+reinstall can't replace the original settings with its own earlier output,
+and a symlink at that path is never followed: any existing entry, even a
+dangling link, counts as a backup, because on Windows `open("xb")` would
+create a dangling link's target. A copy that fails removes its
+partial backup, which later runs would otherwise keep.
 `field_sources` reports each field's source (`environment`, `file`, or
 `default`) and whether it is editable. Both, and the settings editor's
 `hooks_mqtt`, read the environment only when the config type's

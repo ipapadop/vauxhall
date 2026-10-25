@@ -189,10 +189,12 @@ need to edit it.
   search text is not saved.
 - **Window size, position, and maximized state** are saved when the dashboard
   closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
-  only set the size on first start. A saved position is used only if the
-  window's top edge would still be on a connected screen. A maximized window
-  keeps the normal size and position it had when the dashboard started, so if
-  you move it to another monitor before maximizing, it reopens on the first one.
+  only set the size on first start. A size outside their limits (320 to
+  16,384 pixels) is saved as the nearest limit. A saved position is used only
+  if the window's top edge would still be on a connected screen. A maximized
+  window keeps the normal size and position it had when the dashboard started,
+  so if you move it to another monitor before maximizing, it reopens on the
+  first one.
 - **Theme on first paint**: the theme is also kept in the page's local storage,
   so the dashboard starts with the right theme before the state file is read.
   A theme saved there by earlier versions is copied to the state file the first
@@ -219,8 +221,14 @@ written here; see [privacy.md](privacy.md#retention).
 | `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
 | `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities: agent, workspace, session ID, last known state, env, last-seen time |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
-| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the previous file |
+| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the file; an existing `.bak` is never replaced |
 | `vauxhall-*` directories in the system temporary directory | Hooks | Tool start times and partial assistant messages; see [privacy.md](privacy.md#on-disk) |
+
+Each JSON file above is replaced atomically. A file in `~/.config/vauxhall`
+that is a symlink, for example into a dotfiles repository, has its target
+replaced, and the link is kept. A symlinked agent settings file in a
+workspace is replaced by a regular file instead, because a cloned repository
+could point the link at any of your files.
 
 Telemetry content (prompts, messages, commands, tool arguments, errors,
 tokens, duration, activity history) is never written to disk by Vauxhall;

@@ -114,6 +114,12 @@ ellipsis, so the event is still published. A long shell command, such as a
 heredoc that writes a file, therefore publishes its start. Gemini CLI's `args` is the exception: an input too long
 to publish is left out, because its start could be a file's contents.
 
+A workspace path over 4,096 characters becomes its first 24 and last 48
+characters around an ellipsis, then ` [sha256:<hex>]`, the first 16 hex digits
+of the full path's hash, which keeps workspaces that differ only in the middle
+on separate cards. Copying it from the card gives this text, not a usable
+path.
+
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid
 telemetry. Rejection logs never include payload values. The dashboard and
@@ -228,7 +234,8 @@ vauxhall-hook-install claude
 The installer:
 
 - Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`.
-  If the file is invalid JSON or has an unexpected structure, it exits with an
+  An existing backup is kept, so a reinstall doesn't lose the original
+  settings. If the file is invalid JSON or has an unexpected structure, it exits with an
   error and leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
@@ -356,8 +363,9 @@ vauxhall-hook-install codex
 
 The installer:
 
-- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. If the file is
-  invalid JSON or has an unexpected structure, it exits with an error and leaves
+- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. An existing
+  backup is kept, so a reinstall doesn't lose the original settings. If the
+  file is invalid JSON or has an unexpected structure, it exits with an error and leaves
   the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
@@ -479,8 +487,9 @@ vauxhall-hook-install gemini
 
 The installer:
 
-- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. If the file
-  is invalid JSON or has an unexpected structure, it exits with an error and
+- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. An existing
+  backup is kept, so a reinstall doesn't lose the original settings. If the
+  file is invalid JSON or has an unexpected structure, it exits with an error and
   leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,

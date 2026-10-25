@@ -445,9 +445,10 @@ class DashboardApp:
         # Pyloid reads the icon while the window loads, so it has to be set
         # before the window exists.
         self.app.set_icon(str(ICON_FILE))
+        width = saved_window.get("width", settings.dashboard.width)
         self.window = self.app.create_window(
             title=settings.dashboard.window_title,
-            width=saved_window.get("width", settings.dashboard.width),
+            width=width,
             height=saved_window.get("height", settings.dashboard.height),
             dev_tools=settings.dashboard.debug,
             IPCs=[self.ipc],
@@ -456,7 +457,9 @@ class DashboardApp:
             screens = [
                 monitor.available_geometry() for monitor in self.app.get_all_monitors()
             ]
-            position = visible_position(saved_window, screens)
+            # Check the width the window has now, not only a saved one: older
+            # versions saved no width for a window narrower than the minimum.
+            position = visible_position({**saved_window, "width": width}, screens)
             if position is not None:
                 self.window.set_position(*position)
         return saved_window

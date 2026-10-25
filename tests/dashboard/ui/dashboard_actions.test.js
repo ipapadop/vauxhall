@@ -538,6 +538,7 @@ test('clearing the dashboard resets the fleet summary', async (t) => {
 });
 
 const ONE = '["Codex","/home/user/project","one"]';
+const TWO = '["Codex","/home/user/project","two"]';
 
 /**
  * Submits the prompt form the way pressing Send would, and lets the send finish.
@@ -607,6 +608,97 @@ test('a rejected prompt keeps the dialog open with the reason and the text', asy
     assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
     assert.equal(document.getElementById('prompt-text').value, 'keep me');
     assert.equal(document.getElementById('prompt-send').disabled, false);
+});
+
+/**
+ * Boots the dashboard with two cards and a send_prompt that waits until the
+ * test settles it, then sends 'first' from the first card's dialog.
+ * @param {object} t - The test context.
+ * @returns {Promise<{document: Document, reply: Function}>} The document and an
+ *     async function that settles the pending send with a result.
+ */
+async function pendingSend(t) {
+    let resolve;
+    const { document, listeners } = await bootDashboard(t, {
+        send_prompt: () => new Promise((r) => { resolve = r; }),
+    });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'first';
+    await submitPrompt(document);
+    const reply = async (result) => {
+        resolve(JSON.stringify(result));
+        await new Promise((r) => setImmediate(r));
+    };
+    return { document, reply };
+}
+
+/**
+ * Closes the prompt dialog and opens it for the second card with a new draft.
+ * @param {Document} document - The dashboard document.
+ */
+function reopenForTwo(document) {
+    document.getElementById('prompt-cancel').click();
+    agents[TWO].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'second';
+}
+
+test('a send that finishes after the dialog reopened for another card leaves that dialog alone', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    reopenForTwo(document);
+
+    await reply({ ok: true, id: 'id-1' });
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-text').value, 'second');
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt sent, waiting for the relay…');
+});
+
+test('a send rejected after the dialog reopened for another card reports the error on its own card', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    reopenForTwo(document);
+
+    await reply({ ok: false, error: 'Not connected to the broker' });
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-error').textContent, '');
+    assert.equal(document.getElementById('prompt-text').value, 'second');
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt not sent: Not connected to the broker');
+    assert.equal(agents[TWO].querySelector('.prompt-status').textContent, '');
+});
+
+test('a send that finishes after its dialog closed clears the sent text', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    document.getElementById('prompt-cancel').click();
+
+    await reply({ ok: true, id: 'id-1' });
+
+    assert.equal(document.getElementById('prompt-text').value, '');
+});
+
+test('a send rejected after its dialog closed reports the error on its card', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    document.getElementById('prompt-cancel').click();
+
+    await reply({ ok: false, error: 'Not connected to the broker' });
+
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt not sent: Not connected to the broker');
+    assert.equal(document.getElementById('prompt-text').value, 'first');
+});
+
+test('a send rejected after its dialog reopened for the same card shows the error there', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    document.getElementById('prompt-cancel').click();
+    agents[ONE].querySelector('.prompt-icon').click();
+
+    await reply({ ok: false, error: 'Not connected to the broker' });
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
+    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, '');
 });
 
 test('cancelling the prompt dialog sends nothing and returns focus to its button', async (t) => {

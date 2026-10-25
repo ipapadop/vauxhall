@@ -12,7 +12,7 @@ import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, cle
 import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
-import { handleAck, sendPrompt } from './js/prompt.js';
+import { handleAck, sendPrompt, showRejected } from './js/prompt.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
 import { cacheTheme, cachedTheme, createDebounce, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
@@ -132,17 +132,24 @@ async function init() {
     document.getElementById('prompt-cancel')?.addEventListener('click', closePrompt);
     promptForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const card = agents[promptTarget.key];
+        const key = promptTarget.key;
+        const card = agents[key];
         if (!card || !window.ipc?.DashboardIPC) return;
+        const text = promptText.value;
         promptError.textContent = '';
         promptSend.disabled = true;
         try {
-            const result = await sendPrompt(window.ipc.DashboardIPC, card, promptText.value);
+            const result = await sendPrompt(window.ipc.DashboardIPC, card, text);
+            // The dialog may have closed, or reopened for another card, while
+            // the send was pending; the reply then belongs on the card.
+            const current = promptTarget.key === key;
             if (result.ok) {
-                promptText.value = '';
-                closePrompt();
-            } else {
+                if (current || promptText.value === text) promptText.value = '';
+                if (current) closePrompt();
+            } else if (current) {
                 promptError.textContent = result.error;
+            } else {
+                showRejected(card, result.error);
             }
         } finally {
             promptSend.disabled = false;

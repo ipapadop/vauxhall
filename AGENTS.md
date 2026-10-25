@@ -250,7 +250,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
 - `vauxhall/hooks/`: The telemetry client, shared hook helpers, the tmux pane
   record and the prompt relay, and the Claude Code, Codex, and Gemini CLI
-  hooks and installers.
+  hooks and installers. `agents.py` maps agent keys to installers, for the
+  CLI and the dashboard, and detects a workspace's agents.
 - `docs/`: User documentation and the dashboard screenshot shown in the README.
 - `scripts/`: The agent simulator and a logging color check.
 - `scripts/release_notes.py`: The release workflow's tag and changelog check.
@@ -313,6 +314,22 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   or session), and saves it through `DashboardIPC.save_settings()` like any
   other setting; a `get_settings()` error or a read-only `agent_denylist`
   (its `agent_denylist_editable`) is logged and the save is skipped.
+- **Install hooks**: The **Install Hooks…** toolbar button calls
+  `DashboardIPC.select_install_directory()`, which opens Pyloid's
+  `select_directory_dialog` at the last chosen directory (or home once it is
+  gone) and returns the choice with `vauxhall.hooks.agents.detect_agents`.
+  Detection marks an agent detected when its config directory exists and
+  installed when its settings hold a handler `HookInstaller.owns`; it only
+  reads, because `load_hook_settings` creates the directory and a backup.
+  The `install-dialog` lists every agent with a labeled checkbox: detected
+  without hooks starts ticked, installed is labeled "Reinstall", and a
+  settings error is shown in the label. **Install** sends the ticked agents
+  to `DashboardIPC.install_hooks`; the installer's lines fill a `role="log"`
+  region and the outcome a `role="status"` one. While it runs, every control
+  is disabled and the dialog's `cancel` event is prevented. Afterwards the
+  agents are detected again and focus moves to **Close**; **Choose another
+  directory…** starts over for the next workspace. Logic lives in
+  `js/install.js`.
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
   `DashboardIPC.get_settings()` (which logs any unexpected error and returns
   it as `error` rather than raising), with a source badge, reset button, and inline
@@ -334,8 +351,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   form control; no `div` or `span` carries a click handler as its only way in.
   The card's workspace path, its 🕒 history icon, and its ⋮ menu icon are
   buttons, and the card's own click-to-copy handler sits on top of the
-  workspace button rather than replacing it. The history, agent menu, prompt, and
-  settings modals are `<dialog>` elements opened with `showModal()`, so the
+  workspace button rather than replacing it. The history, agent menu, prompt,
+  install, and settings modals are `<dialog>` elements opened with `showModal()`, so the
   browser contains focus and Escape closes them; closing returns focus to the
   control that opened it, or to the agent grid when that control's card was
   evicted, hidden, or filtered out meanwhile, since a hidden control can't
@@ -439,7 +456,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   discard them either: see Single instance.
   `save_ui_state` accepts only `theme`, `sort`, `history_filter`,
   `attention_first`, and `notify`, the last two as booleans; only Python
-  writes `window`. `run()` creates the window with the saved size, calls
+  writes `window` and `install_directory`, the latter kept only as an
+  absolute path. `run()` creates the window with the saved size, calls
   `set_position` only when `visible_position` finds the top edge on a monitor's
   available area, and maximizes after showing the window. The check uses the
   width the window is created with, saved or configured, because older
@@ -461,6 +479,21 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
+- **Hook install**: `vauxhall.dashboard.hook_install.HookInstallRunner`
+  runs `sys.executable -u -m vauxhall.hooks.cli <agents>` with the workspace
+  as the child's `cwd`, so the CLI runs unchanged and the dashboard never
+  calls `os.chdir`, which would change where it reads
+  `vauxhall_dashboard.json`. `-u` keeps a piped child from buffering the log
+  until exit. Output is decoded as UTF-8 with `errors="replace"`. One install
+  runs at a time. A daemon thread posts each line as `install-output` and
+  then `install-done` through `queue_to_ui_thread`, so they keep their order
+  in the outbox; it posts `install-done` even when reading fails, after
+  clearing the running state, so the dialog is never left locked.
+  `DashboardIPC.install_hooks` and `detect_agents` check that the path is an
+  absolute existing directory and the agents known, because any page script
+  can call the bridge. Shutdown terminates a running install, killing it
+  after `SHUTDOWN_CLOSE_SECONDS`; the next install recovers its venv.
+  `hook_install` imports no Pyloid, so its tests run on Python 3.14.
 - **Single instance**: `main()` holds a `QLockFile` on
   `~/.config/vauxhall/dashboard.lock` (`INSTANCE_LOCK_FILE`) before creating
   `Pyloid`, because two dashboards would overwrite each other's view and card

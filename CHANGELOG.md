@@ -45,6 +45,9 @@ The first release, planned as 0.1.0. It is alpha software; see
   for a Mosquitto setup with an ACL that lets only the dashboard send prompts.
 - Hooks for Claude Code, Codex, and Gemini CLI, installed with
   `vauxhall-hook-install claude codex gemini` into an isolated `.vauxhall-venv`.
+- An **Install Hooks…** dashboard button that picks a local workspace,
+  detects which agents it uses and which already have Vauxhall hooks, and
+  installs or reinstalls the chosen agents' hooks with a live installer log.
 - A Python client, `vauxhall.hooks.client.publish`, and telemetry schema
   version 1 for other agents.
 - JSON configuration files with environment variable overrides, validated at

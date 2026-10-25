@@ -123,7 +123,9 @@ path.
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid
 telemetry. Rejection logs never include payload values. The dashboard and
-`publish()` share one validator, `vauxhall.core.telemetry`.
+`publish()` share one validator, `vauxhall.core.telemetry`. `publish()`
+writes non-ASCII text as UTF-8 rather than `\u` escapes, which take six
+bytes per character, unless the payload holds a lone surrogate.
 
 ## Supported States
 

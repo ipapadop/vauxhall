@@ -45,7 +45,16 @@ def format_message(event: Mapping[str, object]) -> str:
     error = telemetry_validation_error(payload)
     if error is not None:
         raise ValueError(error)
-    return json.dumps(payload)
+    # Escaping non-ASCII text takes six bytes per character, or twelve for an
+    # emoji, so long details could exceed the dashboard's payload limit. A
+    # lone surrogate, which hook input can carry, can't be encoded as UTF-8,
+    # so such a payload keeps the escapes.
+    text = json.dumps(payload, ensure_ascii=False)
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return json.dumps(payload)
+    return text
 
 
 def publish(

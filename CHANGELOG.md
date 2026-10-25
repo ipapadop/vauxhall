@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Telemetry with long non-ASCII details, such as a prompt of 4,096 emoji,
+  is no longer dropped as oversized. Hooks escaped every non-ASCII
+  character, which made such an event about three times larger than its
+  UTF-8 text.
 - When `vauxhall-hook-install` creates an agent's settings file, the `.bak`
   next to it now holds `{}`. Before, there was no backup on the first run,
   so the second run backed up the first run's output as if it were your

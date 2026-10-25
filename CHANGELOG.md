@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Prompt and acknowledgment messages with a `schema_version` other than the
+  integer 1 (such as `true` or `1.0`), or a message ID that holds control
+  characters, are now dropped like other invalid messages, as telemetry
+  already was for its `schema_version`. Before, both were accepted.
 - Saving a broker change in the settings dialog no longer freezes the
   window for up to 5 seconds while the old connection is still trying to
   reach its broker. The old connection now closes in the background.

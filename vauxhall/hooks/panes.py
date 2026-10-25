@@ -47,11 +47,16 @@ class PaneTarget:
 def panes_directory() -> Path:
     """Return the private directory holding the records, creating it.
 
+    The creation mode doesn't apply to a directory that already exists, such as
+    one made by hand or under a permissive umask, so its mode is tightened.
+
     Returns:
         The directory ``~/.config/vauxhall/panes``, readable only by this user.
     """
     directory = Path.home() / ".config" / "vauxhall" / "panes"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if hasattr(os, "getuid") and directory.stat().st_mode & 0o077:
+        directory.chmod(0o700)
     return directory
 
 

@@ -8,6 +8,7 @@ import os
 import stat
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -111,6 +112,18 @@ def test_foreground_command_is_unknown_when_tmux_fails() -> None:
         raise subprocess.CalledProcessError(1, command)
 
     assert panes.foreground_command(TMUX_ENV, tmux) is None
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")
+def test_an_existing_reachable_directory_is_made_private() -> None:
+    """A directory made before the hooks, with a looser mode, is tightened."""
+    directory = Path.home() / ".config" / "vauxhall" / "panes"
+    directory.mkdir(parents=True)
+    directory.chmod(0o755)
+
+    panes.record_pane("codex", "native:1", TMUX_ENV)
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
 
 
 @pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")

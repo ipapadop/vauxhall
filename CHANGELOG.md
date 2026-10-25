@@ -62,6 +62,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- The pane records directory `~/.config/vauxhall/panes` is made owner-only
+  when it already exists with a looser mode. Before, only a directory the
+  hooks created was owner-only.
 - Start times of tool calls that never finished, and files left by a
   killed hook, are now removed from the hooks' temporary directory after 24
   hours. Before, they stayed until the system cleared its temporary

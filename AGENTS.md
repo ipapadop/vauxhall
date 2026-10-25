@@ -160,7 +160,7 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
-  0700 directory) holding `pane`, `socket`, `server_pid`, and `command`, the
+  0700 directory, tightened if it already exists with a looser mode) holding `pane`, `socket`, `server_pid`, and `command`, the
   pane's foreground command (`#{pane_current_command}`, such as `claude` or
   `node`) when the session started, or `null` when tmux can't say. It is
   written by `common.track_pane`, called from `publish_telemetry` on

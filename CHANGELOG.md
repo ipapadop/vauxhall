@@ -96,6 +96,11 @@ The first release, planned as 0.1.0. It is alpha software; see
   input (`args`) is left out instead, because it holds the complete input
   of every tool call. A session ID that would exceed 256 characters is
   replaced by its SHA-256 hash.
+- A workspace path over 4,096 characters no longer stops hooks from
+  publishing the event. The card shows the path's start and end around an
+  ellipsis, followed by `[sha256:<hash>]` of the full path, so workspaces that
+  differ only in the middle keep separate cards; clicking it copies that
+  shortened text, not a usable path.
 - A TLS broker that accepts the connection but stalls the handshake no
   longer holds each hook for up to `mqtt.keepalive` seconds (60 by default).
   paho times the handshake with the keepalive, so hooks now connect with a

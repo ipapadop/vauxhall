@@ -114,6 +114,11 @@ ellipsis, so the event is still published. A long shell command, such as a
 heredoc that writes a file, therefore publishes its start. Gemini CLI's `args` is the exception: an input too long
 to publish is left out, because its start could be a file's contents.
 
+A workspace path over 4,096 characters becomes its start and end around an
+ellipsis, then ` [sha256:<hex>]`, the hash of the full path, which keeps
+workspaces that differ only in the middle on separate cards. Copying it from
+the card gives this text, not a usable path.
+
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid
 telemetry. Rejection logs never include payload values. The dashboard and

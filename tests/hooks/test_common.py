@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
+from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH, MAX_WORKSPACE_LENGTH
 from vauxhall.hooks import common
 from vauxhall.hooks.claude import telemetry_hook as claude_hook
 from vauxhall.hooks.client import format_message
@@ -397,6 +397,31 @@ def test_publish_telemetry_truncates_a_detail_too_long_to_publish(
     assert len(value) == MAX_DETAIL_STRING_LENGTH
     assert value.endswith("…")
     format_message(payload)
+
+
+def test_publish_telemetry_shortens_a_workspace_too_long_to_publish() -> None:
+    """A long workspace is shortened instead of dropping the event.
+
+    Two long workspaces that differ only in the middle keep separate cards.
+    """
+    publisher = RecordingPublisher()
+    workspaces = [f"/home/user/{'a' * 3000}{middle}{'b' * 3000}" for middle in "xy"]
+
+    for workspace in workspaces:
+        common.publish_telemetry(
+            {"hook_event_name": "Stop", "session_id": "one", "cwd": workspace},
+            "Claude",
+            claude_hook.HANDLERS,
+            publish=publisher,
+        )
+
+    published = [payload["workspace"] for [payload] in publisher.batches]
+    assert len(published) == 2
+    assert published[0] != published[1]
+    for value in published:
+        assert len(value) <= MAX_WORKSPACE_LENGTH
+        assert value.startswith("/home/user/aaa")
+    format_message(publisher.batches[0][0])
 
 
 def test_publish_telemetry_records_the_pane_at_session_start(

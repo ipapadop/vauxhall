@@ -181,6 +181,8 @@ def private_directory(name: str) -> Path:
         private = private and info.st_uid == os.getuid() and not info.st_mode & 0o077
     if not private:
         message = f"{directory} is not a private directory"
+        # Callers treat OSError as "no state", so say why it is missing.
+        logger.warning("%s; remove it to restore hook state", message)
         raise OSError(message)
     return directory
 
@@ -434,11 +436,13 @@ def _tool_start_location(agent: str, identity: object) -> tuple[Path, str]:
 
     Returns:
         The per-user timing directory and the call's file name prefix.
+
+    Raises:
+        OSError: If the timing directory is not a private one this user owns.
     """
     key = json.dumps(identity, sort_keys=True, default=str)
     digest = hashlib.sha256(key.encode()).hexdigest()
-    directory = Path(tempfile.gettempdir()) / f"vauxhall-{agent}{_USER_SUFFIX}"
-    return directory, f"{digest}-"
+    return private_directory(f"vauxhall-{agent}"), f"{digest}-"
 
 
 def record_tool_start(agent: str, identity: object) -> None:
@@ -451,9 +455,8 @@ def record_tool_start(agent: str, identity: object) -> None:
         agent: The agent whose timing directory is used.
         identity: Value identifying the tool call.
     """
-    directory, prefix = _tool_start_location(agent, identity)
     with suppress(OSError):
-        directory.mkdir(exist_ok=True)
+        directory, prefix = _tool_start_location(agent, identity)
         name = f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"
         pending = directory / f"{name}.tmp"
         pending.write_text(str(time.time()))
@@ -476,8 +479,8 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
     Returns:
         The call's duration in seconds, or ``None`` when no start can be claimed.
     """
-    directory, prefix = _tool_start_location(agent, identity)
     try:
+        directory, prefix = _tool_start_location(agent, identity)
         starts = sorted(directory.glob(f"{prefix}*.time"), reverse=True)
     except OSError:
         return None

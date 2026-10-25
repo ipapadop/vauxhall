@@ -430,3 +430,25 @@ def test_window_state_save_failure_does_not_stop_shutdown() -> None:
 
     subscriber_type.return_value.close.assert_called_once()
     assert not state_path().exists()
+
+
+def test_install_directory_is_kept(tmp_path: Path) -> None:
+    """The last hook install directory is remembered."""
+    update_ui_state({"install_directory": str(tmp_path)})
+
+    assert load_ui_state()["install_directory"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("value", ["rel/dir", 5, None, ""])
+def test_install_directory_must_be_absolute(value: object) -> None:
+    """Anything but an absolute path is dropped on load."""
+    assert "install_directory" not in clean_ui_state({"install_directory": value})
+
+
+def test_frontend_cannot_save_install_directory(tmp_path: Path) -> None:
+    """Only Python records where hooks were last installed."""
+    assert DashboardIPC().save_ui_state(
+        json.dumps({"install_directory": str(tmp_path)})
+    )
+
+    assert "install_directory" not in load_ui_state()

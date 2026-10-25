@@ -6,7 +6,8 @@
 import json
 import webbrowser
 from collections.abc import Callable
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol
 
 import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
@@ -21,6 +22,7 @@ from vauxhall.dashboard.ui_state import (
     load_ui_state,
     update_ui_state,
 )
+from vauxhall.hooks.agents import INSTALLERS, detect_agents
 
 logger = get_logger(__name__)
 
@@ -71,6 +73,50 @@ def _json_array(payload: str) -> list[Any] | None:
     return value if isinstance(value, list) else None
 
 
+def _install_directory(value: object) -> Path | str:
+    """Check a directory the frontend asks to detect or install into.
+
+    The frontend got it from the picker, but any page script can call the
+    bridge, and the path becomes the installer's working directory.
+
+    Args:
+        value: The requested ``path``.
+
+    Returns:
+        The directory, or the reason it is refused.
+    """
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        return "Not an absolute path"
+    directory = Path(value)
+    if not directory.is_dir():
+        return f"Not a directory: {value}"
+    return directory
+
+
+class HookInstallBackend(Protocol):
+    """Picks directories and installs hooks into them for the bridge."""
+
+    def select_install_directory(self) -> dict[str, Any]:
+        """Ask for a directory and detect its agents.
+
+        Returns:
+            The bridge's ``select_install_directory`` result.
+        """
+        ...
+
+    def install_hooks(self, directory: Path, agents: list[str]) -> dict[str, Any]:
+        """Start installing hooks.
+
+        Args:
+            directory: The checked directory.
+            agents: Known, distinct agent keys.
+
+        Returns:
+            The bridge's ``install_hooks`` result.
+        """
+        ...
+
+
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
 
@@ -80,6 +126,7 @@ class DashboardIPC(PyloidIPC):
         on_save_settings: Callable[..., dict[str, Any]] | None = None,
         on_notify: Callable[[str, str], Any] | None = None,
         on_send_prompt: Callable[[str, str, str], dict[str, Any]] | None = None,
+        hook_install: HookInstallBackend | None = None,
     ) -> None:
         """Initialize the IPC bridge.
 
@@ -91,6 +138,8 @@ class DashboardIPC(PyloidIPC):
                 called with a title and a message.
             on_send_prompt: Optional function that publishes a prompt, called
                 with the agent, session identity, and text.
+            hook_install: Optional backend that picks directories and installs
+                hooks into them.
         """
         super().__init__()
         self.is_ready = False
@@ -98,6 +147,7 @@ class DashboardIPC(PyloidIPC):
         self.on_save_settings = on_save_settings
         self.on_notify = on_notify
         self.on_send_prompt = on_send_prompt
+        self.hook_install = hook_install
 
     @Bridge(result=bool)
     def ping(self) -> bool:
@@ -357,3 +407,73 @@ class DashboardIPC(PyloidIPC):
             return False
         else:
             return True
+
+    @Bridge(result=str)
+    def select_install_directory(self) -> str:
+        """Ask the user for a directory to install hooks into.
+
+        Returns:
+            str: JSON with ``ok``, the chosen ``path``, and its ``agents`` (see
+                ``detect_agents``); ``ok`` false alone when cancelled, or with
+                an ``error``.
+        """
+        if self.hook_install is None:
+            return json.dumps({"ok": False, "error": "Hook install is unavailable"})
+        try:
+            result = self.hook_install.select_install_directory()
+        except Exception:
+            logger.exception("Failed to choose an install directory")
+            return json.dumps({"ok": False, "error": "Could not choose a directory"})
+        return json.dumps(result)
+
+    @Bridge(str, result=str)
+    def detect_agents(self, path: str) -> str:
+        """Report which agents a directory uses and which have hooks.
+
+        Args:
+            path: Absolute path of the directory.
+
+        Returns:
+            str: JSON with ``ok`` and ``agents``, or ``ok`` false and an
+                ``error``.
+        """
+        directory = _install_directory(path)
+        if isinstance(directory, str):
+            return json.dumps({"ok": False, "error": directory})
+        return json.dumps({"ok": True, "agents": detect_agents(directory)})
+
+    @Bridge(str, result=str)
+    def install_hooks(self, payload: str) -> str:
+        """Start installing some agents' hooks into a directory.
+
+        Args:
+            payload: JSON object with the directory ``path`` and a list of
+                ``agents`` keys.
+
+        Returns:
+            str: JSON with ``ok`` true once the install has started, or ``ok``
+                false and an ``error``.
+        """
+        request = _json_object(payload)
+        if request is None:
+            return json.dumps({"ok": False, "error": "Invalid install request"})
+        directory = _install_directory(request.get("path"))
+        if isinstance(directory, str):
+            return json.dumps({"ok": False, "error": directory})
+        agents = request.get("agents")
+        if (
+            not isinstance(agents, list)
+            or not agents
+            or not all(isinstance(a, str) and a in INSTALLERS for a in agents)
+        ):
+            return json.dumps({"ok": False, "error": "Choose at least one known agent"})
+        if self.hook_install is None:
+            return json.dumps({"ok": False, "error": "Hook install is unavailable"})
+        try:
+            result = self.hook_install.install_hooks(
+                directory, list(dict.fromkeys(agents))
+            )
+        except Exception:
+            logger.exception("Failed to start the hook install")
+            return json.dumps({"ok": False, "error": "The install could not start"})
+        return json.dumps(result)

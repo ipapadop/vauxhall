@@ -5,6 +5,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import fields
+from pathlib import Path
 from typing import Any
 
 from vauxhall.core.config import load_config_data
@@ -18,10 +19,12 @@ STATE_FILE = "dashboard_state.json"
 
 # Preferences the frontend reads and saves. The page ignores sort and filter
 # values it doesn't offer, so only their shape is checked here. The "window"
-# entry is written only by Python.
+# and INSTALL_DIRECTORY_KEY entries are written only by Python.
 FRONTEND_KEYS = ("theme", "sort", "history_filter", "attention_first", "notify")
 # Preferences stored as booleans rather than the bounded strings the rest use.
 BOOLEAN_KEYS = {"attention_first", "notify"}
+# Where hooks were last installed from the dashboard; the picker opens there.
+INSTALL_DIRECTORY_KEY = "install_directory"
 THEMES = {"dark", "light"}
 MAX_PREFERENCE_LENGTH = 64
 # Saved window sizes follow the limits of the configured size.
@@ -96,7 +99,8 @@ def clean_ui_state(data: object) -> dict[str, Any]:
         data: Decoded state, possibly from a hand-edited or outdated file.
 
     Returns:
-        dict[str, Any]: The valid preferences and window geometry.
+        dict[str, Any]: The valid preferences, window geometry, and install
+            directory.
     """
     if not isinstance(data, dict):
         return {}
@@ -108,6 +112,9 @@ def clean_ui_state(data: object) -> dict[str, Any]:
     window = _clean_window(data.get("window"))
     if window:
         cleaned["window"] = window
+    directory = data.get(INSTALL_DIRECTORY_KEY)
+    if isinstance(directory, str) and Path(directory).is_absolute():
+        cleaned[INSTALL_DIRECTORY_KEY] = directory
     return cleaned
 
 

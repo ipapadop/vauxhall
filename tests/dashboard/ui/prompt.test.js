@@ -150,6 +150,20 @@ test('a rejection shown on the card says the prompt was not sent and why', () =>
     assert.equal(status(card), 'Prompt not sent: Not connected to the broker');
 });
 
+for (const outcome of ['acknowledgment', 'timeout']) {
+    test(`an earlier prompt's ${outcome} does not replace a rejection shown on the card`, async (t) => {
+        t.mock.timers.enable({ apis: ['setTimeout'] });
+        const card = makeCard();
+        await sendPrompt(bridge({ ok: true, id: 'a1' }).ipc, card, 'first');
+
+        showRejected(card, 'Not connected to the broker');
+        if (outcome === 'acknowledgment') handleAck({ id: 'a1', status: 'delivered' });
+        else t.mock.timers.tick(ACK_TIMEOUT_MS);
+
+        assert.equal(status(card), 'Prompt not sent: Not connected to the broker');
+    });
+}
+
 test('a rejection without an error message gets a generic one', async () => {
     const result = await sendPrompt(bridge({ ok: false }).ipc, makeCard(), 'hello');
 

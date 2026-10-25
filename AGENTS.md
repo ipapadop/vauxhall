@@ -210,7 +210,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   card. Otherwise, because it was closed or reopened for another card while
   the send was pending, success clears the text only if it is still the sent
   text, and a rejection shows `Prompt not sent: <error>` on the sending
-  card's `.prompt-status`.
+  card's `.prompt-status` and forgets the card's previous prompt, like a
+  successful send.
 - **Security**: Anyone who can publish to the broker can send prompts, and a
   prompt can make an agent run commands, unless the broker's ACL restricts
   who may publish to `sessions/+/prompt` (see

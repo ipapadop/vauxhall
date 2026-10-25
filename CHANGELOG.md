@@ -66,6 +66,14 @@ The first release, planned as 0.1.0. It is alpha software; see
   now reopens where it was. Before, its width was not saved, and the window
   reopened at the default position and size. A window size outside these
   limits, in either direction, is now saved as the nearest limit.
+- Saving settings, view state, or cards writes through a symlinked file in
+  `~/.config/vauxhall` and keeps the link. Before, the link was replaced by
+  a regular file, so a configuration kept in a dotfiles repository silently
+  stopped updating.
+- Running `vauxhall-hook-install` again keeps the existing `.bak` backup of
+  the agent settings. Before, each run replaced it with the previous run's
+  output, losing the original settings. A copy that fails partway no
+  longer leaves a partial backup behind.
 - A prompt sent to a session whose tmux pane is in copy mode is now
   submitted whole. Copy mode took the relay's Enter for itself and dropped
   the paste's brackets, so a multi-line prompt's first line was submitted

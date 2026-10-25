@@ -227,7 +227,8 @@ vauxhall-hook-install claude
 The installer:
 
 - Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`.
-  If the file is invalid JSON or has an unexpected structure, it exits with an
+  An existing backup is kept, so a reinstall doesn't lose the original
+  settings. If the file is invalid JSON or has an unexpected structure, it exits with an
   error and leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
@@ -353,8 +354,9 @@ vauxhall-hook-install codex
 
 The installer:
 
-- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. If the file is
-  invalid JSON or has an unexpected structure, it exits with an error and leaves
+- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. An existing
+  backup is kept, so a reinstall doesn't lose the original settings. If the
+  file is invalid JSON or has an unexpected structure, it exits with an error and leaves
   the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
@@ -475,8 +477,9 @@ vauxhall-hook-install gemini
 
 The installer:
 
-- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. If the file
-  is invalid JSON or has an unexpected structure, it exits with an error and
+- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. An existing
+  backup is kept, so a reinstall doesn't lose the original settings. If the
+  file is invalid JSON or has an unexpected structure, it exits with an error and
   leaves the file unchanged.
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,

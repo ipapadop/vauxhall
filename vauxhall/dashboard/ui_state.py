@@ -159,7 +159,7 @@ def update_ui_state(changes: object) -> dict[str, Any]:
     state.update(clean_ui_state(changes))
     path = user_config_path(STATE_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_json_atomically(path, state)
+    write_json_atomically(path, state, follow_symlinks=True)
     return state
 
 

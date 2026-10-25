@@ -16,6 +16,7 @@ from vauxhall.core.config_store import (
     field_sources,
     save_user_config,
     user_config_path,
+    write_json_atomically,
 )
 from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.hooks.config import HookConfig
@@ -123,6 +124,50 @@ def test_invalid_value_leaves_file_unchanged() -> None:
 
     assert str(path) in str(error.value)
     assert path.read_bytes() == original
+
+
+def test_save_writes_through_a_symlinked_user_file(tmp_path: Path) -> None:
+    """Saving updates a symlink's target and keeps the link.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    target = tmp_path / "dotfiles" / DASHBOARD_FILE
+    target.parent.mkdir()
+    target.write_text('{"mqtt": {"host": "old"}}', encoding="utf-8")
+    link = user_config_path(DASHBOARD_FILE)
+    link.parent.mkdir(parents=True)
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("creating symlinks needs a privilege on this platform")
+
+    save_user_config(DASHBOARD_FILE, DashboardConfig, {"mqtt": {"host": "new"}})
+
+    assert link.is_symlink()
+    assert json.loads(target.read_text(encoding="utf-8")) == {"mqtt": {"host": "new"}}
+    assert [p.name for p in target.parent.iterdir()] == [DASHBOARD_FILE]
+    assert [p.name for p in link.parent.iterdir()] == [DASHBOARD_FILE]
+
+
+def test_following_a_symlink_loop_replaces_the_link(tmp_path: Path) -> None:
+    """A symlink loop is replaced by the file instead of raising.
+
+    Path.resolve raises RuntimeError on a loop before Python 3.13.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    first, second = tmp_path / "first.json", tmp_path / "second.json"
+    try:
+        first.symlink_to(second)
+        second.symlink_to(first)
+    except OSError:
+        pytest.skip("creating symlinks needs a privilege on this platform")
+
+    write_json_atomically(first, {"saved": True}, follow_symlinks=True)
+
+    assert json.loads(first.read_text(encoding="utf-8")) == {"saved": True}
 
 
 @pytest.mark.parametrize(

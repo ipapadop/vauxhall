@@ -399,6 +399,28 @@ def test_run_skips_off_screen_position() -> None:
     app.create_window.return_value.set_position.assert_not_called()
 
 
+@pytest.mark.parametrize(("x", "expected_calls"), [(50, 1), (1870, 0)])
+def test_run_checks_position_with_created_width(x: int, expected_calls: int) -> None:
+    """A position saved without a width is checked with the width used to create.
+
+    Older versions saved no width for a window narrower than 320 pixels, and a
+    maximized close keeps that saved state.
+
+    Args:
+        x: The saved horizontal position.
+        expected_calls: How often the case expects ``set_position`` to be called.
+    """
+    write_state(json.dumps({"window": {"x": x, "y": 60, "maximized": True}}))
+    app = screen_app()
+    window = app.create_window.return_value
+    window.is_maximized.return_value = True
+
+    run_dashboard(app)
+
+    assert app.create_window.call_args.kwargs["width"] == 1000
+    assert window.set_position.call_args_list == [((x, 60),)] * expected_calls
+
+
 def test_window_state_save_failure_does_not_stop_shutdown() -> None:
     """A failure to save window geometry is logged and shutdown continues."""
     app = MagicMock()

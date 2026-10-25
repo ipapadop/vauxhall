@@ -198,8 +198,8 @@ def window_geometry(window: Any, previous: Mapping[str, Any]) -> dict[str, Any]:
     Returns:
         dict[str, Any]: The window's size, position, and maximized state. A
             maximized window keeps its previously saved normal size and position.
-            A size outside the configured limits is clamped to them, since
-            loading drops it and ``visible_position`` needs the width.
+            A size outside the configured limits is clamped to them, because
+            loading drops it, which would reopen the window at the default size.
     """
     if window.is_maximized():
         return {**previous, "maximized": True}

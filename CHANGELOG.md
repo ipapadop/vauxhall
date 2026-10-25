@@ -62,10 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
-- A dashboard window closed narrower or shorter than 320 pixels, or larger
-  than 16,384, now reopens where it was, at the nearest allowed size. Before,
-  a width out of that range was not saved, and the window reopened at the
-  default position.
+- A dashboard window closed narrower than 320 pixels, or wider than 16,384,
+  now reopens where it was. Before, its width was not saved, and the window
+  reopened at the default position and size. A window size outside these
+  limits, in either direction, is now saved as the nearest limit.
 - Prompt and acknowledgment messages with a `schema_version` other than the
   integer 1 (such as `true` or `1.0`), or a message ID that holds control
   characters, are now dropped like other invalid messages, as telemetry

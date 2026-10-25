@@ -525,6 +525,20 @@ To change configuration from code, use `vauxhall.core.config_store` rather than
 writing JSON directly. `save_user_config` writes only
 `~/.config/vauxhall/<filename>`, validates with the unchanged
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
+`write_json_atomically` takes `follow_symlinks`: `save_user_config` and the
+view and card state pass it, so a symlinked file in `~/.config/vauxhall` has
+its target replaced in the target's directory and the link survives. The hook
+installer doesn't: a cloned repository controls the workspace, and a link
+there could point it at any of the user's files, so the link itself is
+replaced. `os.path.realpath`, not `Path.resolve`, resolves the link, because
+the latter raises `RuntimeError` on a symlink loop before Python 3.13. The
+installer's `load_hook_settings` creates
+the `.bak` backup exclusively (`open("xb")`): an existing backup is kept, so a
+reinstall can't replace the original settings with its own earlier output,
+and a symlink at that path is never followed: any existing entry, even a
+dangling link, counts as a backup, because on Windows `open("xb")` would
+create a dangling link's target. A copy that fails removes its
+partial backup, which later runs would otherwise keep.
 `field_sources` reports each field's source (`environment`, `file`, or
 `default`) and whether it is editable. Both, and the settings editor's
 `hooks_mqtt`, read the environment only when the config type's

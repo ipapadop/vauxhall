@@ -170,12 +170,12 @@ and about 670 MB once installed. Machines that only run agents need just the
 
 Requirements:
 
-- Python 3.10, 3.11, 3.12, or 3.13
+- Python 3.11, 3.12, 3.13, or 3.14 (hooks only)
 - An MQTT broker, such as [Mosquitto](https://mosquitto.org/) 2
 
 | | Dashboard | Hooks |
 | --- | --- | --- |
-| Python | 3.10 - 3.13 | 3.10 - 3.13 |
+| Python | 3.11 - 3.13 | 3.11 - 3.14 |
 | Linux | glibc 2.28+ on x86-64, glibc 2.39+ on ARM64 | any |
 | macOS | 12 or newer, Intel or Apple silicon | any |
 | Windows | 10 or newer, x86-64 or ARM64 | any |
@@ -183,16 +183,18 @@ Requirements:
 The hooks depend only on `paho-mqtt`, which is pure Python, so they run
 anywhere a supported Python does. The dashboard's reach is narrower because
 `pyloid` pins `pyside6==6.9.2`, which ships binary wheels only for the
-platforms above. CI runs the full test suite on every supported Python version
-on Linux and on Python 3.13 on macOS and Windows, and starts the packaged
-dashboard on all three.
+platforms above, and supports Python up to 3.13; on 3.14 the `dashboard`
+extra installs nothing. CI runs the full test suite on Python 3.11 to 3.13 on
+Linux and on Python 3.13 on macOS and Windows, the suite without the
+dashboard tests that need Pyloid on Python 3.14 on Linux, and starts the
+packaged dashboard on all three.
 
 | Agent | Integration | Settings file written | Needs |
 | --- | --- | --- | --- |
 | Claude Code | Built in | `.claude/settings.local.json` | A release with command hooks, including `MessageDisplay`, `PostCompact`, and `StopFailure` |
 | Codex | Built in | `.codex/hooks.json` | A release with the stable `hooks` feature, including `Interrupt` and `SubagentStart` |
 | Gemini CLI | Built in | `.gemini/settings.json` | A release with hooks, including `AfterModel` and `PreCompress` |
-| Anything else | `publish()` or raw MQTT | None | Python 3.10+, or any MQTT client |
+| Anything else | `publish()` or raw MQTT | None | Python 3.11+, or any MQTT client |
 
 The hooks follow each agent's documented hook format. An agent release
 without one of the events still works, without that event's updates. The

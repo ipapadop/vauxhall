@@ -25,8 +25,8 @@ import pytest
 
 import vauxhall
 
-SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12", "3.13")
-REQUIRES_PYTHON = ">=3.10,<3.14"
+SUPPORTED_PYTHON_VERSIONS = ("3.11", "3.12", "3.13", "3.14")
+REQUIRES_PYTHON = ">=3.11,<3.15"
 DASHBOARD_START_SECONDS = 90
 DASHBOARD_SETTLE_SECONDS = 5
 DASHBOARD_STOP_SECONDS = 30
@@ -385,7 +385,10 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         "vauxhall-hook-install": "vauxhall.hooks.cli:main",
         "vauxhall-relay": "vauxhall.hooks.relay:main",
     }
-    assert 'pyloid>=0.27.2; extra == "dashboard"' in metadata.get_all("Requires-Dist")
+    assert (
+        'pyloid>=0.27.2; python_version < "3.14" and extra == "dashboard"'
+        in metadata.get_all("Requires-Dist")
+    )
 
 
 def test_readme_promises_the_supported_python_versions() -> None:

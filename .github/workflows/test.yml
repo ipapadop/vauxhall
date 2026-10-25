@@ -41,8 +41,10 @@ jobs:
         run: npm run test:coverage
 
   test:
-    # Every supported Python on Linux, and the newest supported one on the
-    # other two desktop operating systems.
+    # Every supported Python on Linux, and the newest one the dashboard
+    # supports on the other two desktop operating systems. On 3.14, which only
+    # the hooks support, tests/dashboard/conftest.py skips the dashboard tests
+    # that need Pyloid.
     name: test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -51,13 +53,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: '3.10'
-          - os: ubuntu-latest
             python-version: '3.11'
           - os: ubuntu-latest
             python-version: '3.12'
           - os: ubuntu-latest
             python-version: '3.13'
+          - os: ubuntu-latest
+            python-version: '3.14'
           - os: macos-latest
             python-version: '3.13'
           - os: windows-latest

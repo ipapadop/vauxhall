@@ -59,6 +59,8 @@ The first release, planned as 0.1.0. It is alpha software; see
 - A `dashboard.graphics_backend` setting (`auto`, `vulkan`, `opengl`, or
   `software`) that chooses how the window draws the page; see
   [configuration](https://github.com/ipapadop/vauxhall/blob/main/docs/configuration.md#graphics-backend).
+- Support for Python 3.11 to 3.14 for the hooks, and 3.11 to 3.13 for the
+  dashboard, which Pyloid doesn't yet support on 3.14.
 
 ### Fixed
 

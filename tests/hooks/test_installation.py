@@ -410,6 +410,86 @@ def test_setup_venv_keeps_the_existing_venv_until_the_new_one_is_built(
     assert [path.name for path in tmp_path.iterdir()] == [".vauxhall-venv"]
 
 
+def _leftover(tmp_path: Path, marker: str, *, complete: bool) -> Path:
+    """Create a venv copy an interrupted install left behind.
+
+    Args:
+        tmp_path: The workspace.
+        marker: Text identifying the copy.
+        complete: Whether it has the entry-point scripts pip writes last.
+
+    Returns:
+        The copy.
+    """
+    copy = tmp_path / f".vauxhall-venv.old-{marker}"
+    copy.mkdir()
+    (copy / "marker").write_text(marker)
+    if complete:
+        _make_complete(copy)
+    return copy
+
+
+def _make_complete(venv_dir: Path) -> None:
+    """Give a fake venv the relay script a finished pip install writes.
+
+    Args:
+        venv_dir: The fake venv.
+    """
+    scripts = venv_dir / ("Scripts" if os.name == "nt" else "bin")
+    scripts.mkdir(exist_ok=True)
+    (scripts / ("vauxhall-relay.exe" if os.name == "nt" else "vauxhall-relay")).touch()
+
+
+def test_setup_venv_restores_a_copy_left_by_a_build_that_was_killed(
+    tmp_path: Path,
+) -> None:
+    """A killed build's half-built venv is replaced by the copy it set aside.
+
+    The copy is then what a failing rebuild keeps.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    venv_dir = tmp_path / ".vauxhall-venv"
+    venv_dir.mkdir()  # Half-built: no relay script.
+    _leftover(tmp_path, "good", complete=True)
+
+    with (
+        patch.object(installation.subprocess, "run", _fake_run(pip_fails=True)),
+        pytest.raises(subprocess.CalledProcessError),
+    ):
+        installation.setup_venv(venv_dir)
+
+    assert (venv_dir / "marker").read_text() == "good"
+    assert [path.name for path in tmp_path.iterdir()] == [".vauxhall-venv"]
+
+
+def test_setup_venv_removes_copies_left_after_a_finished_build(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A complete venv stays, and older copies beside it are removed.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        capsys: Pytest output capture fixture.
+    """
+    venv_dir = tmp_path / ".vauxhall-venv"
+    venv_dir.mkdir()
+    (venv_dir / "marker").write_text("current")
+    _make_complete(venv_dir)
+    stale = _leftover(tmp_path, "stale", complete=True)
+
+    with (
+        patch.object(installation.subprocess, "run", _fake_run(pip_fails=True)),
+        pytest.raises(subprocess.CalledProcessError),
+    ):
+        installation.setup_venv(venv_dir)
+
+    assert (venv_dir / "marker").read_text() == "current"
+    assert [path.name for path in tmp_path.iterdir()] == [".vauxhall-venv"]
+    assert f"Removed {stale}" in capsys.readouterr().out
+
+
 def test_setup_venv_removes_a_half_built_venv(tmp_path: Path) -> None:
     """Without a previous venv, a failed build leaves none, not one lacking Vauxhall.
 

@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Running `vauxhall-hook-install` after an install that was interrupted
+  puts back the hooks environment that install set aside, if its own was
+  left incomplete, and removes the copy otherwise. Before, a
+  `.vauxhall-venv.old-…` directory stayed behind.
 - The settings dialog shows "Settings could not be loaded; the dashboard
   log has details." for any failure, and the dashboard logs the error with
   its traceback. Before, a failure other than a configuration error was

@@ -241,7 +241,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
@@ -369,7 +371,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Replaces existing Vauxhall handlers, keeps all other configuration, and
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
@@ -494,7 +498,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Removes only handlers that Vauxhall generated: commands with the installed
   hook module invocation, or the named handlers from earlier installers that
   ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including

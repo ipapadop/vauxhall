@@ -229,7 +229,9 @@ once however many you install. The installer then registers hooks that run
 the installed hook module, so the hooks don't run code from a source
 checkout. If building the environment fails, for example because pip can't
 reach the package, the installer shows pip's error, puts back the previous
-`.vauxhall-venv` if there was one, and changes no settings. Before
+`.vauxhall-venv` if there was one, and changes no settings. A copy of the
+environment left by an interrupted install is put back or removed on the
+next run. Before
 changing an existing hook or settings file, the installer backs it up and
 validates it. Every named agent's settings are validated before the
 environment is built, so an invalid file leaves them all unchanged and exits

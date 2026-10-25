@@ -345,6 +345,7 @@ def setup_venv(venv_dir: Path) -> Path:
             installing the package fails.
         OSError: If the existing environment can't be moved aside.
     """
+    _recover_interrupted_install(venv_dir)
     previous = None
     if venv_dir.exists():
         previous = venv_dir.with_name(f"{venv_dir.name}.old-{uuid4().hex}")
@@ -357,12 +358,52 @@ def setup_venv(venv_dir: Path) -> Path:
             _restore_venv(previous, venv_dir)
         raise
     if previous is not None:
-        try:
-            shutil.rmtree(previous)
-        except OSError as error:
-            # The new environment works; only the copy is left behind.
-            print(f"Warning: could not remove the previous venv {previous}: {error}")
+        # The new environment works; at worst the copy is left behind.
+        _remove_previous_venv(previous)
     return venv_python
+
+
+def _remove_previous_venv(previous: Path) -> bool:
+    """Remove a venv copy set aside by ``setup_venv``, warning on failure.
+
+    Args:
+        previous: The copy.
+
+    Returns:
+        Whether it was removed.
+    """
+    try:
+        shutil.rmtree(previous)
+    except OSError as error:
+        print(f"Warning: could not remove the previous venv {previous}: {error}")
+        return False
+    return True
+
+
+def _recover_interrupted_install(venv_dir: Path) -> None:
+    """Clean up after an installer that was killed while replacing a venv.
+
+    A copy set aside by ``setup_venv`` is put back when the venv is missing
+    or incomplete (killed during the build), and removed otherwise (killed
+    after it). pip writes the entry-point scripts last, so a venv without
+    ``vauxhall-relay`` is incomplete.
+
+    Args:
+        venv_dir: The hooks environment.
+    """
+    leftovers = sorted(
+        venv_dir.parent.glob(f"{venv_dir.name}.old-*"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not leftovers:
+        return
+    relay = "Scripts/vauxhall-relay.exe" if os.name == "nt" else "bin/vauxhall-relay"
+    if not (venv_dir / relay).exists():
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        _restore_venv(leftovers.pop(), venv_dir)
+    for leftover in leftovers:
+        if _remove_previous_venv(leftover):
+            print(f"Removed {leftover}, left by an interrupted install")
 
 
 def _restore_venv(previous: Path, venv_dir: Path) -> None:

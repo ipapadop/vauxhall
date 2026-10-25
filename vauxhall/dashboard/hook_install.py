@@ -65,10 +65,13 @@ class HookInstallRunner:
                 # -u: a piped child buffers its output, which would arrive
                 # in one burst at exit instead of as a live log. -X utf8: on
                 # Windows a piped child writes the ANSI code page, which can't
-                # encode every workspace path the installer prints.
+                # encode every workspace path the installer prints. -P: -m
+                # would put the workspace first on sys.path, so its own
+                # vauxhall package or egg-info would replace the install's.
                 process = self._launch(
                     [
                         sys.executable,
+                        "-P",
                         "-u",
                         "-X",
                         "utf8",

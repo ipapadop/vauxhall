@@ -485,10 +485,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
 - **Hook install**: `vauxhall.dashboard.hook_install.HookInstallRunner`
-  runs `sys.executable -u -m vauxhall.hooks.cli <agents>` with the workspace
-  as the child's `cwd`, so the CLI runs unchanged and the dashboard never
-  calls `os.chdir`, which would change where it reads
-  `vauxhall_dashboard.json`. `-u` keeps a piped child from buffering the log
+  runs `sys.executable -P -u -X utf8 -m vauxhall.hooks.cli <agents>` with the
+  workspace as the child's `cwd`, so the CLI runs unchanged and the dashboard
+  never calls `os.chdir`, which would change where it reads
+  `vauxhall_dashboard.json`. `-P` keeps `-m` from putting the workspace first
+  on `sys.path`: a checkout's `vauxhall.egg-info` hid the install's
+  `direct_url.json`, pinning the hooks to a PyPI release, and a workspace's own
+  `vauxhall` package would have run. `-u` keeps a piped child from buffering the log
   until exit; `-X utf8` makes the child write UTF-8, since on Windows a piped
   child writes the ANSI code page, which can't encode every path the
   installer prints. Output is decoded as UTF-8 with `errors="replace"`. One install

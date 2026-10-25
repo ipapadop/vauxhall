@@ -70,6 +70,7 @@ def test_start_runs_the_installer_cli(tmp_path: Path) -> None:
     args, kwargs = launcher.launches[0]
     assert args == [
         sys.executable,
+        "-P",
         "-u",
         "-X",
         "utf8",
@@ -202,3 +203,24 @@ def test_close_without_install_does_nothing() -> None:
     runner.close(0.01)
 
     assert launcher.launches == []
+
+
+def test_the_workspace_cannot_replace_the_installer(tmp_path: Path) -> None:
+    """A workspace's own vauxhall package or metadata is never imported.
+
+    ``-m`` would put the child's working directory first on ``sys.path``, so
+    a repository's ``vauxhall.egg-info`` hid the install's ``direct_url.json``
+    (pinning the hooks to PyPI) and its ``vauxhall`` package would run.
+    """
+    decoy = tmp_path / "vauxhall" / "hooks"
+    decoy.mkdir(parents=True)
+    (tmp_path / "vauxhall" / "__init__.py").write_text("")
+    (decoy / "__init__.py").write_text("")
+    (decoy / "cli.py").write_text("print('decoy')\n")
+    posted = Posted()
+
+    HookInstallRunner(posted).start(tmp_path, ["--help"])
+
+    lines = [data["line"] for name, data in posted.wait() if name == "install-output"]
+    assert "decoy" not in lines
+    assert any("vauxhall-hook-install" in line for line in lines)

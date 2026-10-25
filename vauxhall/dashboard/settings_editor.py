@@ -58,9 +58,8 @@ def apply_mode(key: str) -> str:
 def hook_config_type() -> type[Any]:
     """Import the hook configuration type on first use.
 
-    Importing ``vauxhall.hooks.config`` loads the hooks configuration and raises
-    ``ConfigurationError`` if that file is malformed. Importing it lazily keeps
-    a broken hooks file from stopping the dashboard.
+    Importing ``vauxhall.hooks.config`` no longer loads the hooks file (its
+    ``hook_settings`` loads on first access), so this only defers the import.
 
     Returns:
         The ``HookConfig`` dataclass.

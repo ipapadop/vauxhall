@@ -96,3 +96,11 @@ def test_resolve_session_id_digest_differs_from_a_short_identifier() -> None:
     digest = long_id.rsplit(":", 1)[1]
 
     assert resolve_session_id({"session_id": f"sha256:{digest}"}, {}) != long_id
+
+
+def test_resolve_session_id_hashes_a_transcript_path_with_a_lone_surrogate() -> None:
+    """A transcript path from JSON input can hold a lone surrogate."""
+    session_id = resolve_session_id({"transcript_path": "/t/\ud800"}, {})
+
+    assert session_id is not None
+    assert session_id.startswith("transcript:")

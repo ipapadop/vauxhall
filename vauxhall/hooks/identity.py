@@ -68,7 +68,9 @@ def resolve_session_id(
         return _publishable("native", native_id)
     transcript_path = _non_empty_string(input_data.get("transcript_path"))
     if transcript_path is not None:
-        digest = hashlib.sha256(transcript_path.encode()).hexdigest()
+        digest = hashlib.sha256(
+            transcript_path.encode(errors="surrogatepass")
+        ).hexdigest()
         return f"transcript:{digest}"
     source = os.environ if environment is None else environment
     configured_id = _non_empty_string(source.get("VAUXHALL_SESSION_ID"))

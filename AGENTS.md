@@ -369,8 +369,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   a failed start is logged, and the saved settings stay. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
   card limit, and agent denylist; the frontend removes any card whose agent is
-  newly denylisted. `vauxhall.hooks.config` is imported lazily, so a malformed
-  hooks file only disables the hooks option. `on_telemetry` drops an event
+  newly denylisted. `vauxhall.hooks.config` loads `hook_settings` on first
+  access (a module `__getattr__`), not on import, so importing `HookConfig`
+  applies neither the dashboard's environment nor a malformed hooks file,
+  which only disables the hooks option. `on_telemetry` drops an event
   whose `agent` is in `dashboard.agent_denylist` before it is queued or
   dispatched, so a denylisted agent's telemetry never reaches the frontend;
   the UI thread rechecks the denylist before sending each event, and a

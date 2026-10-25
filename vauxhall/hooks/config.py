@@ -86,4 +86,24 @@ def warn_about_workspace_file() -> None:
         logger.warning("Ignoring %s: hooks read only %s", workspace_file, user_file)
 
 
-hook_settings = HookConfig.load()
+def __getattr__(name: str) -> HookConfig:
+    """Load ``hook_settings`` on first access, not on import.
+
+    The dashboard imports this module for ``HookConfig`` and checks the hooks
+    file without its own environment; loading at import would apply it.
+
+    Args:
+        name: The attribute being looked up.
+
+    Returns:
+        The hook configuration, loaded once from the process environment.
+
+    Raises:
+        AttributeError: If ``name`` is not ``hook_settings``.
+    """
+    if name != "hook_settings":
+        message = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(message)
+    settings = HookConfig.load()
+    globals()["hook_settings"] = settings
+    return settings

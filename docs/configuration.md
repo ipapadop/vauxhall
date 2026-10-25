@@ -160,9 +160,10 @@ copied, because the dashboard and the hooks should use different broker
 identities. Both files are validated
 before either is written, the hooks file without the dashboard's environment
 variables, so a dashboard that gets `tls` from `VAUXHALL_MQTT_TLS` can't
-write `ca_certs` to a hooks file that doesn't also set `tls`. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
-environment variables or run on another machine. The option is unavailable,
-with the reason shown, when the hooks configuration is malformed.
+write `ca_certs` to a hooks file that doesn't also set `tls`. This doesn't
+affect hooks that get `VAUXHALL_MQTT_*` environment variables or run on
+another machine. The option is unavailable, with the reason shown, when the
+hooks file is malformed or invalid on its own.
 
 ### Denylisted agents
 

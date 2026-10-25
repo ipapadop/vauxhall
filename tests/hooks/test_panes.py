@@ -220,3 +220,12 @@ def test_load_pane_drops_malformed_optional_fields() -> None:
     )
 
     assert panes.load_pane("codex", "native:1") == panes.PaneTarget("%3", None, None)
+
+
+def test_session_with_a_lone_surrogate_gets_a_record() -> None:
+    """JSON hook input can carry a lone surrogate, which UTF-8 rejects."""
+    panes.record_pane("codex", "native:\ud800abc", TMUX_ENV)
+
+    assert panes.load_pane("codex", "native:\ud800abc") == panes.PaneTarget(
+        "%3", "/run/tmux-1000/default", 4242
+    )

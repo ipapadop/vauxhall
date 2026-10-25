@@ -121,6 +121,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- A shell command over 4,096 characters, such as a heredoc that writes a
+  file, is now published cut to its first 4,096 characters; before, the
+  whole event was dropped. Short commands were always published in full.
+  See [privacy](https://github.com/ipapadop/vauxhall/blob/main/docs/privacy.md).
 - Hooks and `vauxhall-relay` no longer read a `vauxhall_hooks.json` in the
   agent's workspace, only `~/.config/vauxhall/vauxhall_hooks.json`. A
   workspace file, for example one committed to a cloned repository, could

@@ -8,15 +8,18 @@ from contextlib import suppress
 from pathlib import Path
 
 
-def remove_old_files(directory: Path, pattern: str, max_age_seconds: float) -> None:
+def remove_old_files(
+    directory: Path, pattern: str, max_age_seconds: float, now: float | None = None
+) -> None:
     """Remove files not modified for longer than an age, ignoring failures.
 
     Args:
         directory: The directory to sweep.
         pattern: Glob pattern of the files to consider.
         max_age_seconds: Age past which a file is removed.
+        now: The current time, read from the clock when not given.
     """
-    cutoff = time.time() - max_age_seconds
+    cutoff = (time.time() if now is None else now) - max_age_seconds
     with suppress(OSError):
         for path in directory.glob(pattern):
             with suppress(OSError):

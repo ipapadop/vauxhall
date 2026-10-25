@@ -154,7 +154,8 @@ temporary directory, named `vauxhall-<agent>-<uid>`,
 `vauxhall-messages-<agent>-<uid>`, and `vauxhall-codex-cursors-<uid>`
 (without the `-<uid>` suffix on Windows):
 
-- Tool start times, under hashed names, deleted when the tool finishes.
+- Tool start times, under hashed names, deleted when the tool finishes, or
+  after 24 hours if it never does.
 - **The text of an assistant message** while it is still being displayed,
   deleted when it is published, or after 24 hours if the message never
   finishes.

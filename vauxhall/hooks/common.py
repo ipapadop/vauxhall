@@ -38,6 +38,9 @@ _COMPACTION_TRIGGERS = ("manual", "auto")
 # Text from a response that never finished is swept once it cannot belong to a
 # live turn, because only a final chunk removes its own file.
 _MESSAGE_MAX_AGE_SECONDS = 86400
+# Likewise for the start of a tool call that never finished, and for a start
+# or claim a killed hook left behind; only finishing a call removes its file.
+_TOOL_START_MAX_AGE_SECONDS = 86400
 # Timing directories are per user because the system temporary directory is shared.
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
 # The system temporary directory is shared, so a name another account could
@@ -457,9 +460,13 @@ def record_tool_start(agent: str, identity: object) -> None:
     """
     with suppress(OSError):
         directory, prefix = _tool_start_location(agent, identity)
+        now = time.time()
+        # The directory holds only start files, claimed or not, and their
+        # temporary copies.
+        remove_old_files(directory, "*", _TOOL_START_MAX_AGE_SECONDS, now)
         name = f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"
         pending = directory / f"{name}.tmp"
-        pending.write_text(str(time.time()))
+        pending.write_text(str(now))
         pending.replace(directory / f"{name}.time")
 
 

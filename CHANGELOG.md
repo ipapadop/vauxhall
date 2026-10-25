@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Start times of tool calls that never finished, and files left by a
+  killed hook, are now removed from the hooks' temporary directory after 24
+  hours. Before, they stayed until the system cleared its temporary
+  directory.
 - A hook event whose working directory was deleted, or with an empty or
   missing `cwd`, is no longer dropped. Hooks used the hook process's own
   directory even when the event named one, and a blank `cwd` failed

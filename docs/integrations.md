@@ -461,8 +461,10 @@ reason values are not published.
   input. Gemini CLI sends no tool call ID, so `AfterTool` claims the most recent
   start recorded for the same call by renaming its file, and concurrent hooks
   never share a start. A start left by a call that never finished doesn't
-  inflate a later duration. Identical calls that overlap each report a
-  duration, but they can't be told apart, so they may report each other's.
+  inflate a later duration, and starts older than 24 hours are removed, so a
+  call that runs longer reports no duration. Identical calls that overlap
+  each report a duration, but they can't be told apart, so they may report
+  each other's.
 - `ToolPermission` notifications publish the message, and the tool name only
   for MCP tools (`details.toolName`). Shell commands and file diffs in
   `details` are not published.

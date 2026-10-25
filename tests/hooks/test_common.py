@@ -101,6 +101,29 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("*.claimed"))
 
 
+def test_record_tool_start_sweeps_starts_older_than_a_day(tmp_path: Path) -> None:
+    """Starts of calls that never finished don't pile up.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        directory = common.private_directory("vauxhall-test")
+        old = time.time() - common._TOOL_START_MAX_AGE_SECONDS - 60
+        stale = [directory / name for name in ("a.time", "b.tmp", "c.x.claimed")]
+        for path in stale:
+            path.write_text("0")
+            os.utime(path, (old, old))
+        recent = directory / "d.time"
+        recent.write_text("0")
+
+        common.record_tool_start("test", IDENTITY)
+
+    assert not any(path.exists() for path in stale)
+    assert recent.exists()
+    assert len(list(directory.glob("*.time"))) == 2
+
+
 @pytest.mark.skipif(
     not hasattr(os, "getuid"),
     reason="Windows ignores creation modes, and its temporary directory is per account",

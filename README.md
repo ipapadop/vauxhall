@@ -288,10 +288,10 @@ In each workspace where you installed hooks:
    left empty. On Windows, the installer's commands start with
    `powershell.exe -NoProfile -NonInteractive -EncodedCommand`. In
    `.gemini/settings.json`, also delete handlers named `vauxhall-...` that run
-   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the
-   installer created the file (no `.bak` next to it), you can delete the file
-   instead. Codex's installer also added a top-level `"description"`, which you
-   can delete.
+   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the `.bak`
+   next to it holds only `{}`, the installer created the file, and you can
+   delete the file instead. Codex's installer also added a top-level
+   `"description"`, which you can delete.
 2. **Remove the hook environment**: `rm -rf .vauxhall-venv`, or
    `Remove-Item -Recurse -Force .vauxhall-venv` in PowerShell. Do this after
    step 1; otherwise the agent reports a failing hook on every event.

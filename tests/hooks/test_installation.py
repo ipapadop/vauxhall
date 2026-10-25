@@ -309,6 +309,38 @@ def test_load_hook_settings_returns_empty_settings_when_missing(
     assert installation.load_hook_settings(tmp_path / "settings.json", "Agent") == {}
 
 
+def test_install_backs_up_a_file_it_creates_as_empty(tmp_path: Path) -> None:
+    """The backup of a file the installer creates says there were no settings.
+
+    A reinstall then keeps that backup instead of backing up the installer's
+    own output as if it were the user's.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = _settings_file(claude_install, tmp_path)
+    backup = settings_file.with_suffix(".json.bak")
+
+    _install(claude_install, tmp_path)
+    assert settings_file.exists()
+    _install(claude_install, tmp_path)
+
+    assert json.loads(backup.read_text()) == {}
+
+
+def test_load_hook_settings_does_not_back_up_a_missing_file(tmp_path: Path) -> None:
+    """Only the install step that creates the file backs it up.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = tmp_path / "settings.json"
+
+    installation.load_hook_settings(settings_file, "Agent")
+
+    assert not settings_file.with_suffix(".json.bak").exists()
+
+
 def test_register_hook_handler_uses_catch_all_group() -> None:
     """Handlers must be appended to the event's catch-all matcher group."""
     settings = {"hooks": {"Stop": [{"matcher": "Bash", "hooks": []}]}}
@@ -583,6 +615,8 @@ def test_installer_names_the_failed_command_and_changes_nothing(
     assert "exited with 1" in output
     assert "No agent settings were changed." in output
     assert not settings_file.exists()
+    # A {} backup would later stand for a settings file written after this.
+    assert not settings_file.with_suffix(".json.bak").exists()
 
 
 def test_installer_reports_a_venv_it_cannot_move_aside(

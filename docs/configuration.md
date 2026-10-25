@@ -221,7 +221,7 @@ written here; see [privacy.md](privacy.md#retention).
 | `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
 | `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities: agent, workspace, session ID, last known state, env, last-seen time |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
-| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the file; an existing `.bak` is never replaced |
+| `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the file (`{}` if there was none); an existing `.bak` is never replaced |
 | `vauxhall-*` directories in the system temporary directory | Hooks | Tool start times and partial assistant messages; see [privacy.md](privacy.md#on-disk) |
 
 Each JSON file above is replaced atomically. A file in `~/.config/vauxhall`

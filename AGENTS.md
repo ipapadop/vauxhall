@@ -553,7 +553,12 @@ reinstall can't replace the original settings with its own earlier output,
 and a symlink at that path is never followed: any existing entry, even a
 dangling link, counts as a backup, because on Windows `open("xb")` would
 create a dangling link's target. A copy that fails removes its
-partial backup, which later runs would otherwise keep.
+partial backup, which later runs would otherwise keep. Without a settings
+file the backup holds `{}`, so a reinstall doesn't back up the installer's
+own output as the original. `install_hooks` writes that `{}` backup
+(`back_up_settings`) just before it creates the file, not while loading, so
+an install that fails earlier leaves none to stand for a file the user
+writes later.
 `field_sources` reports each field's source (`environment`, `file`, or
 `default`) and whether it is editable. Both, and the settings editor's
 `hooks_mqtt`, read the environment only when the config type's

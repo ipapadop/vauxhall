@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- When `vauxhall-hook-install` creates an agent's settings file, the `.bak`
+  next to it now holds `{}`. Before, there was no backup on the first run,
+  so the second run backed up the first run's output as if it were your
+  original settings.
 - Running `vauxhall-hook-install` after an install that was interrupted
   puts back the hooks environment that install set aside, if its own was
   left incomplete, and removes the copy otherwise. Before, a

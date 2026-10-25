@@ -54,9 +54,15 @@ settings to the per-user file. If the dashboard's settings dialog changed the br
 
 **`No matching distribution found for pyside6`** while installing. The
 dashboard needs a platform that PySide6 6.9.2 ships wheels for; see the
-[compatibility table](../README.md#compatibility). Python 3.14, Intel Macs
-older than macOS 12, and ARM64 Linux older than glibc 2.39 aren't supported.
-The hooks install anywhere.
+[compatibility table](../README.md#compatibility). Intel Macs older than
+macOS 12 and ARM64 Linux older than glibc 2.39 aren't supported. The hooks
+install anywhere.
+
+**`ModuleNotFoundError: No module named 'pyloid'`** when starting `vauxhall`.
+The `dashboard` extra isn't installed, or Python is 3.14, where the extra
+installs nothing because Pyloid supports only Python 3.13 and older. Install
+the dashboard with Python 3.11 to 3.13, such as
+`pipx install --python python3.13 "vauxhall[dashboard] @ git+https://github.com/ipapadop/vauxhall.git"`.
 
 **The dashboard exits with a Qt error on Linux**, such as
 `libEGL.so.1: cannot open shared object file` or

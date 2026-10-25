@@ -143,8 +143,8 @@ handles the text like any other prompt you enter. See
 ### On disk
 
 The hooks also record, for each session started inside tmux, its tmux pane
-ID, tmux server socket path, server process ID, and the name of the command
-running in the pane's foreground (normally the agent, such as `claude`) in
+ID, tmux server socket path, server process ID, and the process group
+running in the pane's foreground (normally the agent's) in
 `~/.config/vauxhall/panes/`, readable only by you. These are used only by
 `vauxhall-relay` on the same machine and are never published. They are deleted
 when the session ends, and any left behind are removed after 30 days.
@@ -152,9 +152,12 @@ when the session ends, and any left behind are removed after 30 days.
 The hooks keep short-lived files in owner-only directories in the system
 temporary directory, named `vauxhall-<agent>-<uid>`,
 `vauxhall-messages-<agent>-<uid>`, and `vauxhall-codex-cursors-<uid>`
-(without the `-<uid>` suffix on Windows):
+(without the `-<uid>` suffix on Windows). A directory with that name that
+another account owns is not used; one you own that others can reach is made
+owner-only, and entries other accounts put in it are removed:
 
-- Tool start times, under hashed names, deleted when the tool finishes.
+- Tool start times, under hashed names, deleted when the tool finishes, or
+  after 24 hours if it never does.
 - **The text of an assistant message** while it is still being displayed,
   deleted when it is published, or after 24 hours if the message never
   finishes.

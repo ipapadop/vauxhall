@@ -7,6 +7,14 @@ import logging
 import sys
 from typing import ClassVar
 
+# C0 controls except tab and newline, DEL, and C1 controls, which a terminal
+# would act on: an escape sequence from a topic or a path could rewrite the
+# log line or the terminal's state.
+_CONTROL_ESCAPES = {
+    code: f"\\x{code:02x}"
+    for code in (*range(0x09), *range(0x0B, 0x20), *range(0x7F, 0xA0))
+}
+
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter to add ANSI colors to log levels."""
@@ -39,14 +47,30 @@ class ColoredFormatter(logging.Formatter):
     del _color  # pyright: ignore[reportPossiblyUnboundVariable]
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format a log record with a colored level name.
+        r"""Format a log record with a colored level name.
 
         Args:
             record: The log record to render.
 
         Returns:
-            The formatted line, with the level name wrapped in color codes.
+            The formatted line, with the level name wrapped in color codes
+            and control characters in the message, traceback, and stack
+            shown as ``\xNN``.
         """
+        exception = record.exc_text
+        if record.exc_info:
+            exception = self.formatException(record.exc_info)
+        record = logging.makeLogRecord(
+            {
+                **record.__dict__,
+                "msg": record.getMessage().translate(_CONTROL_ESCAPES),
+                "args": None,
+                "exc_info": None,
+                "exc_text": exception and exception.translate(_CONTROL_ESCAPES),
+                "stack_info": record.stack_info
+                and record.stack_info.translate(_CONTROL_ESCAPES),
+            }
+        )
         formatter = self._FORMATTERS[self.COLORS.get(record.levelno, self.GREY)]
         return formatter.format(record)
 

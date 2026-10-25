@@ -15,10 +15,14 @@ from typing import Any
 
 from pyloid import Pyloid
 from pyloid.serve import pyloid_serve
-from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtCore import QLockFile, QObject, Qt, Signal, Slot
 
 from vauxhall.core.config import ConfigurationError
-from vauxhall.core.config_store import check_user_config, save_user_config
+from vauxhall.core.config_store import (
+    check_user_config,
+    save_user_config,
+    user_config_path,
+)
 from vauxhall.core.logging import get_logger, setup_logging
 from vauxhall.core.telemetry import telemetry_validation_error
 from vauxhall.dashboard import USER_CHROMIUM_FLAGS
@@ -50,6 +54,8 @@ ICON_FILE = UI_DIR / "icon.png"
 # At exit, long enough for a connected client to send its DISCONNECT; a client
 # still inside a connect attempt has nothing to close cleanly.
 SHUTDOWN_CLOSE_SECONDS = 1.0
+# Held while a dashboard runs: two would overwrite each other's saved state.
+INSTANCE_LOCK_FILE = "dashboard.lock"
 
 WindowEvent = Callable[[str, object], None]
 
@@ -544,17 +550,60 @@ def _set_chromium_flags(
     environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join([*flags, user_flags]).strip()
 
 
+def _lock_dashboard(path: Path) -> QLockFile:
+    """Lock ``path`` for this dashboard, refusing to run beside another one.
+
+    A lock whose process has exited is taken over. When the lock can't be
+    created at all, the dashboard runs without it rather than not at all.
+
+    Args:
+        path: The lock file.
+
+    Returns:
+        The lock, held until it is unlocked or the process exits.
+
+    Raises:
+        SystemExit: Another live process holds the lock.
+    """
+    with suppress(OSError):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(path))
+    lock.setStaleLockTime(0)
+    if lock.tryLock(0):
+        return lock
+    if lock.error() == QLockFile.LockError.LockFailedError:
+        pid, host, _ = lock.getLockInfo()
+        logger.error(
+            "Another Vauxhall Dashboard is already running (process %s on %s); "
+            "if it isn't, delete %s",
+            pid,
+            host or "unknown host",
+            path,
+        )
+        raise SystemExit(1)
+    logger.warning(
+        "Could not create %s (%s); a second dashboard would not be refused",
+        path,
+        lock.error().name,
+    )
+    return lock
+
+
 def main() -> None:
     """Run the Vauxhall Dashboard application."""
     _use_utf8_output()
     _set_chromium_flags()
     setup_logging(level=settings.logging.level)
+    lock = _lock_dashboard(user_config_path(INSTANCE_LOCK_FILE))
     logger.info("Starting Vauxhall Dashboard...")
     set_graphics_backend(settings.dashboard.graphics_backend)
 
     app = Pyloid(app_name="Vauxhall Dashboard")
     dashboard = DashboardApp(app)
-    dashboard.run()
+    try:
+        dashboard.run()
+    finally:
+        lock.unlock()
 
 
 if __name__ == "__main__":

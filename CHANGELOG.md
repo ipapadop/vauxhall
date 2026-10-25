@@ -62,11 +62,51 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A second dashboard for the same user exits with `Another Vauxhall Dashboard
+  is already running` instead of running beside the first, where each would
+  overwrite the other's saved view and cards.
+- Telemetry with long non-ASCII details, such as a prompt of 4,096 emoji,
+  is no longer dropped as oversized. Hooks escaped every non-ASCII
+  character, which made such an event about three times larger than its
+  UTF-8 text.
+- When `vauxhall-hook-install` creates an agent's settings file, the `.bak`
+  next to it now holds `{}`. Before, there was no backup on the first run,
+  so the second run backed up the first run's output as if it were your
+  original settings.
+- Running `vauxhall-hook-install` after an install that was interrupted
+  puts back the hooks environment that install set aside, if its own was
+  left incomplete, and removes the copy otherwise. Before, a
+  `.vauxhall-venv.old-…` directory stayed behind.
+- The settings dialog shows "Settings could not be loaded; the dashboard
+  log has details." for any failure, and the dashboard logs the error with
+  its traceback. Before, a failure other than a configuration error was
+  logged nowhere.
+- A prompt whose acknowledgment arrives before the dashboard has the
+  prompt's message ID is no longer left waiting when acknowledgments of
+  earlier, replaced prompts arrive around the same time.
+- The prompt dialog's **Send** button is no longer disabled for one card
+  while another card's prompt is still being sent, and text typed for one
+  card is no longer left in the dialog when it opens for another card,
+  where it could be sent to the wrong agent.
+- The pane records directory `~/.config/vauxhall/panes` is made owner-only
+  when it already exists with a looser mode. Before, only a directory the
+  hooks created was owner-only.
+- Start times of tool calls that never finished, and files left by a
+  killed hook, are now removed from the hooks' temporary directory after 24
+  hours. Before, they stayed until the system cleared its temporary
+  directory.
+- A hook event whose working directory was deleted, or with an empty or
+  missing `cwd`, is no longer dropped. Hooks used the hook process's own
+  directory even when the event named one, and a blank `cwd` failed
+  validation.
 - Hook events that run at once no longer lose or repeat each other's work:
   concurrent Claude Code `MessageDisplay` or Gemini CLI `AfterModel` chunks
   could drop part of a message, concurrent Codex hooks could publish the same
   interim message twice, and two `SessionStart` hooks for one session could
   fail to record its tmux pane.
+- A streamed Claude Code or Gemini CLI message chunk holding a lone
+  surrogate, such as half of an emoji, is no longer left out of the
+  published message. Its text couldn't be stored as UTF-8.
 - A dashboard window closed narrower than 320 pixels, or wider than 16,384,
   now reopens where it was. Before, its width was not saved, and the window
   reopened at the default position and size. A window size outside these
@@ -175,6 +215,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- Logs show control characters in messages, tracebacks, and stacks as
+  `\xNN`. A terminal escape sequence in an MQTT topic, which the dashboard
+  and relay log when they drop a message, could otherwise rewrite the
+  terminal showing the log.
 - A shell command over 4,096 characters, such as a heredoc that writes a
   file, is now published cut to its first 4,096 characters; before, the
   whole event was dropped. Short commands were always published in full.
@@ -190,12 +234,13 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The prompt relay no longer types a prompt into a shell. An agent that
   exited without ending its session, for example after a crash, left the
   shell in its tmux pane, and the relay pasted the prompt there, where it ran
-  as a command. Hooks now record the pane's foreground command at session
-  start, and the relay refuses delivery (`pane-unavailable`) when the pane
-  runs something else. When the recorded command is unknown, as for
-  sessions started before upgrading, or is a shell, as for an agent started
-  by a wrapper script, the relay can't tell the agent from a shell; it
-  delivers as before and logs a warning.
+  as a command. Hooks now record the pane's foreground process group at
+  session start, and the relay refuses delivery (`pane-unavailable`) when
+  another group is in the foreground: the shell, or another program,
+  including the same agent restarted in that pane. When the recorded group
+  is unknown, as for sessions started before upgrading, the relay can't
+  tell, so it refuses too and logs a warning; restarting the session
+  records the group.
 - The dashboard window checks HTTPS certificates. Pyloid turns those checks
   off for every page with `--ignore-certificate-errors` and
   `--allow-insecure-localhost`; the dashboard now removes both, since its UI
@@ -210,5 +255,7 @@ The first release, planned as 0.1.0. It is alpha software; see
   describes. The directory was readable by other accounts, and one that
   another account created first, or a symlink, was used as found, so that
   account could read tool timing or plant start times that faked a tool's
-  duration. Such a directory is now refused with a warning, and the duration
-  left out.
+  duration. A directory another account owns, or a symlink, is now refused
+  with a warning, and the duration left out. One you own that others can
+  reach, such as one an earlier version created, is made owner-only, and
+  entries other accounts put in it are removed.

@@ -123,7 +123,9 @@ path.
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
 default) before decoding them, and logs and drops malformed or invalid
 telemetry. Rejection logs never include payload values. The dashboard and
-`publish()` share one validator, `vauxhall.core.telemetry`.
+`publish()` share one validator, `vauxhall.core.telemetry`. `publish()`
+writes non-ASCII text as UTF-8 rather than `\u` escapes, which take six
+bytes per character, unless the payload holds a lone surrogate.
 
 ## Supported States
 
@@ -233,7 +235,7 @@ vauxhall-hook-install claude
 
 The installer:
 
-- Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`.
+- Backs up `.claude/settings.local.json` to `.claude/settings.local.json.bak`. Without that file, the backup holds `{}`.
   An existing backup is kept, so a reinstall doesn't lose the original
   settings. If the file is invalid JSON or has an unexpected structure, it exits with an
   error and leaves the file unchanged.
@@ -242,7 +244,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
@@ -363,7 +367,7 @@ vauxhall-hook-install codex
 
 The installer:
 
-- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. An existing
+- Backs up `.codex/hooks.json` to `.codex/hooks.json.bak`. Without that file, the backup holds `{}`. An existing
   backup is kept, so a reinstall doesn't lose the original settings. If the
   file is invalid JSON or has an unexpected structure, it exits with an error and leaves
   the file unchanged.
@@ -372,7 +376,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Replaces existing Vauxhall handlers, keeps all other configuration, and
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
@@ -465,8 +471,10 @@ reason values are not published.
   input. Gemini CLI sends no tool call ID, so `AfterTool` claims the most recent
   start recorded for the same call by renaming its file, and concurrent hooks
   never share a start. A start left by a call that never finished doesn't
-  inflate a later duration. Identical calls that overlap each report a
-  duration, but they can't be told apart, so they may report each other's.
+  inflate a later duration, and starts older than 24 hours are removed, so a
+  call that runs longer reports no duration. Identical calls that overlap
+  each report a duration, but they can't be told apart, so they may report
+  each other's.
 - `ToolPermission` notifications publish the message, and the tool name only
   for MCP tools (`details.toolName`). Shell commands and file diffs in
   `details` are not published.
@@ -487,7 +495,7 @@ vauxhall-hook-install gemini
 
 The installer:
 
-- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. An existing
+- Backs up `.gemini/settings.json` to `.gemini/settings.json.bak`. Without that file, the backup holds `{}`. An existing
   backup is kept, so a reinstall doesn't lose the original settings. If the
   file is invalid JSON or has an unexpected structure, it exits with an error and
   leaves the file unchanged.
@@ -496,7 +504,9 @@ The installer:
   or wheel file, or otherwise the matching PyPI release. Agents named in one
   command share that environment, so it is built once. If building it fails,
   the installer shows pip's error, restores the previous environment if
-  there was one, and changes no settings.
+  there was one, and changes no settings. If an earlier install was interrupted, it first
+  puts back the environment that install set aside, when its own was left
+  incomplete, and removes the copy otherwise.
 - Removes only handlers that Vauxhall generated: commands with the installed
   hook module invocation, or the named handlers from earlier installers that
   ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including

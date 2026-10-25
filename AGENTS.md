@@ -160,9 +160,16 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
-  0700 directory) holding `pane`, `socket`, `server_pid`, and `command`, the
-  pane's foreground command (`#{pane_current_command}`, such as `claude` or
-  `node`) when the session started, or `null` when tmux can't say. It is
+  0700 directory, tightened if it already exists with a looser mode) holding
+  `pane`, `socket`, `server_pid`, and `process_group`, the foreground process
+  group of the pane's terminal when the session started, which is the
+  agent's, or `null` when it can't be read. tmux has no format for it, so
+  `panes.pane_process_group` asks tmux for `#{pane_pid}` and reads that
+  process's `tpgid` with `ps`. `panes.run_tmux` runs every tmux command, for
+  the hooks and the relay; the hooks wait `panes.TMUX_TIMEOUT_SECONDS` (1
+  second) per command, and the relay `relay.TMUX_TIMEOUT_SECONDS` (5
+  seconds), because a command that times out may still have run, and a
+  paste acknowledged as failed after it was typed would be resent. It is
   written by `common.track_pane`, called from `publish_telemetry` on
   `SessionStart`, and deleted on `SessionEnd`; a `SessionStart` outside tmux
   removes any old record, records older than 30 days are swept, and failures
@@ -179,12 +186,15 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   is logged instead of letting paho re-raise it out of the network loop,
   which would end the relay. Delivery checks that the pane's tmux server PID
   still matches the record (pane IDs restart from `%0` after tmux restarts)
-  and, when the record has a `command`, that the pane still runs it: an agent
-  that exited without `SessionEnd` leaves its shell in the foreground, which
-  would run the prompt as a command. A record without a `command` (from an
-  older hook, or when tmux couldn't say) skips that check, and a recorded
-  shell (an agent started by a wrapper script) passes it for the shell left
-  behind; in both cases it delivers and logs a warning. It leaves any pane
+  and, when the record has a `process_group`, that the pane's foreground
+  group is still that one: an agent that exited without `SessionEnd` leaves
+  its shell in the foreground, which would run the prompt as a command, and
+  an agent started in the pane since then belongs to another session. Both
+  lead another group, though a restarted agent has the same command name. A
+  group that can't be read now is refused, and so is a record without a
+  `process_group` (from an older hook, which recorded `command` instead, or
+  from a `ps` without `tpgid`), with a warning: nothing then shows that the
+  pane still runs the agent. It leaves any pane
   mode, such as copy mode, with `copy-mode -q` before pasting and again
   before Enter: a mode takes `send-keys Enter` for itself and drops the
   paste's brackets, which would submit a multi-line prompt line by line.
@@ -214,14 +224,18 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   an older prompt's timeout or late acknowledgment can't overwrite the newer
   outcome, and a send also forgets the prompts of cards that have left the
   page. An acknowledgment that beats the bridge's reply is kept briefly and
-  matched afterwards. The dialog closes when its card is evicted,
-  cleared, or denylisted. A send's reply closes the dialog on success,
-  or shows the error in it, only while the dialog still targets the sending
-  card. Otherwise, because it was closed or reopened for another card while
-  the send was pending, success clears the text only if it is still the sent
-  text, and a rejection shows `Prompt not sent: <error>` on the sending
+  matched afterwards; one for a message ID the bridge already returned (a
+  replaced prompt's, or a duplicate) is dropped instead, so it can't push
+  out one still to be matched. The dialog closes when its card is evicted,
+  cleared, or denylisted. A send's reply shows an error in the dialog only
+  while the dialog still targets the sending card, and closes the dialog on
+  success only if it was not closed or reopened meanwhile, since a reopened
+  dialog may hold a follow-up draft. Otherwise, success clears the text only
+  if it is still the sent text, and a rejection shows `Prompt not sent: <error>` on the sending
   card's `.prompt-status` and forgets the card's previous prompt, like a
-  successful send.
+  successful send. Send is disabled only while the dialog's own card has a
+  send pending, and opening the dialog for a different card than the one
+  whose draft it holds clears the text.
 - **Security**: Anyone who can publish to the broker can send prompts, and a
   prompt can make an agent run commands, unless the broker's ACL restricts
   who may publish to `sessions/+/prompt` (see
@@ -300,7 +314,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   other setting; a `get_settings()` error or a read-only `agent_denylist`
   (its `agent_denylist_editable`) is logged and the save is skipped.
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
-  `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
+  `DashboardIPC.get_settings()` (which logs any unexpected error and returns
+  it as `error` rather than raising), with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
   or Cancel closes it and focus returns to the button. The hooks option
   appears when an editable MQTT value differs from `hooks_mqtt`, the values
@@ -420,8 +435,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `~/.config/vauxhall/dashboard_state.json`. It keeps only known keys with
   valid values, treats an unreadable file as empty, and writes atomically.
   Frontend saves and the shutdown window save both run on the UI thread, so
-  neither can discard the other's fields. Two dashboard processes saving at
-  once can still lose one update.
+  neither can discard the other's fields. A second dashboard process can't
+  discard them either: see Single instance.
   `save_ui_state` accepts only `theme`, `sort`, `history_filter`,
   `attention_first`, and `notify`, the last two as booleans; only Python
   writes `window`. `run()` creates the window with the saved size, calls
@@ -446,6 +461,14 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
+- **Single instance**: `main()` holds a `QLockFile` on
+  `~/.config/vauxhall/dashboard.lock` (`INSTANCE_LOCK_FILE`) before creating
+  `Pyloid`, because two dashboards would overwrite each other's view and card
+  state. A lock held by a live process makes `main()` log its PID, host, and
+  the lock path and exit with status 1; a lock whose process has exited is
+  taken over (`setStaleLockTime(0)` relies on the PID check alone, not age).
+  If the lock can't be created at all, such as on a read-only home, the
+  dashboard logs a warning and runs without it.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
   startup failure, the dashboard marks the frontend not ready, closes the
   MQTT client, and waits up to `SHUTDOWN_CLOSE_SECONDS` (1 second) for every
@@ -548,7 +571,12 @@ reinstall can't replace the original settings with its own earlier output,
 and a symlink at that path is never followed: any existing entry, even a
 dangling link, counts as a backup, because on Windows `open("xb")` would
 create a dangling link's target. A copy that fails removes its
-partial backup, which later runs would otherwise keep.
+partial backup, which later runs would otherwise keep. Without a settings
+file the backup holds `{}`, so a reinstall doesn't back up the installer's
+own output as the original. `install_hooks` writes that `{}` backup
+(`back_up_settings`) just before it creates the file, not while loading, so
+an install that fails earlier leaves none to stand for a file the user
+writes later.
 `field_sources` reports each field's source (`environment`, `file`, or
 `default`) and whether it is editable. Both, and the settings editor's
 `hooks_mqtt`, read the environment only when the config type's

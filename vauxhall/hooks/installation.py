@@ -160,13 +160,52 @@ def _validate_hook_settings(
                 raise TypeError(msg)
 
 
+def back_up_settings(path: Path) -> None:
+    """Copy a hook settings file to ``<name>.json.bak`` unless a backup exists.
+
+    An existing backup is kept, so a reinstall can't replace the original
+    settings with its own earlier output. Without a settings file the backup
+    holds ``{}``, recording that there were none before Vauxhall.
+
+    Args:
+        path: Path to the agent's JSON settings file.
+
+    Raises:
+        OSError: If a new backup cannot be written, in which case the partial
+            backup is removed.
+    """
+    exists = path.exists()
+    backup_path = path.with_suffix(".json.bak")
+    # A symlink planted at the backup path is never written through. On POSIX
+    # "x" mode refuses it; Windows would create a dangling link's target, so
+    # any existing entry counts.
+    backup = None
+    if not os.path.lexists(backup_path):
+        with contextlib.suppress(FileExistsError):
+            backup = backup_path.open("xb")
+    if backup is None:
+        print(f"Keeping the existing backup at {backup_path}")
+    else:
+        try:
+            with backup:
+                backup.write(path.read_bytes() if exists else b"{}\n")
+            if exists:
+                shutil.copymode(path, backup_path)
+        except BaseException:
+            # Every later run would keep a partial backup as the original.
+            backup_path.unlink(missing_ok=True)
+            raise
+        print(f"Backup created at {backup_path}")
+
+
 def load_hook_settings(
     path: Path, agent: str, option_keys: frozenset[str] = frozenset()
 ) -> dict[str, Any]:
     """Back up, validate, and load an existing hook settings file.
 
-    An existing backup is kept, so a reinstall can't replace the original
-    settings with its own earlier output.
+    A missing file isn't backed up here: ``install`` backs it up as ``{}``
+    only when it is about to create the file, so an install that fails first
+    leaves no backup that a file written later would be judged by.
 
     Args:
         path: Path to the agent's JSON settings file.
@@ -186,28 +225,8 @@ def load_hook_settings(
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         return {}
-
     print(f"Reading existing settings from {path}")
-    backup_path = path.with_suffix(".json.bak")
-    # A symlink planted at the backup path is never written through. On POSIX
-    # "x" mode refuses it; Windows would create a dangling link's target, so
-    # any existing entry counts.
-    backup = None
-    if not os.path.lexists(backup_path):
-        with contextlib.suppress(FileExistsError):
-            backup = backup_path.open("xb")
-    if backup is None:
-        print(f"Keeping the existing backup at {backup_path}")
-    else:
-        try:
-            with backup, path.open("rb") as source:
-                shutil.copyfileobj(source, backup)
-            shutil.copymode(path, backup_path)
-        except BaseException:
-            # Every later run would keep a partial backup as the original.
-            backup_path.unlink(missing_ok=True)
-            raise
-        print(f"Backup created at {backup_path}")
+    back_up_settings(path)
     try:
         with path.open() as file:
             settings = json.load(file)
@@ -345,6 +364,7 @@ def setup_venv(venv_dir: Path) -> Path:
             installing the package fails.
         OSError: If the existing environment can't be moved aside.
     """
+    _recover_interrupted_install(venv_dir)
     previous = None
     if venv_dir.exists():
         previous = venv_dir.with_name(f"{venv_dir.name}.old-{uuid4().hex}")
@@ -357,12 +377,52 @@ def setup_venv(venv_dir: Path) -> Path:
             _restore_venv(previous, venv_dir)
         raise
     if previous is not None:
-        try:
-            shutil.rmtree(previous)
-        except OSError as error:
-            # The new environment works; only the copy is left behind.
-            print(f"Warning: could not remove the previous venv {previous}: {error}")
+        # The new environment works; at worst the copy is left behind.
+        _remove_previous_venv(previous)
     return venv_python
+
+
+def _remove_previous_venv(previous: Path) -> bool:
+    """Remove a venv copy set aside by ``setup_venv``, warning on failure.
+
+    Args:
+        previous: The copy.
+
+    Returns:
+        Whether it was removed.
+    """
+    try:
+        shutil.rmtree(previous)
+    except OSError as error:
+        print(f"Warning: could not remove the previous venv {previous}: {error}")
+        return False
+    return True
+
+
+def _recover_interrupted_install(venv_dir: Path) -> None:
+    """Clean up after an installer that was killed while replacing a venv.
+
+    A copy set aside by ``setup_venv`` is put back when the venv is missing
+    or incomplete (killed during the build), and removed otherwise (killed
+    after it). pip writes the entry-point scripts last, so a venv without
+    ``vauxhall-relay`` is incomplete.
+
+    Args:
+        venv_dir: The hooks environment.
+    """
+    leftovers = sorted(
+        venv_dir.parent.glob(f"{venv_dir.name}.old-*"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not leftovers:
+        return
+    relay = "Scripts/vauxhall-relay.exe" if os.name == "nt" else "bin/vauxhall-relay"
+    if not (venv_dir / relay).exists():
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        _restore_venv(leftovers.pop(), venv_dir)
+    for leftover in leftovers:
+        if _remove_previous_venv(leftover):
+            print(f"Removed {leftover}, left by an interrupted install")
 
 
 def _restore_venv(previous: Path, venv_dir: Path) -> None:
@@ -485,6 +545,8 @@ def install_hooks(installers: Sequence[HookInstaller]) -> None:
     for installer, settings_path, settings in loaded:
         _register_hooks(installer, settings, venv_python)
         try:
+            if not settings_path.exists():
+                back_up_settings(settings_path)
             write_json_atomically(settings_path, settings)
         except Exception as error:
             print(f"Error saving {installer.agent} settings: {error}")

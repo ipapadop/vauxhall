@@ -73,6 +73,63 @@ def test_colored_formatter_wraps_level_name_in_its_color() -> None:
     assert f"{ColoredFormatter.RED}ERROR{ColoredFormatter.RESET}" in line
 
 
+def test_colored_formatter_escapes_control_characters_in_the_message() -> None:
+    """A terminal escape in a logged value can't act on the terminal."""
+    record = logging.LogRecord(
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="Dropping message on topic %s",
+        args=("a\x1b[2J\rb\x9b\x7f",),
+        exc_info=None,
+    )
+
+    line = ColoredFormatter().format(record)
+
+    assert line.endswith("topic a\\x1b[2J\\x0db\\x9b\\x7f")
+    assert line.count("\x1b") == 2  # the level name's color and reset only
+
+
+def test_colored_formatter_escapes_control_characters_in_tracebacks() -> None:
+    """An exception or stack text from a logged value is escaped too."""
+    error = ValueError("bad \x1b]0;title\x07 path")
+    exc_info = (ValueError, error, None)
+    record = logging.LogRecord(
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="Failed",
+        args=(),
+        exc_info=exc_info,
+    )
+    record.stack_info = "Stack (most recent call last):\n  \x1b[2J"
+
+    line = ColoredFormatter().format(record)
+
+    assert "ValueError: bad \\x1b]0;title\\x07 path" in line
+    assert line.endswith("\\x1b[2J")
+    assert "\nValueError: bad" in line
+    assert line.count("\x1b") == 2  # the level name's color and reset only
+    assert record.exc_info is exc_info
+
+
+def test_colored_formatter_keeps_newlines_and_tabs() -> None:
+    """Multi-line messages and tracebacks keep their layout."""
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="one\n\ttwo",
+        args=(),
+        exc_info=None,
+    )
+
+    assert ColoredFormatter().format(record).endswith("one\n\ttwo")
+
+
 def test_colored_formatter_does_not_build_a_formatter_per_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

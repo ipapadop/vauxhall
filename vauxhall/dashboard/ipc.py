@@ -163,6 +163,11 @@ class DashboardIPC(PyloidIPC):
         except ConfigurationError as error:
             logger.warning("Could not describe settings: %s", error)
             return json.dumps({"error": str(error)})
+        except Exception:
+            # Raising would reach the window only as an empty reply.
+            logger.exception("Failed to describe settings")
+            message = "Settings could not be loaded; the dashboard log has details."
+            return json.dumps({"error": message})
 
     @Bridge(str, result=str)
     def save_settings(self, payload: str) -> str:

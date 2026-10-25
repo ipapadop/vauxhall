@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from vauxhall.core.config import MQTTConfig
+from vauxhall.dashboard.config import UIConfig
 from vauxhall.hooks.client import format_message, publish
 from vauxhall.hooks.config import HookConfig
 
@@ -183,6 +184,23 @@ def test_format_message_adds_the_schema_version() -> None:
         **EVENT,
         "env": "remote",
     }
+
+
+def test_format_message_keeps_long_emoji_details_under_the_payload_limit() -> None:
+    """Non-ASCII text isn't escaped, so full-length details fit the default limit."""
+    emoji = "\N{GRINNING FACE}" * 4096
+    payload = format_message({**EVENT, "details": {"prompt": emoji, "message": emoji}})
+
+    assert len(payload.encode()) <= UIConfig().max_payload_bytes
+    assert json.loads(payload)["details"]["prompt"] == emoji
+
+
+def test_format_message_escapes_a_payload_with_a_lone_surrogate() -> None:
+    """Text UTF-8 can't encode keeps its JSON escapes, so it can be sent."""
+    payload = format_message({**EVENT, "details": {"prompt": "a\ud800b"}})
+
+    payload.encode()
+    assert json.loads(payload)["details"]["prompt"] == "a\ud800b"
 
 
 def test_format_message_keeps_its_schema_version() -> None:

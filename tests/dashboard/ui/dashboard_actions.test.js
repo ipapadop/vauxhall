@@ -670,6 +670,37 @@ test('a send rejected after the dialog reopened for another card reports the err
     assert.equal(agents[TWO].querySelector('.prompt-status').textContent, '');
 });
 
+test('send stays available for another card while the first card is still sending', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    assert.equal(document.getElementById('prompt-send').disabled, true);
+
+    reopenForTwo(document);
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+
+    document.getElementById('prompt-cancel').click();
+    agents[ONE].querySelector('.prompt-icon').click();
+    assert.equal(document.getElementById('prompt-send').disabled, true);
+
+    await reply({ ok: true, id: 'id-1' });
+    assert.equal(document.getElementById('prompt-send').disabled, false);
+});
+
+test('a draft is kept for its own card and not carried to another', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
+    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'for one';
+    document.getElementById('prompt-cancel').click();
+
+    agents[ONE].querySelector('.prompt-icon').click();
+    assert.equal(document.getElementById('prompt-text').value, 'for one');
+
+    document.getElementById('prompt-cancel').click();
+    agents[TWO].querySelector('.prompt-icon').click();
+    assert.equal(document.getElementById('prompt-text').value, '');
+});
+
 test('a send that finishes after its dialog closed clears the sent text', async (t) => {
     const { document, reply } = await pendingSend(t);
     document.getElementById('prompt-cancel').click();
@@ -699,6 +730,19 @@ test('a send rejected after its dialog reopened for the same card shows the erro
     assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
     assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
     assert.equal(agents[ONE].querySelector('.prompt-status').textContent, '');
+});
+
+test('a send that finishes after its dialog reopened for the same card keeps the new draft', async (t) => {
+    const { document, reply } = await pendingSend(t);
+    document.getElementById('prompt-cancel').click();
+    agents[ONE].querySelector('.prompt-icon').click();
+    document.getElementById('prompt-text').value = 'first, then more';
+
+    await reply({ ok: true, id: 'id-1' });
+
+    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
+    assert.equal(document.getElementById('prompt-text').value, 'first, then more');
+    assert.equal(document.getElementById('prompt-send').disabled, false);
 });
 
 test('cancelling the prompt dialog sends nothing and returns focus to its button', async (t) => {

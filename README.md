@@ -229,7 +229,9 @@ once however many you install. The installer then registers hooks that run
 the installed hook module, so the hooks don't run code from a source
 checkout. If building the environment fails, for example because pip can't
 reach the package, the installer shows pip's error, puts back the previous
-`.vauxhall-venv` if there was one, and changes no settings. Before
+`.vauxhall-venv` if there was one, and changes no settings. A copy of the
+environment left by an interrupted install is put back or removed on the
+next run. Before
 changing an existing hook or settings file, the installer backs it up and
 validates it. Every named agent's settings are validated before the
 environment is built, so an invalid file leaves them all unchanged and exits
@@ -286,10 +288,10 @@ In each workspace where you installed hooks:
    left empty. On Windows, the installer's commands start with
    `powershell.exe -NoProfile -NonInteractive -EncodedCommand`. In
    `.gemini/settings.json`, also delete handlers named `vauxhall-...` that run
-   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the
-   installer created the file (no `.bak` next to it), you can delete the file
-   instead. Codex's installer also added a top-level `"description"`, which you
-   can delete.
+   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the `.bak`
+   next to it holds only `{}`, the installer created the file, and you can
+   delete the file instead. Codex's installer also added a top-level
+   `"description"`, which you can delete.
 2. **Remove the hook environment**: `rm -rf .vauxhall-venv`, or
    `Remove-Item -Recurse -Force .vauxhall-venv` in PowerShell. Do this after
    step 1; otherwise the agent reports a failing hook on every event.

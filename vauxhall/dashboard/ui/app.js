@@ -127,6 +127,13 @@ async function init() {
     const promptError = document.getElementById('prompt-error');
     const promptSend = document.getElementById('prompt-send');
     const promptTarget = dialogTarget(promptModal);
+    // Cards with a send in flight, so Send is disabled only for those, the
+    // card whose draft the text box holds, and a count of openings, so a reply
+    // can tell the dialog it was sent from apart from a later one.
+    const pendingSends = new Set();
+    let draftKey = null;
+    let promptOpenings = 0;
+    const updatePromptSend = () => { promptSend.disabled = pendingSends.has(promptTarget.key); };
     const closePrompt = () => { if (promptModal) closeDialog(promptModal); };
     document.getElementById('prompt-close')?.addEventListener('click', closePrompt);
     document.getElementById('prompt-cancel')?.addEventListener('click', closePrompt);
@@ -134,25 +141,30 @@ async function init() {
         e.preventDefault();
         const key = promptTarget.key;
         const card = agents[key];
-        if (!card || !window.ipc?.DashboardIPC) return;
+        if (!card || !window.ipc?.DashboardIPC || pendingSends.has(key)) return;
         const text = promptText.value;
+        const opening = promptOpenings;
         promptError.textContent = '';
-        promptSend.disabled = true;
+        pendingSends.add(key);
+        updatePromptSend();
         try {
             const result = await sendPrompt(window.ipc.DashboardIPC, card, text);
             // The dialog may have closed, or reopened for another card, while
-            // the send was pending; the reply then belongs on the card.
+            // the send was pending; the reply then belongs on the card. Reopened
+            // for this card, it may hold a new draft, so success leaves it open.
             const current = promptTarget.key === key;
+            const unchanged = current && promptOpenings === opening;
             if (result.ok) {
-                if (current || promptText.value === text) promptText.value = '';
-                if (current) closePrompt();
+                if (unchanged || promptText.value === text) promptText.value = '';
+                if (unchanged) closePrompt();
             } else if (current) {
                 promptError.textContent = result.error;
             } else {
                 showRejected(card, result.error);
             }
         } finally {
-            promptSend.disabled = false;
+            pendingSends.delete(key);
+            updatePromptSend();
         }
     });
     const openPrompt = (key, opener) => {
@@ -160,7 +172,12 @@ async function init() {
         if (!card) return;
         promptTarget.key = key;
         promptTarget.opener = opener;
+        promptOpenings += 1;
         promptError.textContent = '';
+        // A draft typed for another card must not be sent to this one.
+        if (key !== draftKey) promptText.value = '';
+        draftKey = key;
+        updatePromptSend();
         // Text typed while the agent shows a question or permission dialog
         // answers that dialog, so say so before the user sends anything.
         document.getElementById('prompt-warning').textContent = card.classList.contains('waiting')

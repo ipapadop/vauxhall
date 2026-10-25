@@ -26,7 +26,7 @@ from vauxhall.hooks.files import (
     write_atomically,
 )
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
-from vauxhall.hooks.panes import foreground_command, forget_pane, record_pane
+from vauxhall.hooks.panes import foreground_process_group, forget_pane, record_pane
 
 logger = get_logger(__name__)
 
@@ -44,6 +44,9 @@ _COMPACTION_TRIGGERS = ("manual", "auto")
 # Text from a response that never finished is swept once it cannot belong to a
 # live turn, because only a final chunk removes its own file.
 _MESSAGE_MAX_AGE_SECONDS = 86400
+# Likewise for the start of a tool call that never finished, and for a start
+# or claim a killed hook left behind; only finishing a call removes its file.
+_TOOL_START_MAX_AGE_SECONDS = 86400
 # Timing directories are per user because the system temporary directory is shared.
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
 
@@ -157,12 +160,35 @@ def message_text(value: object) -> str | None:
     return truncate_text(value)
 
 
+def _make_private(directory: Path) -> None:
+    """Make an owned directory owner-only and remove what others put in it.
+
+    While the directory was reachable, other accounts could add entries, such
+    as a symlink where a hook will write; the sticky system temporary
+    directory keeps them from replacing the directory itself.
+
+    Args:
+        directory: A directory this user owns.
+
+    Raises:
+        OSError: If its mode can't be changed.
+    """
+    directory.chmod(0o700)
+    for entry in os.scandir(directory):
+        with suppress(OSError):
+            if entry.stat(follow_symlinks=False).st_uid != os.getuid():
+                Path(entry.path).unlink()
+    logger.warning("Made %s private; it was reachable by other accounts", directory)
+
+
 def private_directory(name: str) -> Path:
     """Return a per-user directory in the system temporary directory.
 
     The system temporary directory is shared, so another account can pre-create
-    the name. A directory that is a symlink, is owned by somebody else, or is
-    reachable by anybody else is rejected rather than used.
+    the name. A directory that is a symlink or is owned by somebody else is
+    rejected rather than used. One this user owns that others can reach, such
+    as one created under a permissive umask by an older version, is made
+    owner-only.
 
     Args:
         name: Directory name, to which the user suffix is added.
@@ -181,7 +207,9 @@ def private_directory(name: str) -> Path:
         # Windows ignores the creation mode, reports every directory as world
         # accessible, and names no owner, so these checks would always fail
         # there. It gives each account its own temporary directory instead.
-        private = private and info.st_uid == os.getuid() and not info.st_mode & 0o077
+        private = private and info.st_uid == os.getuid()
+        if private and info.st_mode & 0o077:
+            _make_private(directory)
     if not private:
         message = f"{directory} is not a private directory"
         # Callers treat OSError as "no state", so say why it is missing.
@@ -265,7 +293,9 @@ def collect_message_chunk(
                 # A long response has many chunks; past the limit, only remove them.
                 if length <= MAX_DETAIL_STRING_LENGTH:
                     source = os.open(claimed, os.O_RDONLY | NOFOLLOW)
-                    with os.fdopen(source, encoding="utf-8") as chunk:
+                    with os.fdopen(
+                        source, encoding="utf-8", errors="surrogatepass"
+                    ) as chunk:
                         parts.append(chunk.read())
                     length += len(parts[-1])
             finally:
@@ -456,7 +486,11 @@ def record_tool_start(agent: str, identity: object) -> None:
     """
     with suppress(OSError):
         directory, prefix = _hashed_location(f"vauxhall-{agent}", identity)
-        write_atomically(directory / f"{unique_name(prefix)}.time", str(time.time()))
+        now = time.time()
+        # The directory holds only start files, claimed or not, and their
+        # temporary copies.
+        remove_old_files(directory, "*", _TOOL_START_MAX_AGE_SECONDS, now)
+        write_atomically(directory / f"{unique_name(prefix)}.time", str(now))
 
 
 def claim_tool_duration(agent: str, identity: object) -> float | None:
@@ -551,7 +585,7 @@ def track_pane(
     hook_type: object,
     agent: str,
     session_id: str,
-    pane_command: Callable[[], str | None] = foreground_command,
+    process_group: Callable[[], int | None] = foreground_process_group,
 ) -> None:
     """Keep the local tmux pane record of a session in step with its lifecycle.
 
@@ -562,16 +596,38 @@ def track_pane(
         hook_type: The hook event name.
         agent: The agent name.
         session_id: The session identity.
-        pane_command: Returns the pane's foreground command, the agent itself
-            at session start.
+        process_group: Returns the pane's foreground process group, the
+            agent's own at session start.
     """
     try:
         if hook_type == "SessionStart":
-            record_pane(agent, session_id, command=pane_command())
+            record_pane(agent, session_id, process_group=process_group())
         elif hook_type == "SessionEnd":
             forget_pane(agent, session_id)
     except OSError:
         logger.debug("Could not update the tmux pane record for %s", agent)
+
+
+def event_workspace(
+    input_data: dict[str, Any], current_directory: Callable[[], Path] = Path.cwd
+) -> str | None:
+    """Return the workspace of a hook event.
+
+    Args:
+        input_data: The hook event.
+        current_directory: Returns the process directory, used when the event
+            has no non-blank ``cwd`` string.
+
+    Returns:
+        The workspace, or None when the process directory is gone too.
+    """
+    workspace = input_data.get("cwd")
+    if isinstance(workspace, str) and workspace.strip():
+        return workspace
+    try:
+        return str(current_directory())
+    except OSError:
+        return None
 
 
 def publish_telemetry(
@@ -603,6 +659,10 @@ def publish_telemetry(
     if session_id is None:
         logger.warning("Skipping telemetry: no stable session identity is available")
         return
+    workspace = event_workspace(input_data)
+    if workspace is None:
+        logger.warning("Skipping telemetry: no workspace is available")
+        return
 
     track_pane(hook_type, agent, session_id)
     events: list[Telemetry] = [
@@ -613,9 +673,7 @@ def publish_telemetry(
     if publish is None:
         from vauxhall.hooks.client import publish  # noqa: PLC0415
 
-    workspace = input_data.get("cwd", str(Path.cwd()))
-    if isinstance(workspace, str):
-        workspace = publishable_workspace(workspace)
+    workspace = publishable_workspace(workspace)
     publish(
         [
             {

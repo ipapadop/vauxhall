@@ -102,6 +102,29 @@ def test_claim_discards_unreadable_start(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("*.claimed"))
 
 
+def test_record_tool_start_sweeps_starts_older_than_a_day(tmp_path: Path) -> None:
+    """Starts of calls that never finished don't pile up.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        directory = common.private_directory("vauxhall-test")
+        old = time.time() - common._TOOL_START_MAX_AGE_SECONDS - 60
+        stale = [directory / name for name in ("a.time", "b.tmp", "c.x.claimed")]
+        for path in stale:
+            path.write_text("0")
+            os.utime(path, (old, old))
+        recent = directory / "d.time"
+        recent.write_text("0")
+
+        common.record_tool_start("test", IDENTITY)
+
+    assert not any(path.exists() for path in stale)
+    assert recent.exists()
+    assert len(list(directory.glob("*.time"))) == 2
+
+
 @pytest.mark.skipif(
     not hasattr(os, "getuid"),
     reason="Windows ignores creation modes, and its temporary directory is per account",
@@ -129,27 +152,22 @@ def test_record_tool_start_creates_an_owner_only_directory(tmp_path: Path) -> No
     reason="Windows has no mode bits to plant, and its temporary directory is "
     "per account",
 )
-def test_tool_timing_ignores_a_directory_another_account_could_reach(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """A timing directory others can write to is neither written nor read.
+def test_tool_timing_repairs_a_directory_others_could_reach(tmp_path: Path) -> None:
+    """Durations keep working in a timing directory left reachable.
 
     Args:
         tmp_path: Pytest temporary directory.
-        caplog: Pytest log capture fixture.
     """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         common.record_tool_start("test", IDENTITY)
-        [spoofed] = tmp_path.rglob("*.time")
-        spoofed.write_text("0")
-        spoofed.parent.chmod(0o777)
+        [start] = tmp_path.rglob("*.time")
+        start.parent.chmod(0o775)
 
         common.record_tool_start("test", IDENTITY)
         duration = common.claim_tool_duration("test", IDENTITY)
 
-    assert duration is None
-    assert list(spoofed.parent.iterdir()) == [spoofed]
-    assert "is not a private directory" in caplog.text
+    assert duration is not None
+    assert start.parent.stat().st_mode & 0o777 == 0o700
 
 
 def test_record_tool_start_writes_nothing_through_a_planted_symlink(
@@ -222,6 +240,19 @@ def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> N
     assert not list(tmp_path.rglob("*.chunk"))
 
 
+def test_collect_message_chunks_keeps_a_lone_surrogate(tmp_path: Path) -> None:
+    """JSON hook input can carry a lone surrogate, which UTF-8 rejects.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.collect_message_chunk("claude", ["session"], "a\ud800", final=False)
+        message = common.collect_message_chunk("claude", ["session"], "b", final=True)
+
+    assert message == "a\ud800b"
+
+
 def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
     """A long reply fits the telemetry detail string limit.
 
@@ -280,23 +311,68 @@ def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
     reason="Windows has no mode bits to plant, and its temporary directory is "
     "per account",
 )
-def test_private_directory_rejects_a_directory_another_account_could_reach(
-    tmp_path: Path,
+def test_private_directory_makes_an_owned_reachable_directory_private(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A pre-created world-writable directory is refused, not reused.
+    """An owned directory others could reach is repaired, not refused.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        caplog: Pytest log capture fixture.
+    """
+    loose = tmp_path / f"vauxhall-claude{common._USER_SUFFIX}"
+    loose.mkdir()
+    loose.chmod(0o775)
+    kept = loose / "start.time"
+    kept.write_text("1")
+
+    with (
+        patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
+        caplog.at_level("WARNING"),
+    ):
+        directory = common.private_directory("vauxhall-claude")
+
+    assert directory == loose
+    assert loose.stat().st_mode & 0o777 == 0o700
+    assert kept.exists()
+    assert "Made" in caplog.text
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"), reason="Windows names no owner and ignores modes"
+)
+def test_make_private_removes_entries_another_account_owns(tmp_path: Path) -> None:
+    """Entries planted while the directory was reachable are removed.
 
     Args:
         tmp_path: Pytest temporary directory.
     """
-    planted = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
-    planted.mkdir()
-    planted.chmod(0o777)
+    loose = tmp_path / "loose"
+    loose.mkdir()
+    loose.chmod(0o777)
+    (loose / "mine").write_text("1")
+    (loose / "planted").symlink_to(tmp_path / "elsewhere")
+    real_scandir = os.scandir
 
-    with (
-        patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
-        pytest.raises(OSError, match="not a private directory"),
+    class Foreign:
+        """A directory entry owned by another account."""
+
+        def __init__(self, entry: os.DirEntry[str]) -> None:
+            self.path = entry.path
+            self._entry = entry
+
+        def stat(self, *, follow_symlinks: bool) -> os.stat_result:
+            info = self._entry.stat(follow_symlinks=follow_symlinks)
+            if self._entry.name != "planted":
+                return info
+            return os.stat_result((info.st_mode, 0, 0, 0, os.getuid() + 1, *info[5:]))
+
+    with patch.object(
+        common.os, "scandir", lambda path: [Foreign(e) for e in real_scandir(path)]
     ):
-        common.private_directory("vauxhall-messages-claude")
+        common._make_private(loose)
+
+    assert sorted(path.name for path in loose.iterdir()) == ["mine"]
 
 
 def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
@@ -462,6 +538,55 @@ def test_publish_telemetry_shortens_a_workspace_too_long_to_publish() -> None:
     format_message(publisher.batches[0][0])
 
 
+def _deleted_directory() -> Path:
+    """Stand in for ``Path.cwd`` in a deleted directory.
+
+    Raises:
+        FileNotFoundError: Always.
+    """
+    raise FileNotFoundError
+
+
+def test_event_workspace_uses_the_cwd_without_asking_the_process() -> None:
+    """A deleted hook working directory doesn't matter when the event has one."""
+    assert common.event_workspace({"cwd": "/workspace"}, _deleted_directory) == (
+        "/workspace"
+    )
+
+
+@pytest.mark.parametrize("cwd", ["", "   ", None, 42])
+def test_event_workspace_falls_back_to_the_process_directory(cwd: object) -> None:
+    """A missing, blank, or non-string ``cwd`` falls back to the process's.
+
+    Args:
+        cwd: The unusable ``cwd`` value.
+    """
+    fallback = Path("/fallback")
+
+    assert common.event_workspace({"cwd": cwd}, lambda: fallback) == str(fallback)
+
+
+def test_event_workspace_is_none_without_any_directory() -> None:
+    """No ``cwd`` and no process directory leaves nothing to key a card by."""
+    assert common.event_workspace({}, _deleted_directory) is None
+
+
+def test_publish_telemetry_keeps_an_event_with_a_blank_cwd() -> None:
+    """A blank ``cwd`` is published as the process directory, not dropped."""
+    publisher = RecordingPublisher()
+
+    common.publish_telemetry(
+        {"hook_event_name": "Stop", "session_id": "one", "cwd": ""},
+        "Claude",
+        claude_hook.HANDLERS,
+        publish=publisher,
+    )
+
+    [[payload]] = publisher.batches
+    assert payload["workspace"] == str(Path.cwd())
+    format_message(payload)
+
+
 def test_publish_telemetry_records_the_pane_at_session_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -483,19 +608,19 @@ def test_publish_telemetry_records_the_pane_at_session_start(
     assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
 
 
-def test_track_pane_records_the_agent_command_at_session_start(
+def test_track_pane_records_the_agent_process_group_at_session_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The relay can later tell the agent from a shell left in its pane.
+    """The relay can later tell the agent from whatever else runs in its pane.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setenv("TMUX_PANE", "%5")
 
-    common.track_pane("SessionStart", "Claude", "native:one", lambda: "claude")
+    common.track_pane("SessionStart", "Claude", "native:one", lambda: 500)
 
-    assert load_pane("claude", "native:one") == PaneTarget("%5", None, None, "claude")
+    assert load_pane("claude", "native:one") == PaneTarget("%5", None, None, 500)
 
 
 def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:

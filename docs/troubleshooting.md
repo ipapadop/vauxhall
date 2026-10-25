@@ -116,6 +116,12 @@ accept, and aiohttp continues without it.
 the environment variable or file, the field, the value, and what is expected.
 Fix or remove that value; see [configuration.md](configuration.md).
 
+**The dashboard exits with `Another Vauxhall Dashboard is already running`.**
+Only one dashboard runs per user, because two would overwrite each other's
+saved view and cards. Switch to the running one. If the process the message
+names isn't a dashboard, as after a crash on another host sharing the home
+directory, delete the `dashboard.lock` the message names.
+
 **The dashboard fails to start and port 8080 is busy.** `dashboard.port` is
 the port of the dashboard's local UI server. Pick a free one with
 `VAUXHALL_DASHBOARD_PORT=8181 vauxhall`.

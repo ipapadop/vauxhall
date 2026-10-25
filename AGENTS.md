@@ -179,7 +179,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   would run the prompt as a command. A record without a `command` (from an
   older hook, or when tmux couldn't say) skips that check, and a recorded
   shell (an agent started by a wrapper script) passes it for the shell left
-  behind; in both cases it delivers and logs a warning. It then runs `load-buffer` from standard
+  behind; in both cases it delivers and logs a warning. It leaves any pane
+  mode, such as copy mode, with `copy-mode -q` before pasting and again
+  before Enter: a mode takes `send-keys Enter` for itself and drops the
+  paste's brackets, which would submit a multi-line prompt line by line.
+  `copy-mode -q` does nothing outside a mode and needs tmux 3.1a; when it
+  fails, delivery goes ahead with a debug log. It then runs `load-buffer` from standard
   input, `paste-buffer -p -d` into the pane, and, after 0.2 seconds,
   `send-keys Enter`. Text never appears on a command line. It acknowledges
   `delivered` or `failed` (`pane-unavailable` or `delivery-failed`) without

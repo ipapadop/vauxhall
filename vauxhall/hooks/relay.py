@@ -71,6 +71,24 @@ def _tmux(
     )
 
 
+def _leave_pane_mode(target: PaneTarget, run: Runner) -> None:
+    """Leave copy mode, or any other mode, if the pane is in one.
+
+    A mode takes ``send-keys Enter`` for itself and drops a paste's brackets,
+    which would submit a multi-line prompt line by line. ``copy-mode -q``
+    (tmux 3.1a and later) does nothing outside a mode; an older tmux rejects
+    it, and delivery goes ahead without it.
+
+    Args:
+        target: The pane.
+        run: Function that runs tmux.
+    """
+    try:
+        _tmux(target, "copy-mode", "-q", "-t", target.pane, run=run)
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("Could not leave the mode of pane %s", target.pane)
+
+
 def deliver_prompt(
     target: PaneTarget,
     message_id: str,
@@ -126,11 +144,14 @@ def deliver_prompt(
 
     buffer = "vauxhall-" + hashlib.sha256(message_id.encode()).hexdigest()[:16]
     try:
+        _leave_pane_mode(target, run)
         _tmux(target, "load-buffer", "-b", buffer, "-", data=text.encode(), run=run)
         _tmux(
             target, "paste-buffer", "-d", "-p", "-b", buffer, "-t", target.pane, run=run
         )
         sleep(SUBMIT_DELAY_SECONDS)
+        # The user may have entered a mode during the wait.
+        _leave_pane_mode(target, run)
         _tmux(target, "send-keys", "-t", target.pane, "Enter", run=run)
     except (OSError, subprocess.SubprocessError):
         try:

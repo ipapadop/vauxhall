@@ -81,6 +81,8 @@ never queued for later.
    unknown (it started before this check existed, or tmux didn't answer) or
    is a shell (a wrapper script started the agent without `exec`), the relay
    can't tell the agent from a shell: it delivers and logs a warning. It then
+   leaves copy mode (or any other tmux mode) if you have the pane in one
+   (tmux 3.1a or later),
    loads the text into a private tmux buffer, pastes it into the pane as a
    bracketed paste, and presses Enter. It never puts the text on a command
    line, so shell and tmux syntax in a prompt isn't interpreted.
@@ -112,7 +114,9 @@ replays are ignored, so a relay that connects afterwards never types it.
 restarted. Restart the agent in a live pane.
 
 **The text arrives but isn't submitted, or a multi-line prompt is split.**
-The relay waits 0.2 seconds between pasting and pressing Enter. An agent
+If the pane was in copy mode and tmux is older than 3.1a, the relay can't
+leave the mode: leave it yourself (`q`) and send again, or upgrade tmux
+(`tmux -V`). The relay waits 0.2 seconds between pasting and pressing Enter. An agent
 that doesn't treat pasted text as one input can behave differently; please
 report the agent and its version.
 

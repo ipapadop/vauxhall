@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- The prompt dialog's **Send** button is no longer disabled for one card
+  while another card's prompt is still being sent, and text typed for one
+  card is no longer left in the dialog when it opens for another card,
+  where it could be sent to the wrong agent.
 - The pane records directory `~/.config/vauxhall/panes` is made owner-only
   when it already exists with a looser mode. Before, only a directory the
   hooks created was owner-only.

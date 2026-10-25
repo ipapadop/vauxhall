@@ -215,13 +215,15 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   outcome, and a send also forgets the prompts of cards that have left the
   page. An acknowledgment that beats the bridge's reply is kept briefly and
   matched afterwards. The dialog closes when its card is evicted,
-  cleared, or denylisted. A send's reply closes the dialog on success,
-  or shows the error in it, only while the dialog still targets the sending
-  card. Otherwise, because it was closed or reopened for another card while
-  the send was pending, success clears the text only if it is still the sent
-  text, and a rejection shows `Prompt not sent: <error>` on the sending
+  cleared, or denylisted. A send's reply shows an error in the dialog only
+  while the dialog still targets the sending card, and closes the dialog on
+  success only if it was not closed or reopened meanwhile, since a reopened
+  dialog may hold a follow-up draft. Otherwise, success clears the text only
+  if it is still the sent text, and a rejection shows `Prompt not sent: <error>` on the sending
   card's `.prompt-status` and forgets the card's previous prompt, like a
-  successful send.
+  successful send. Send is disabled only while the dialog's own card has a
+  send pending, and opening the dialog for a different card than the one
+  whose draft it holds clears the text.
 - **Security**: Anyone who can publish to the broker can send prompts, and a
   prompt can make an agent run commands, unless the broker's ACL restricts
   who may publish to `sessions/+/prompt` (see

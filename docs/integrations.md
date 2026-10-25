@@ -146,7 +146,9 @@ the other side: subscribe to
 publish `{"schema_version": 1, "id": ..., "status": "delivered"}` (or
 `"failed"` with a `reason` of `pane-unavailable` or `delivery-failed`) to the
 same topic ending in `/ack`. The agent name is lower-case, and the session ID
-is percent-encoded. `vauxhall.core.prompts` builds and validates these messages.
+is percent-encoded. `schema_version` is the integer `1`, and `id` is 1..64
+characters with no control characters; other messages are dropped.
+`vauxhall.core.prompts` builds and validates these messages.
 
 ## Claude Code
 

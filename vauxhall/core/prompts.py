@@ -19,6 +19,9 @@ ACK_TOPIC_FILTER: Final = "vauxhall/agents/+/sessions/+/ack"
 ACK_STATUSES: Final = frozenset({"delivered", "failed"})
 FAILURE_REASONS: Final = frozenset({"pane-unavailable", "delivery-failed"})
 _MAX_ID_LENGTH = 64
+_ID_ERROR = (
+    f"id must be a string of 1..{_MAX_ID_LENGTH} characters without control characters"
+)
 _ALLOWED_CONTROLS = frozenset("\n\t")
 
 
@@ -58,6 +61,22 @@ def parse_session_topic(topic: str) -> tuple[str, str, str] | None:
     return unquote(parts[2]), unquote(parts[4]), parts[5]
 
 
+def _has_control_character(text: str, allowed: frozenset[str] = frozenset()) -> bool:
+    """Return whether text holds a C0, DEL, or C1 control character.
+
+    Args:
+        text: The text to check.
+        allowed: Control characters to accept.
+
+    Returns:
+        Whether any control character outside ``allowed`` occurs.
+    """
+    return any(
+        (ord(char) < 32 or 127 <= ord(char) < 160) and char not in allowed
+        for char in text
+    )
+
+
 def prompt_text_error(text: object) -> str | None:
     """Explain why text cannot be sent to an agent, without echoing it.
 
@@ -75,10 +94,7 @@ def prompt_text_error(text: object) -> str | None:
         return "Prompt must not be empty"
     if len(text) > MAX_PROMPT_LENGTH:
         return f"Prompt must be at most {MAX_PROMPT_LENGTH} characters"
-    if any(
-        (ord(char) < 32 or 127 <= ord(char) < 160) and char not in _ALLOWED_CONTROLS
-        for char in text
-    ):
+    if _has_control_character(text, _ALLOWED_CONTROLS):
         return "Prompt must not contain control characters"
     try:
         text.encode()
@@ -94,15 +110,45 @@ def _is_message_id(value: object) -> TypeGuard[str]:
         value: The candidate identifier.
 
     Returns:
-        Whether it is a non-empty, encodable string of bounded length.
+        Whether it is a non-empty, encodable string of bounded length without
+        control characters.
     """
-    if not isinstance(value, str) or not 0 < len(value) <= _MAX_ID_LENGTH:
+    if (
+        not isinstance(value, str)
+        or not 0 < len(value) <= _MAX_ID_LENGTH
+        or _has_control_character(value)
+    ):
         return False
     try:
         value.encode()
     except UnicodeEncodeError:
         return False
     return True
+
+
+def _load_message(payload: bytes) -> dict[str, Any] | None:
+    """Decode a prompt or acknowledgment message and check its schema version.
+
+    Args:
+        payload: The raw MQTT payload.
+
+    Returns:
+        The decoded object, or ``None`` when it is oversized, malformed, or of
+        another schema version.
+    """
+    if len(payload) > MAX_MESSAGE_BYTES:
+        return None
+    try:
+        data: Any = json.loads(payload.decode())
+    except (ValueError, RecursionError):  # Deeply nested JSON recurses.
+        return None
+    if not isinstance(data, dict):
+        return None
+    version = data.get("schema_version")
+    # JSON true decodes to True, which equals 1.
+    if type(version) is not int or version != PROMPT_SCHEMA_VERSION:
+        return None
+    return data
 
 
 def format_prompt(message_id: str, text: str) -> str:
@@ -119,8 +165,7 @@ def format_prompt(message_id: str, text: str) -> str:
         ValueError: If the identifier or text is not acceptable.
     """
     if not _is_message_id(message_id):
-        message = "id must be a string of 1..64 characters"
-        raise ValueError(message)
+        raise ValueError(_ID_ERROR)
     if (error := prompt_text_error(text)) is not None:
         raise ValueError(error)
     # Escaping non-ASCII text would take six bytes per character.
@@ -140,16 +185,7 @@ def parse_prompt(payload: bytes) -> tuple[str, str] | None:
         The message identifier and text, or ``None`` when it is oversized,
         malformed, or invalid.
     """
-    if len(payload) > MAX_MESSAGE_BYTES:
-        return None
-    try:
-        data: Any = json.loads(payload.decode())
-    except (ValueError, RecursionError):  # Deeply nested JSON recurses.
-        return None
-    if (
-        not isinstance(data, dict)
-        or data.get("schema_version") != PROMPT_SCHEMA_VERSION
-    ):
+    if (data := _load_message(payload)) is None:
         return None
     message_id, text = data.get("id"), data.get("text")
     if not _is_message_id(message_id) or not isinstance(text, str):
@@ -174,8 +210,7 @@ def format_ack(message_id: str, status: str, reason: str | None = None) -> str:
         ValueError: If the identifier, status, or reason is not acceptable.
     """
     if not _is_message_id(message_id):
-        message = "id must be a string of 1..64 characters"
-        raise ValueError(message)
+        raise ValueError(_ID_ERROR)
     if status not in ACK_STATUSES:
         message = "status must be delivered or failed"
         raise ValueError(message)
@@ -202,16 +237,7 @@ def parse_ack(payload: bytes) -> dict[str, str] | None:
         A dict with ``id``, ``status``, and optionally ``reason``, or ``None``
         when the message is oversized, malformed, or invalid.
     """
-    if len(payload) > MAX_MESSAGE_BYTES:
-        return None
-    try:
-        data: Any = json.loads(payload.decode())
-    except (ValueError, RecursionError):  # Deeply nested JSON recurses.
-        return None
-    if (
-        not isinstance(data, dict)
-        or data.get("schema_version") != PROMPT_SCHEMA_VERSION
-    ):
+    if (data := _load_message(payload)) is None:
         return None
     message_id, status, reason = data.get("id"), data.get("status"), data.get("reason")
     if not _is_message_id(message_id) or status not in ACK_STATUSES:

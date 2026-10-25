@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { ACK_TIMEOUT_MS, handleAck, sendPrompt } from '../../../vauxhall/dashboard/ui/js/prompt.js';
+import { ACK_TIMEOUT_MS, handleAck, sendPrompt, showRejected } from '../../../vauxhall/dashboard/ui/js/prompt.js';
 import { createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
@@ -141,6 +141,28 @@ test('a rejected prompt returns the error and leaves the card alone', async () =
     assert.deepEqual(result, { ok: false, error: 'Prompt must not be empty' });
     assert.equal(status(card), '');
 });
+
+test('a rejection shown on the card says the prompt was not sent and why', () => {
+    const card = makeCard();
+
+    showRejected(card, 'Not connected to the broker');
+
+    assert.equal(status(card), 'Prompt not sent: Not connected to the broker');
+});
+
+for (const outcome of ['acknowledgment', 'timeout']) {
+    test(`an earlier prompt's ${outcome} does not replace a rejection shown on the card`, async (t) => {
+        t.mock.timers.enable({ apis: ['setTimeout'] });
+        const card = makeCard();
+        await sendPrompt(bridge({ ok: true, id: 'a1' }).ipc, card, 'first');
+
+        showRejected(card, 'Not connected to the broker');
+        if (outcome === 'acknowledgment') handleAck({ id: 'a1', status: 'delivered' });
+        else t.mock.timers.tick(ACK_TIMEOUT_MS);
+
+        assert.equal(status(card), 'Prompt not sent: Not connected to the broker');
+    });
+}
 
 test('a rejection without an error message gets a generic one', async () => {
     const result = await sendPrompt(bridge({ ok: false }).ipc, makeCard(), 'hello');

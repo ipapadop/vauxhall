@@ -579,6 +579,28 @@ def track_pane(
         logger.debug("Could not update the tmux pane record for %s", agent)
 
 
+def event_workspace(
+    input_data: dict[str, Any], current_directory: Callable[[], Path] = Path.cwd
+) -> str | None:
+    """Return the workspace of a hook event.
+
+    Args:
+        input_data: The hook event.
+        current_directory: Returns the process directory, used when the event
+            has no non-blank ``cwd`` string.
+
+    Returns:
+        The workspace, or None when the process directory is gone too.
+    """
+    workspace = input_data.get("cwd")
+    if isinstance(workspace, str) and workspace.strip():
+        return workspace
+    try:
+        return str(current_directory())
+    except OSError:
+        return None
+
+
 def publish_telemetry(
     input_data: dict[str, Any],
     agent: str,
@@ -608,6 +630,10 @@ def publish_telemetry(
     if session_id is None:
         logger.warning("Skipping telemetry: no stable session identity is available")
         return
+    workspace = event_workspace(input_data)
+    if workspace is None:
+        logger.warning("Skipping telemetry: no workspace is available")
+        return
 
     track_pane(hook_type, agent, session_id)
     events: list[Telemetry] = [
@@ -618,9 +644,7 @@ def publish_telemetry(
     if publish is None:
         from vauxhall.hooks.client import publish  # noqa: PLC0415
 
-    workspace = input_data.get("cwd", str(Path.cwd()))
-    if isinstance(workspace, str):
-        workspace = publishable_workspace(workspace)
+    workspace = publishable_workspace(workspace)
     publish(
         [
             {

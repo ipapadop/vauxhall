@@ -424,6 +424,55 @@ def test_publish_telemetry_shortens_a_workspace_too_long_to_publish() -> None:
     format_message(publisher.batches[0][0])
 
 
+def _deleted_directory() -> Path:
+    """Stand in for ``Path.cwd`` in a deleted directory.
+
+    Raises:
+        FileNotFoundError: Always.
+    """
+    raise FileNotFoundError
+
+
+def test_event_workspace_uses_the_cwd_without_asking_the_process() -> None:
+    """A deleted hook working directory doesn't matter when the event has one."""
+    assert common.event_workspace({"cwd": "/workspace"}, _deleted_directory) == (
+        "/workspace"
+    )
+
+
+@pytest.mark.parametrize("cwd", ["", "   ", None, 42])
+def test_event_workspace_falls_back_to_the_process_directory(cwd: object) -> None:
+    """A missing, blank, or non-string ``cwd`` falls back to the process's.
+
+    Args:
+        cwd: The unusable ``cwd`` value.
+    """
+    fallback = Path("/fallback")
+
+    assert common.event_workspace({"cwd": cwd}, lambda: fallback) == str(fallback)
+
+
+def test_event_workspace_is_none_without_any_directory() -> None:
+    """No ``cwd`` and no process directory leaves nothing to key a card by."""
+    assert common.event_workspace({}, _deleted_directory) is None
+
+
+def test_publish_telemetry_keeps_an_event_with_a_blank_cwd() -> None:
+    """A blank ``cwd`` is published as the process directory, not dropped."""
+    publisher = RecordingPublisher()
+
+    common.publish_telemetry(
+        {"hook_event_name": "Stop", "session_id": "one", "cwd": ""},
+        "Claude",
+        claude_hook.HANDLERS,
+        publish=publisher,
+    )
+
+    [[payload]] = publisher.batches
+    assert payload["workspace"] == str(Path.cwd())
+    format_message(payload)
+
+
 def test_publish_telemetry_records_the_pane_at_session_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

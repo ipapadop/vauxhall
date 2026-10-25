@@ -50,7 +50,8 @@ The MQTT topic, `vauxhall/agents/<agent>/activity`, carries the agent name.
 Values that can hold text you or the agent wrote are in **bold**. Text fields
 are limited to 4,096 characters; longer values are cut off with an ellipsis,
 except Gemini CLI's `args`, which is left out. A `workspace` over 4,096
-characters keeps its start and end and gains a SHA-256 hash of the full path.
+characters keeps its first 24 and last 48 characters and gains part of a
+SHA-256 hash of the full path.
 
 | `details` field | Claude Code | Codex | Gemini CLI |
 | --- | --- | --- | --- |

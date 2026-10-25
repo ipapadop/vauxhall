@@ -122,14 +122,13 @@ def test_publishable_workspace_keeps_both_ends_and_a_digest() -> None:
 
     published = publishable_workspace(workspace)
 
-    assert len(published) == MAX_WORKSPACE_LENGTH
-    assert published.startswith("C:\\a\\")
-    assert published.endswith(f"a\\project [sha256:{digest}]")
-    assert "…" in published
+    assert published == (
+        "C:\\" + "a\\" * 10 + "a…\\" + "a\\" * 20 + f"project [sha256:{digest[:16]}]"
+    )
 
 
 def test_publishable_workspace_hashes_a_lone_surrogate() -> None:
     """A long workspace with a lone surrogate from JSON input still hashes."""
     published = publishable_workspace("/home/" + "\ud800" * MAX_WORKSPACE_LENGTH)
 
-    assert len(published) == MAX_WORKSPACE_LENGTH
+    assert published.startswith("/home/")

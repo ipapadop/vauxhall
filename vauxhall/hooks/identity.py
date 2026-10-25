@@ -10,6 +10,12 @@ from typing import Any
 
 from vauxhall.core.telemetry import MAX_SESSION_ID_LENGTH, MAX_WORKSPACE_LENGTH
 
+# A card shows only two lines of its workspace, so a shortened workspace stays
+# short enough for its start, end, and digest to show.
+_WORKSPACE_HEAD_LENGTH = 24
+_WORKSPACE_TAIL_LENGTH = 48
+_WORKSPACE_DIGEST_LENGTH = 16
+
 
 def _non_empty_string(value: object) -> str | None:
     """Return a stripped non-empty string.
@@ -71,15 +77,15 @@ def publishable_workspace(workspace: str) -> str:
         workspace: The workspace path.
 
     Returns:
-        The path, or ``<start>…<end> [sha256:<digest>]`` when it exceeds the
-        telemetry limit.
+        The path, or ``<start>…<end> [sha256:<digest>]``, 99 characters, when
+        it exceeds the telemetry limit.
     """
     if len(workspace) <= MAX_WORKSPACE_LENGTH:
         return workspace
-    suffix = f" [sha256:{_sha256(workspace)}]"
-    kept = MAX_WORKSPACE_LENGTH - len(suffix) - 1
-    head = kept // 2
-    return f"{workspace[:head]}…{workspace[head - kept :]}{suffix}"
+    head = workspace[:_WORKSPACE_HEAD_LENGTH]
+    tail = workspace[-_WORKSPACE_TAIL_LENGTH:]
+    digest = _sha256(workspace)[:_WORKSPACE_DIGEST_LENGTH]
+    return f"{head}…{tail} [sha256:{digest}]"
 
 
 def resolve_session_id(

@@ -94,7 +94,7 @@ sequenceDiagram
    transcript path, or `VAUXHALL_SESSION_ID`; an ID that would exceed 256
    characters becomes `<source>-sha256:<hex>`. Without a session ID the event
    is skipped. A workspace over 4,096 characters becomes
-   `<start>…<end> [sha256:<hex>]` (`identity.publishable_workspace`).
+   `<24 chars>…<48 chars> [sha256:<16 hex>]` (`identity.publishable_workspace`).
    `publish_telemetry` cuts each `details` string over 4,096
    characters to fit, so the event isn't rejected; Gemini's `args`, which can
    hold file contents, is left out instead.

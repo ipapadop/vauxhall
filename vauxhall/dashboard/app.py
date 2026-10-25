@@ -9,6 +9,7 @@ import sys
 from collections import deque
 from collections.abc import Callable, MutableMapping
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,7 @@ from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.graphics import set_graphics_backend
 from vauxhall.dashboard.ipc import DashboardIPC
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
 from vauxhall.dashboard.settings_editor import (
     DASHBOARD_FILE,
     HOOKS_FILE,
@@ -46,6 +47,9 @@ logger = get_logger(__name__)
 
 UI_DIR = (Path(__file__).parent / "ui").resolve()
 ICON_FILE = UI_DIR / "icon.png"
+# At exit, long enough for a connected client to send its DISCONNECT; a client
+# still inside a connect attempt has nothing to close cleanly.
+SHUTDOWN_CLOSE_SECONDS = 1.0
 
 WindowEvent = Callable[[str, object], None]
 
@@ -137,6 +141,8 @@ class DashboardApp:
         self._outbox: deque[tuple[str, object]] = deque()
         self._sending = False
         self.mqtt: DashboardSubscriber | None = None
+        self.mqtt_closer = SubscriberCloser()
+        self._subscriber_generation = 0
 
     def _on_frontend_ready(self) -> None:
         """Mark the frontend ready and send it the last status and queued updates.
@@ -160,8 +166,11 @@ class DashboardApp:
             name: The window event name.
             data: The event payload.
         """
-        if name == "status-update" and isinstance(data, str):
-            self.last_status = data
+        if name == "status-update" and isinstance(data, tuple):
+            generation, message = data
+            if generation != self._subscriber_generation:
+                return
+            self.last_status = data = message
         # Before readiness, and after the window closes, only telemetry is
         # kept; the frontend gets the last status when it becomes ready.
         if not self.ipc.is_ready:
@@ -289,16 +298,31 @@ class DashboardApp:
         except Exception:
             logger.exception("Error in on_ack")
 
-    def on_status(self, message: str) -> None:
+    def on_status(self, message: str, generation: int) -> None:
         """Post an MQTT status to the UI thread, which records and forwards it.
 
         Args:
             message: The status to show.
+            generation: The generation of the subscriber that reported it. The
+                UI thread drops a status from a subscriber since replaced.
         """
         try:
-            self._post("status-update", message)
+            self._post("status-update", (generation, message))
         except Exception:
             logger.exception("Error in on_status")
+
+    def _status_callback(self) -> Callable[[str], None]:
+        """Return the status callback for a new subscriber, retiring older ones.
+
+        A discarded subscriber's network thread can be inside a callback,
+        past its stopping check, and post its status after the replacement's.
+        Runs on the UI thread, which also checks the generation.
+
+        Returns:
+            Callable[[str], None]: Posts a status tagged with the new generation.
+        """
+        self._subscriber_generation += 1
+        return partial(self.on_status, generation=self._subscriber_generation)
 
     def save_settings(
         self, changes: dict[str, dict[str, object]], *, update_hooks: bool = False
@@ -398,10 +422,10 @@ class DashboardApp:
     def _reconnect(self) -> None:
         """Replace the MQTT subscriber with one using the current broker settings."""
         assert self.mqtt is not None
-        self.mqtt.stop()
+        self.mqtt.close(self.mqtt_closer)
         self.mqtt = DashboardSubscriber(
             self.on_telemetry,
-            self.on_status,
+            self._status_callback(),
             settings.mqtt.host,
             settings.mqtt.port,
             ack_callback=self.on_ack,
@@ -454,7 +478,7 @@ class DashboardApp:
         saved_window = self._create_window()
 
         self.mqtt = DashboardSubscriber(
-            self.on_telemetry, self.on_status, ack_callback=self.on_ack
+            self.on_telemetry, self._status_callback(), ack_callback=self.on_ack
         )
         try:
             self.mqtt.start()
@@ -471,7 +495,9 @@ class DashboardApp:
             # The window is gone once the UI loop exits; hold any late updates.
             self.ipc.is_ready = False
             self._save_window_state(saved_window)
-            self.mqtt.stop()
+            self.mqtt.close(self.mqtt_closer)
+            if not self.mqtt_closer.finish(SHUTDOWN_CLOSE_SECONDS):
+                logger.warning("Exiting before the MQTT connection finished closing")
             logger.info("Vauxhall Dashboard shutting down...")
 
 

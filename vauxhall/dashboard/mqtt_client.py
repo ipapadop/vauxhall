@@ -6,6 +6,8 @@
 import json
 import uuid
 from collections.abc import Callable
+from queue import SimpleQueue
+from threading import Thread
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -215,8 +217,10 @@ class DashboardSubscriber:
         A failure to set up credentials or TLS is reported through the status
         callback and leaves the subscriber stopped.
         """
+        if self._stopping:
+            message = "A closed subscriber can't be started again"
+            raise RuntimeError(message)
         logger.info("Connecting to MQTT broker at %s:%d...", self.host, self.port)
-        self._stopping = False
         self.status_callback("Connecting...")
         try:
             configure_client(self.client, settings.mqtt)
@@ -238,17 +242,82 @@ class DashboardSubscriber:
                 self._loop_started = False
             raise
 
-    def stop(self) -> None:
-        """Stop the background loop and disconnect from the broker."""
+    def close(self, closer: "SubscriberCloser") -> None:
+        """Silence status callbacks and disconnect, leaving the wait to ``closer``.
+
+        The caller is the UI thread, and ``loop_stop()`` joins a network
+        thread that can be inside a connect attempt for up to paho's 5-second
+        connect timeout. No status is reported: a replacement reports its own,
+        and at shutdown the window is gone. Messages that arrive before the
+        disconnect are still forwarded: they describe agents, and an
+        acknowledgment isn't replayed to a replacement. A closed subscriber
+        can't be started again.
+
+        Args:
+            closer: Stops the network loop on its own thread.
+        """
         if self._stopping:
             return
         self._stopping = True
         if not self._loop_started:
             return
-        logger.info("Disconnecting from MQTT broker...")
+        logger.info("Disconnecting from MQTT broker at %s:%d", self.host, self.port)
         try:
             self.client.disconnect()
-        finally:
+        except Exception:
+            logger.exception("Could not disconnect from the MQTT broker")
+        closer.add(self)
+
+    def stop_loop(self) -> None:
+        """Wait for the network loop to end, logging rather than raising errors."""
+        try:
             self.client.loop_stop()
-            self._loop_started = False
-            self.status_callback("Disconnected")
+        except Exception:
+            logger.exception("Could not stop the MQTT network loop")
+
+
+class SubscriberCloser:
+    """Stops closed subscribers' network loops, one at a time, on one thread.
+
+    A single thread serves every broker change, so repeated changes to an
+    unreachable broker don't each start a thread that waits on a connect.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the closer; its thread starts with the first subscriber."""
+        self._queue: SimpleQueue[DashboardSubscriber | None] = SimpleQueue()
+        self._thread: Thread | None = None
+
+    def add(self, subscriber: DashboardSubscriber) -> None:
+        """Queue a closed subscriber whose network loop must be stopped.
+
+        Args:
+            subscriber: The subscriber, already disconnected.
+        """
+        if self._thread is None:
+            self._thread = Thread(
+                target=self._run, name="vauxhall-mqtt-closer", daemon=True
+            )
+            self._thread.start()
+        self._queue.put(subscriber)
+
+    def finish(self, timeout: float) -> bool:
+        """Wait for every queued network loop to stop, up to a time limit.
+
+        Args:
+            timeout: Seconds to wait.
+
+        Returns:
+            bool: Whether they all stopped. A loop still inside a connect
+                attempt runs on a daemon thread that ends with the process.
+        """
+        if self._thread is None:
+            return True
+        self._queue.put(None)
+        self._thread.join(timeout)
+        return not self._thread.is_alive()
+
+    def _run(self) -> None:
+        """Stop each queued subscriber's network loop until told to finish."""
+        while (subscriber := self._queue.get()) is not None:
+            subscriber.stop_loop()

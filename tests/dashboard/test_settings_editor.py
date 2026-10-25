@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 
@@ -347,7 +347,7 @@ def test_environment_field_is_rejected(
 
 
 def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
-    """Broker changes stop the subscriber and start one with the new settings.
+    """Broker changes close the subscriber and start one with the new settings.
 
     Args:
         dashboard: Dashboard whose frontend is ready and MQTT is not started.
@@ -360,10 +360,10 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
 
     assert result["reconnecting"] is True
     assert result["restart_required"] == []
-    old_subscriber.stop.assert_called_once_with()
+    old_subscriber.close.assert_called_once_with(dashboard.mqtt_closer)
     subscriber_type.assert_called_once_with(
         dashboard.on_telemetry,
-        dashboard.on_status,
+        ANY,
         "broker",
         1883,
         ack_callback=dashboard.on_ack,
@@ -376,7 +376,7 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
 def test_second_mqtt_change_replaces_reconnected_subscriber(
     dashboard: DashboardApp,
 ) -> None:
-    """A later broker change stops the subscriber started by the previous one.
+    """A later broker change closes the subscriber started by the previous one.
 
     Args:
         dashboard: Dashboard whose frontend is ready and MQTT is not started.
@@ -390,9 +390,34 @@ def test_second_mqtt_change_replaces_reconnected_subscriber(
         dashboard.save_settings({"mqtt": {"host": "one"}})
         dashboard.save_settings({"mqtt": {"host": "two"}})
 
-    first.stop.assert_called_once_with()
+    first.close.assert_called_once_with(dashboard.mqtt_closer)
     second.start.assert_called_once_with()
     assert dashboard.mqtt is second
+
+
+def test_replaced_subscriber_status_is_dropped(dashboard: DashboardApp) -> None:
+    """A status the closed subscriber posts after its replacement is dropped.
+
+    Its network thread can be past its stopping check when it is closed.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    dashboard.mqtt = MagicMock()
+
+    with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
+        dashboard.save_settings({"mqtt": {"host": "one"}})
+        dashboard.save_settings({"mqtt": {"host": "two"}})
+    old_status, new_status = (args.args[1] for args in subscriber_type.call_args_list)
+    dashboard.window.invoke.reset_mock()
+
+    new_status("Connecting...")
+    old_status("Connected to Agent Fleet")
+
+    assert dashboard.window.invoke.call_args_list == [
+        call("status-update", "Connecting...")
+    ]
+    assert dashboard.last_status == "Connecting..."
 
 
 def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None:
@@ -582,7 +607,7 @@ def test_credential_change_reconnects(dashboard: DashboardApp) -> None:
         result = dashboard.save_settings({"mqtt": {"username": "dashboard"}})
 
     assert result["reconnecting"] is True
-    old_subscriber.stop.assert_called_once_with()
+    old_subscriber.close.assert_called_once_with(dashboard.mqtt_closer)
     subscriber_type.return_value.start.assert_called_once_with()
 
 

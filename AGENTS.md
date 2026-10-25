@@ -304,7 +304,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   settings modals are `<dialog>` elements opened with `showModal()`, so the
   browser contains focus and Escape closes them; closing returns focus to the
   control that opened it, or to the agent grid when that control's card was
-  evicted meanwhile. Each card is a `group` named by agent and session, and its
+  evicted, hidden, or filtered out meanwhile, since a hidden control can't
+  take focus. Each card is a `group` named by agent and session, and its
   history and menu buttons name the agent, workspace, and session, so
   concurrent sessions stay distinguishable. Search, sort, filter, and
   theme controls carry `aria-label`s, the status line is `role="status"` with

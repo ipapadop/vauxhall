@@ -62,6 +62,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- **Hide until next event** moves keyboard focus to the card grid. Before,
+  focus went back to the hidden card's ⋮ button, which can't take focus, so
+  it was lost.
 - A card that shows `No relay acknowledged the prompt` now shows the
   outcome when the relay's acknowledgment arrives later, unless another
   prompt was sent from the card since. Before, an acknowledgment after the

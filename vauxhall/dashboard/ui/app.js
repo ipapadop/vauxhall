@@ -67,12 +67,15 @@ async function init() {
     // Tracks which card a dialog acts on and the control that opened it. The
     // close button, the backdrop, and Escape all end in the dialog's close
     // event, so the target is reset and focus returned in one place. An opener
-    // evicted while the dialog was open hands focus to the grid.
+    // evicted while the dialog was open, or in a card that is now hidden or
+    // filtered out, hands focus to the grid: a hidden control can't take focus.
+    const canTakeFocus = (control) =>
+        control?.isConnected && control.closest('.agent-card')?.style.display !== 'none';
     const dialogTarget = (dialog) => {
         const target = { key: null, opener: null };
         dialog?.addEventListener('close', () => {
             target.key = null;
-            (target.opener?.isConnected ? target.opener : grid).focus?.();
+            (canTakeFocus(target.opener) ? target.opener : grid).focus?.();
             target.opener = null;
         });
         return target;

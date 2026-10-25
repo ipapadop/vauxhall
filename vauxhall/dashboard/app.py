@@ -5,6 +5,7 @@
 
 import logging
 import os
+import subprocess
 import sys
 from collections import deque
 from collections.abc import Callable, MutableMapping
@@ -29,6 +30,7 @@ from vauxhall.dashboard import USER_CHROMIUM_FLAGS
 from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.graphics import set_graphics_backend
+from vauxhall.dashboard.hook_install import HookInstallRunner
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
 from vauxhall.dashboard.settings_editor import (
@@ -41,11 +43,13 @@ from vauxhall.dashboard.settings_editor import (
     hook_config_type,
 )
 from vauxhall.dashboard.ui_state import (
+    INSTALL_DIRECTORY_KEY,
     load_ui_state,
     update_ui_state,
     visible_position,
     window_geometry,
 )
+from vauxhall.hooks.agents import detect_agents
 
 logger = get_logger(__name__)
 
@@ -116,6 +120,7 @@ class DashboardApp:
         self,
         app: Pyloid,
         queue_to_ui: Callable[[WindowEvent], WindowEvent] = queue_to_ui_thread,
+        launch_installer: Callable[..., Any] = subprocess.Popen,
     ) -> None:
         """Initialize the Dashboard application.
 
@@ -125,6 +130,8 @@ class DashboardApp:
             app: The Pyloid application instance.
             queue_to_ui: Wraps the window-event handler in a poster that runs
                 it on the UI thread without waiting.
+            launch_installer: Starts the hook installer's child process, with
+                ``subprocess.Popen``'s arguments.
         """
         self.app = app
         self.window: Any = None
@@ -138,7 +145,9 @@ class DashboardApp:
             on_save_settings=self.save_settings,
             on_notify=self._notify,
             on_send_prompt=self.send_prompt,
+            hook_install=self,
         )
+        self.install_runner = HookInstallRunner(self._post, launch=launch_installer)
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
         )
@@ -330,6 +339,39 @@ class DashboardApp:
         self._subscriber_generation += 1
         return partial(self.on_status, generation=self._subscriber_generation)
 
+    def select_install_directory(self) -> dict[str, Any]:
+        """Ask for a directory to install hooks into and detect its agents.
+
+        Runs on the UI thread, like the other view-state writes. The picker
+        opens at the last chosen directory, or at home once that is gone.
+
+        Returns:
+            ``ok`` with the chosen ``path`` and its ``agents``, or ``ok``
+            false alone when cancelled.
+        """
+        last = load_ui_state().get(INSTALL_DIRECTORY_KEY)
+        start = last if last and Path(last).is_dir() else str(Path.home())
+        chosen = self.app.select_directory_dialog(dir=start)
+        if not chosen:
+            return {"ok": False}
+        try:
+            update_ui_state({INSTALL_DIRECTORY_KEY: chosen})
+        except OSError:
+            logger.exception("Could not remember the install directory")
+        return {"ok": True, "path": chosen, "agents": detect_agents(Path(chosen))}
+
+    def install_hooks(self, directory: Path, agents: list[str]) -> dict[str, Any]:
+        """Start installing some agents' hooks into a directory.
+
+        Args:
+            directory: The checked directory.
+            agents: Known, distinct agent keys.
+
+        Returns:
+            ``ok``, or ``ok`` false and an ``error``.
+        """
+        return self.install_runner.start(directory, agents)
+
     def save_settings(
         self, changes: dict[str, dict[str, object]], *, update_hooks: bool = False
     ) -> dict[str, Any]:
@@ -503,6 +545,7 @@ class DashboardApp:
         finally:
             # The window is gone once the UI loop exits; hold any late updates.
             self.ipc.is_ready = False
+            self.install_runner.close(SHUTDOWN_CLOSE_SECONDS)
             self._save_window_state(saved_window)
             self.mqtt.close(self.mqtt_closer)
             if not self.mqtt_closer.finish(SHUTDOWN_CLOSE_SECONDS):

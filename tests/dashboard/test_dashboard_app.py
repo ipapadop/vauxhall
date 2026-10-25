@@ -3,8 +3,11 @@
 
 """Tests for Vauxhall Dashboard components."""
 
+import threading
+import time
 import unittest
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 from unittest.mock import ANY, MagicMock, call, patch
 
@@ -22,6 +25,11 @@ sys_modules_patch = patch.dict(
 )
 sys_modules_patch.start()
 
+from tests.dashboard.fake_installer import (  # noqa: E402
+    WAIT_SECONDS,
+    FakeProcess,
+    Launcher,
+)
 from vauxhall.dashboard.app import (  # noqa: E402
     ICON_FILE,
     SHUTDOWN_CLOSE_SECONDS,
@@ -29,6 +37,7 @@ from vauxhall.dashboard.app import (  # noqa: E402
     WindowEvent,
     _set_chromium_flags,
 )
+from vauxhall.dashboard.ui_state import load_ui_state, update_ui_state  # noqa: E402
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
@@ -626,3 +635,116 @@ def test_set_chromium_flags_drops_pyloids_certificate_overrides(
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_select_install_directory_opens_at_the_saved_directory(
+    tmp_path: Path,
+) -> None:
+    """The picker starts where hooks were last installed."""
+    update_ui_state({"install_directory": str(tmp_path)})
+    app = MagicMock()
+    app.select_directory_dialog.return_value = None
+
+    DashboardApp(app).select_install_directory()
+
+    app.select_directory_dialog.assert_called_once_with(dir=str(tmp_path))
+
+
+def test_select_install_directory_falls_back_to_home(tmp_path: Path) -> None:
+    """A remembered directory that is gone opens the picker at home."""
+    update_ui_state({"install_directory": str(tmp_path / "gone")})
+    app = MagicMock()
+    app.select_directory_dialog.return_value = None
+
+    DashboardApp(app).select_install_directory()
+
+    app.select_directory_dialog.assert_called_once_with(dir=str(Path.home()))
+
+
+def test_select_install_directory_cancel(tmp_path: Path) -> None:
+    """Cancelling the picker changes nothing."""
+    update_ui_state({"install_directory": str(tmp_path)})
+    app = MagicMock()
+    app.select_directory_dialog.return_value = None
+
+    assert DashboardApp(app).select_install_directory() == {"ok": False}
+    assert load_ui_state()["install_directory"] == str(tmp_path)
+
+
+def test_select_install_directory_saves_and_detects(tmp_path: Path) -> None:
+    """A chosen directory is remembered and its agents detected."""
+    (tmp_path / ".claude").mkdir()
+    app = MagicMock()
+    app.select_directory_dialog.return_value = str(tmp_path)
+
+    result = DashboardApp(app).select_install_directory()
+
+    assert result["ok"] is True
+    assert result["path"] == str(tmp_path)
+    assert [entry["detected"] for entry in result["agents"]] == [True, False, False]
+    assert load_ui_state()["install_directory"] == str(tmp_path)
+
+
+def test_select_install_directory_survives_a_failed_save(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Not remembering the directory doesn't stop the install."""
+    app = MagicMock()
+    app.select_directory_dialog.return_value = str(tmp_path)
+
+    with patch(
+        "vauxhall.dashboard.app.update_ui_state", side_effect=OSError("read-only")
+    ):
+        result = DashboardApp(app).select_install_directory()
+
+    assert result["ok"] is True
+    assert "Could not remember the install directory" in caplog.text
+
+
+def test_install_events_reach_a_ready_window(tmp_path: Path) -> None:
+    """Installer output goes through the outbox to the window, in order."""
+    launcher = Launcher(FakeProcess(["Installing\n"]))
+    dashboard = DashboardApp(
+        MagicMock(), queue_to_ui=run_now, launch_installer=launcher
+    )
+    dashboard.window = MagicMock()
+    dashboard.ipc.is_ready = True
+
+    assert dashboard.install_hooks(tmp_path, ["claude"]) == {"ok": True}
+    deadline = time.monotonic() + WAIT_SECONDS
+    while dashboard.window.invoke.call_count < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert dashboard.window.invoke.call_args_list == [
+        call("install-output", {"line": "Installing"}),
+        call("install-done", {"ok": True, "returncode": 0}),
+    ]
+    assert launcher.launches[0][1]["cwd"] == tmp_path
+
+
+@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
+def test_shutdown_stops_a_running_install(
+    mock_serve: MagicMock, tmp_path: Path
+) -> None:
+    """Closing the dashboard terminates an install still running.
+
+    Args:
+        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
+        tmp_path: Workspace for the install.
+    """
+    release = threading.Event()
+    process = FakeProcess(release=release)
+    app = MagicMock()
+    app.run.side_effect = RuntimeError("UI failed")
+    dashboard = DashboardApp(app, launch_installer=Launcher(process))
+    dashboard.install_hooks(tmp_path, ["claude"])
+
+    with (
+        patch("vauxhall.dashboard.app.DashboardSubscriber"),
+        pytest.raises(RuntimeError, match="UI failed"),
+    ):
+        dashboard.run()
+    release.set()
+
+    mock_serve.assert_called_once()
+    assert process.calls[0] == "terminate"

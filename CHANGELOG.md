@@ -70,6 +70,11 @@ The first release, planned as 0.1.0. It is alpha software; see
   the agent settings. Before, each run replaced it with the previous run's
   output, losing the original settings. A copy that fails partway no
   longer leaves a partial backup behind.
+- A prompt sent to a session whose tmux pane is in copy mode is now
+  submitted whole. Copy mode took the relay's Enter for itself and dropped
+  the paste's brackets, so a multi-line prompt's first line was submitted
+  alone and the rest never was, while the dashboard reported it delivered.
+  The relay now leaves the pane's mode first (tmux 3.1a or later).
 - Prompt and acknowledgment messages with a `schema_version` other than the
   integer 1 (such as `true` or `1.0`), or a message ID that holds control
   characters, are now dropped like other invalid messages, as telemetry

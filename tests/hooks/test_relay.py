@@ -111,15 +111,19 @@ def test_deliver_pastes_the_text_and_submits() -> None:
     assert result is None
     assert names(tmux) == [
         "display-message",
+        "copy-mode",
         "load-buffer",
         "paste-buffer",
+        "copy-mode",
         "send-keys",
     ]
     assert all(
         command[:3] == ["tmux", "-S", TARGET.socket] for command in tmux.commands
     )
-    _, load, paste, keys = tmux.commands
-    assert tmux.inputs[1] == TEXT.encode()
+    _, leave, load, paste, _, keys = tmux.commands
+    # A pane mode would take Enter and drop the paste's brackets.
+    assert leave[3:] == ["copy-mode", "-q", "-t", "%3"]
+    assert tmux.inputs[2] == TEXT.encode()
     assert "-p" in paste
     assert paste[paste.index("-t") + 1] == "%3"
     assert paste[paste.index("-b") + 1] == load[load.index("-b") + 1]
@@ -170,7 +174,7 @@ def test_deliver_types_into_the_agent_the_session_started_with() -> None:
 
     assert relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None) is None
     assert names(tmux)[0] == "display-message"
-    assert names(tmux)[1:] == ["load-buffer", "paste-buffer", "send-keys"]
+    assert "send-keys" in names(tmux)
 
 
 def test_deliver_skips_the_command_check_for_an_older_record() -> None:
@@ -224,6 +228,24 @@ def test_deliver_reports_a_missing_pane() -> None:
     assert relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None) == (
         "pane-unavailable"
     )
+
+
+def test_deliver_goes_ahead_when_tmux_cannot_leave_a_mode(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A tmux older than 3.1a has no ``copy-mode -q``, which isn't fatal.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    tmux = FakeTmux(fail_on=frozenset({"copy-mode"}))
+
+    with caplog.at_level("DEBUG"):
+        result = relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None)
+
+    assert result is None
+    assert names(tmux)[-1] == "send-keys"
+    assert "Could not leave the mode of pane %3" in caplog.text
 
 
 @pytest.mark.parametrize("failing", ["paste-buffer", "send-keys"])

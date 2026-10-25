@@ -45,8 +45,8 @@ def test_resolve_session_id_uses_stable_fallback_order(
 @pytest.mark.parametrize(
     ("input_data", "environment", "prefix"),
     [
-        ({"session_id": "x" * 300}, {}, "native:"),
-        ({}, {"VAUXHALL_SESSION_ID": "x" * 300}, "environment:"),
+        ({"session_id": "x" * 300}, {}, "native"),
+        ({}, {"VAUXHALL_SESSION_ID": "x" * 300}, "environment"),
     ],
 )
 def test_resolve_session_id_hashes_an_identifier_too_long_to_publish(
@@ -69,7 +69,7 @@ def test_resolve_session_id_hashes_an_identifier_too_long_to_publish(
 
     assert session_id is not None
     assert len(session_id) <= MAX_SESSION_ID_LENGTH
-    assert session_id.startswith(prefix + "sha256:")
+    assert session_id.startswith(prefix + "-sha256:")
     assert session_id == resolve_session_id(input_data, environment)
     assert other != session_id
 
@@ -79,3 +79,20 @@ def test_resolve_session_id_keeps_an_identifier_at_the_limit() -> None:
     native_id = "x" * (MAX_SESSION_ID_LENGTH - len("native:"))
 
     assert resolve_session_id({"session_id": native_id}, {}) == f"native:{native_id}"
+
+
+def test_resolve_session_id_hashes_a_long_identifier_with_a_lone_surrogate() -> None:
+    """JSON hook input can decode to a lone surrogate, which UTF-8 rejects."""
+    session_id = resolve_session_id({"session_id": "\ud800" + "x" * 300}, {})
+
+    assert session_id is not None
+    assert session_id.startswith("native-sha256:")
+
+
+def test_resolve_session_id_digest_differs_from_a_short_identifier() -> None:
+    """A short ID that spells a digest can't share a long ID's session."""
+    long_id = resolve_session_id({"session_id": "x" * 300}, {})
+    assert long_id is not None
+    digest = long_id.rsplit(":", 1)[1]
+
+    assert resolve_session_id({"session_id": f"sha256:{digest}"}, {}) != long_id

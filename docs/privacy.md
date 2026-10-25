@@ -73,8 +73,10 @@ except Gemini CLI's `args`, which is left out.
 > from `.gemini/settings.json`.
 
 Never published by any integration: tool output (`tool_response`), error
-details and messages from the agent, file contents (except through Gemini
-`args`), transcripts, and environment variables.
+details and messages from the agent, transcripts, and environment variables.
+File contents are published only through Gemini `args` and through command
+text that holds them, such as a heredoc that writes a file (its first 4,096
+characters when longer).
 
 ## Controlling what is sent
 

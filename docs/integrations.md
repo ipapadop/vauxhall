@@ -106,11 +106,12 @@ The built-in hooks take the session ID from the agent's native session ID, then
 a hash of the transcript path, then the `VAUXHALL_SESSION_ID` environment
 variable. If none is available, the hook skips the event. An ID that would
 exceed 256 characters is replaced by its SHA-256 hash, keeping the source
-prefix (`native:sha256:<hex>`), so it stays stable and distinct.
+prefix (`native-sha256:<hex>`), so it stays stable and distinct.
 
 The built-in hooks also shorten any `details` string over 4,096 characters,
-such as a long prompt or command, to its start and an ellipsis, so the event
-is still published. Gemini CLI's `args` is the exception: an input too long
+such as a long prompt or command, to its first 4,095 characters and an
+ellipsis, so the event is still published. A long shell command, such as a
+heredoc that writes a file, therefore publishes its start. Gemini CLI's `args` is the exception: an input too long
 to publish is left out, because its start could be a file's contents.
 
 The dashboard drops messages larger than `max_payload_bytes` (65,536 bytes by
@@ -434,8 +435,8 @@ reason values are not published.
 
 - `BeforeTool` publishes the tool input as JSON in `args`, and a `cmd` value:
   the command for `run_shell_command`, or `file_path` for `read_file`,
-  `write_file`, and `replace`. Events whose `args` exceed 4,096
-  characters fail validation and are not published.
+  `write_file`, and `replace`. When the JSON exceeds 4,096 characters, `args`
+  is left out and the event is published without it.
 - `tool_response` content is never published.
 - `AfterModel` text chunks are assembled in a private temporary file and
   published when that model response ends, including responses before tool

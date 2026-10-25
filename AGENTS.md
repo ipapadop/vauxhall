@@ -91,8 +91,11 @@ sequenceDiagram
    `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
    `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and
    resolves the session ID from the agent's own session ID, a hash of the
-   transcript path, or `VAUXHALL_SESSION_ID`. Without a session ID the event is
-   skipped.
+   transcript path, or `VAUXHALL_SESSION_ID`; an ID that would exceed 256
+   characters becomes `<source>-sha256:<hex>`. Without a session ID the event
+   is skipped. `publish_telemetry` cuts each `details` string over 4,096
+   characters to fit, so the event isn't rejected; Gemini's `args`, which can
+   hold file contents, is left out instead.
 3. **The client publishes it.** `publish()` validates each payload against
    schema version 1, publishes the hook's events at QoS 1 over one connection
    to `vauxhall/agents/<agent_name>/activity`, and waits up to one second in

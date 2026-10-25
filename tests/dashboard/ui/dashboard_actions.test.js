@@ -255,6 +255,21 @@ test('hiding a card removes it from view until its agent reports again', async (
     assert.equal(card.dataset.hidden, undefined);
 });
 
+test('hiding a card from its menu hands focus to the grid, not the hidden menu button', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    const menuButton = agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon');
+    const grid = document.getElementById('agent-grid');
+    const focused = [];
+    menuButton.focus = () => focused.push('menu');
+    grid.focus = () => focused.push('grid');
+    menuButton.click();
+
+    document.getElementById('card-menu-hide').click();
+
+    assert.deepEqual(focused, ['grid']);
+});
+
 test('the close button hides the card menu and returns focus to its opener', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });

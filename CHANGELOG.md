@@ -104,6 +104,9 @@ The first release, planned as 0.1.0. It is alpha software; see
   could drop part of a message, concurrent Codex hooks could publish the same
   interim message twice, and two `SessionStart` hooks for one session could
   fail to record its tmux pane.
+- A streamed Claude Code or Gemini CLI message chunk holding a lone
+  surrogate, such as half of an emoji, is no longer left out of the
+  published message. Its text couldn't be stored as UTF-8.
 - A dashboard window closed narrower than 320 pixels, or wider than 16,384,
   now reopens where it was. Before, its width was not saved, and the window
   reopened at the default position and size. A window size outside these

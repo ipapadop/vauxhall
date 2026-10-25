@@ -49,7 +49,10 @@ def write_atomically(path: Path, text: str) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW
     descriptor = os.open(temporary, flags, 0o600)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        # Hook input is JSON, which can carry a lone surrogate.
+        with os.fdopen(
+            descriptor, "w", encoding="utf-8", errors="surrogatepass"
+        ) as handle:
             handle.write(text)
         temporary.replace(path)
     except BaseException:

@@ -240,6 +240,19 @@ def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> N
     assert not list(tmp_path.rglob("*.chunk"))
 
 
+def test_collect_message_chunks_keeps_a_lone_surrogate(tmp_path: Path) -> None:
+    """JSON hook input can carry a lone surrogate, which UTF-8 rejects.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
+        common.collect_message_chunk("claude", ["session"], "a\ud800", final=False)
+        message = common.collect_message_chunk("claude", ["session"], "b", final=True)
+
+    assert message == "a\ud800b"
+
+
 def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
     """A long reply fits the telemetry detail string limit.
 

@@ -293,7 +293,9 @@ def collect_message_chunk(
                 # A long response has many chunks; past the limit, only remove them.
                 if length <= MAX_DETAIL_STRING_LENGTH:
                     source = os.open(claimed, os.O_RDONLY | NOFOLLOW)
-                    with os.fdopen(source, encoding="utf-8") as chunk:
+                    with os.fdopen(
+                        source, encoding="utf-8", errors="surrogatepass"
+                    ) as chunk:
                         parts.append(chunk.read())
                     length += len(parts[-1])
             finally:

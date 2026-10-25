@@ -180,3 +180,31 @@ test('a late acknowledgment of an older prompt does not replace the newer prompt
     handleAck({ id: 'new-2', status: 'delivered' });
     assert.equal(status(card), 'Prompt delivered');
 });
+
+test('an acknowledgment after the timeout replaces the timeout message', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const card = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'late-1' }).ipc, card, 'hello');
+    t.mock.timers.tick(ACK_TIMEOUT_MS);
+
+    handleAck({ id: 'late-1', status: 'delivered' });
+
+    assert.equal(status(card), 'Prompt delivered');
+});
+
+test('timed-out prompts are remembered only up to a limit', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const cards = [];
+    for (let index = 0; index < 25; index++) {
+        const card = makeCard();
+        cards.push(card);
+        await sendPrompt(bridge({ ok: true, id: `expired-${index}` }).ipc, card, 'hello');
+        t.mock.timers.tick(ACK_TIMEOUT_MS);
+    }
+
+    handleAck({ id: 'expired-0', status: 'delivered' });
+    handleAck({ id: 'expired-24', status: 'delivered' });
+
+    assert.equal(status(cards[0]), 'No relay acknowledged the prompt');
+    assert.equal(status(cards[24]), 'Prompt delivered');
+});

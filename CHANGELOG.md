@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A card that shows `No relay acknowledged the prompt` now shows the
+  outcome when the relay's acknowledgment arrives later. Before, an
+  acknowledgment after the 10-second wait was ignored, so a delivered prompt
+  stayed reported as unacknowledged.
 - A failed `vauxhall-hook-install`, for example when pip can't reach the
   package, no longer leaves `.vauxhall-venv` as an environment that lacks
   Vauxhall, which made every registered hook fail. The previous environment

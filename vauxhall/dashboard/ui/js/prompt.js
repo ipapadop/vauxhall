@@ -16,12 +16,25 @@ const FAILURE_REASONS = {
     'pane-unavailable': 'its tmux pane is no longer available',
     'delivery-failed': 'tmux could not type it in',
 };
-const MAX_UNMATCHED_ACKS = 20;
+const MAX_REMEMBERED = 20;
 
 /** Prompts waiting for a relay: message id -> the card and its timeout. */
 const pending = new Map();
+/** Timed-out prompts whose late acknowledgment can still be shown: message id -> card. */
+const expired = new Map();
 /** Acknowledgments that beat the bridge's reply carrying their message id. */
 const unmatched = new Map();
+
+/**
+ * Adds an entry to a map, dropping the oldest once it holds more than MAX_REMEMBERED.
+ * @param {Map<string, any>} map - The map to add to.
+ * @param {string} key - The message id.
+ * @param {any} value - The value to keep.
+ */
+function remember(map, key, value) {
+    map.set(key, value);
+    if (map.size > MAX_REMEMBERED) map.delete(map.keys().next().value);
+}
 
 /**
  * Shows the delivery state of a prompt on a card's live region, unless a newer
@@ -77,6 +90,7 @@ export async function sendPrompt(dashboardIpc, card, text) {
     setCardStatus(card, result.id, 'Prompt sent, waiting for the relay…');
     const timer = setTimeout(() => {
         pending.delete(result.id);
+        remember(expired, result.id, card);
         setCardStatus(card, result.id, 'No relay acknowledged the prompt');
     }, ACK_TIMEOUT_MS);
     pending.set(result.id, { card, timer });
@@ -90,12 +104,17 @@ export async function sendPrompt(dashboardIpc, card, text) {
 export function handleAck(ack) {
     if (!ack || typeof ack.id !== 'string') return;
     const entry = pending.get(ack.id);
-    if (!entry) {
-        unmatched.set(ack.id, ack);
-        if (unmatched.size > MAX_UNMATCHED_ACKS) unmatched.delete(unmatched.keys().next().value);
+    if (entry) {
+        clearTimeout(entry.timer);
+        pending.delete(ack.id);
+        setCardStatus(entry.card, ack.id, describeAck(ack));
         return;
     }
-    clearTimeout(entry.timer);
-    pending.delete(ack.id);
-    setCardStatus(entry.card, ack.id, describeAck(ack));
+    const card = expired.get(ack.id);
+    if (card) {
+        expired.delete(ack.id);
+        setCardStatus(card, ack.id, describeAck(ack));
+        return;
+    }
+    remember(unmatched, ack.id, ack);
 }

@@ -218,6 +218,34 @@ def test_window_geometry_of_normal_window() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("size", "saved_size"),
+    [
+        ({"width": 200, "height": 150}, {"width": 320, "height": 320}),
+        ({"width": 20000, "height": 800}, {"width": 16384, "height": 800}),
+    ],
+)
+def test_out_of_range_window_size_keeps_position(
+    size: dict[str, int], saved_size: dict[str, int]
+) -> None:
+    """A window outside the size limits saves the nearest size and its position.
+
+    Args:
+        size: The window's current size.
+        saved_size: The size the case expects to be saved.
+    """
+    window = MagicMock()
+    window.is_maximized.return_value = False
+    window.get_size.return_value = size
+    window.get_position.return_value = {"x": 50, "y": 60}
+
+    update_ui_state({"window": window_geometry(window, {})})
+
+    saved = load_ui_state()["window"]
+    assert saved == {**saved_size, "x": 50, "y": 60, "maximized": False}
+    assert visible_position(saved, [SCREEN]) == (50, 60)
+
+
 def test_window_geometry_of_maximized_window_keeps_normal_size() -> None:
     """A maximized window keeps the previously saved normal size and position."""
     window = MagicMock()

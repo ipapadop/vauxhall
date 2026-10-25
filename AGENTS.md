@@ -418,8 +418,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `set_position` only when `visible_position` finds the top edge on a monitor's
   available area, and maximizes after showing the window. When the UI loop
   exits, it saves the size and position from Pyloid's public `get_size`,
-  `get_position`, and `is_maximized`. A maximized window keeps its previous
-  normal size, and a save failure is logged without blocking shutdown.
+  `get_position`, and `is_maximized`, clamping the size to the
+  `dashboard.width` and `dashboard.height` limits: loading drops an
+  out-of-range size, and `visible_position` needs the width, so a window
+  narrower than 320 pixels would otherwise lose its position. A maximized
+  window keeps its previous normal size, and a save failure is logged without
+  blocking shutdown.
 - **Card state**: `vauxhall.dashboard.card_state` reads and writes
   `~/.config/vauxhall/dashboard_cards.json` as `{"cards": [...]}`. Each entry
   keeps only `agent`, `workspace`, `session_id`, `state` (one of

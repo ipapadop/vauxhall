@@ -40,7 +40,7 @@ The dashboard's own UI server listens only on `127.0.0.1`.
 | --- | --- |
 | `agent` | `Claude Code`, `Codex`, or `Gemini CLI` |
 | `workspace` | The absolute path of the directory the agent runs in, which often includes your user name and project names |
-| `session_id` | The agent's own session ID, or a SHA-256 hash of its transcript path |
+| `session_id` | The agent's own session ID, or a SHA-256 hash of its transcript path; an ID over 256 characters is replaced by its SHA-256 hash |
 | `state` | One of the [supported states](integrations.md#supported-states) |
 
 The MQTT topic, `vauxhall/agents/<agent>/activity`, carries the agent name.
@@ -48,8 +48,8 @@ The MQTT topic, `vauxhall/agents/<agent>/activity`, carries the agent name.
 ## What each integration publishes
 
 Values that can hold text you or the agent wrote are in **bold**. Text fields
-are limited to 4,096 characters; longer assistant messages are cut off with an
-ellipsis.
+are limited to 4,096 characters; longer values are cut off with an ellipsis,
+except Gemini CLI's `args`, which is left out.
 
 | `details` field | Claude Code | Codex | Gemini CLI |
 | --- | --- | --- | --- |
@@ -66,11 +66,11 @@ ellipsis.
 > [!WARNING]
 > **Gemini CLI publishes the complete input of every tool call** in `args`.
 > For `write_file` that includes the file contents, and for `replace` the old
-> and new text, whenever the JSON fits in 4,096 characters (larger events fail
-> validation and aren't sent at all). Issue #3 tracks replacing this with an
-> allowlist. Until then, don't use the Gemini CLI hooks in workspaces that
-> hold secrets, or remove the `vauxhall-acting` (`BeforeTool`) handler from
-> `.gemini/settings.json`.
+> and new text, whenever the JSON fits in 4,096 characters (a larger input is
+> left out of the event rather than cut off). Issue #3 tracks replacing this
+> with an allowlist. Until then, don't use the Gemini CLI hooks in workspaces
+> that hold secrets, or remove the `vauxhall-acting` (`BeforeTool`) handler
+> from `.gemini/settings.json`.
 
 Never published by any integration: tool output (`tool_response`), error
 details and messages from the agent, file contents (except through Gemini

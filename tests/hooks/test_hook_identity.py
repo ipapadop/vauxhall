@@ -5,6 +5,7 @@
 
 import pytest
 
+from vauxhall.core.telemetry import MAX_SESSION_ID_LENGTH
 from vauxhall.hooks.identity import resolve_session_id
 
 
@@ -39,3 +40,42 @@ def test_resolve_session_id_uses_stable_fallback_order(
         expected: The result the case expects.
     """
     assert resolve_session_id(event, environment) == expected
+
+
+@pytest.mark.parametrize(
+    ("input_data", "environment", "prefix"),
+    [
+        ({"session_id": "x" * 300}, {}, "native:"),
+        ({}, {"VAUXHALL_SESSION_ID": "x" * 300}, "environment:"),
+    ],
+)
+def test_resolve_session_id_hashes_an_identifier_too_long_to_publish(
+    input_data: dict[str, str], environment: dict[str, str], prefix: str
+) -> None:
+    """An identifier over the telemetry limit becomes a stable digest.
+
+    Truncating it could give two sessions the same identity.
+
+    Args:
+        input_data: The case's hook event.
+        environment: The case's environment.
+        prefix: The source prefix the identity keeps.
+    """
+    session_id = resolve_session_id(input_data, environment)
+    other = resolve_session_id(
+        {key: value + "y" for key, value in input_data.items()},
+        {key: value + "y" for key, value in environment.items()},
+    )
+
+    assert session_id is not None
+    assert len(session_id) <= MAX_SESSION_ID_LENGTH
+    assert session_id.startswith(prefix + "sha256:")
+    assert session_id == resolve_session_id(input_data, environment)
+    assert other != session_id
+
+
+def test_resolve_session_id_keeps_an_identifier_at_the_limit() -> None:
+    """Only identifiers that would be rejected change."""
+    native_id = "x" * (MAX_SESSION_ID_LENGTH - len("native:"))
+
+    assert resolve_session_id({"session_id": native_id}, {}) == f"native:{native_id}"

@@ -62,6 +62,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A prompt, command, or other text over 4,096 characters no longer stops
+  hooks from publishing the event; it is cut off with an ellipsis, as
+  assistant messages already were. Gemini CLI's tool input (`args`) is left
+  out instead, so no file contents are sent that weren't before. A session ID
+  that would exceed 256 characters is replaced by its SHA-256 hash.
 - A TLS broker that accepts the connection but stalls the handshake no
   longer holds each hook for up to `mqtt.keepalive` seconds (60 by default).
   paho times the handshake with the keepalive, so hooks now connect with a

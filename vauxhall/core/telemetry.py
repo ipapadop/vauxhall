@@ -13,16 +13,17 @@ SUPPORTED_STATES = frozenset(
 _ALLOWED_FIELDS = frozenset(
     {"schema_version", "agent", "workspace", "session_id", "state", "env", "details"}
 )
+MAX_SESSION_ID_LENGTH: Final = 256
+MAX_DETAIL_STRING_LENGTH: Final = 4096
 _IDENTITY_FIELD_LIMITS = {
     "agent": 128,
     "workspace": 4096,
-    "session_id": 256,
+    "session_id": MAX_SESSION_ID_LENGTH,
     "state": 32,
     "env": 16,
 }
 _MAX_DETAIL_COUNT = 16
 _MAX_DETAIL_KEY_LENGTH = 64
-_MAX_DETAIL_STRING_LENGTH = 4096
 _NUMERIC_DETAIL_FIELDS = frozenset({"tokens", "duration"})
 
 
@@ -41,7 +42,7 @@ def _is_valid_details(details: object) -> bool:
         if not isinstance(key, str) or len(key) > _MAX_DETAIL_KEY_LENGTH:
             return False
         if isinstance(value, str):
-            if len(value) > _MAX_DETAIL_STRING_LENGTH:
+            if len(value) > MAX_DETAIL_STRING_LENGTH:
                 return False
         elif not isinstance(value, (int, float, bool)) and value is not None:
             return False

@@ -17,6 +17,7 @@ from typing import Any
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
+from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
 from vauxhall.hooks.files import remove_old_files
 from vauxhall.hooks.identity import resolve_session_id
 from vauxhall.hooks.panes import foreground_command, forget_pane, record_pane
@@ -34,7 +35,6 @@ _SESSION_START_STATUSES = {
     "fork": "Session forked",
 }
 _COMPACTION_TRIGGERS = ("manual", "auto")
-_MAX_MESSAGE_LENGTH = 4096
 # Text from a response that never finished is swept once it cannot belong to a
 # live turn, because only a final chunk removes its own file.
 _MESSAGE_MAX_AGE_SECONDS = 86400
@@ -125,6 +125,20 @@ def prompt_submit_telemetry(input_data: dict[str, Any]) -> Telemetry:
     return "Thinking", {"prompt": input_data.get("prompt", "Processing...")}
 
 
+def truncate_text(value: str) -> str:
+    """Shorten text to the telemetry detail limit, ending it with an ellipsis.
+
+    Args:
+        value: The text to bound.
+
+    Returns:
+        The text, or its start and an ellipsis when it exceeds the limit.
+    """
+    if len(value) > MAX_DETAIL_STRING_LENGTH:
+        return value[: MAX_DETAIL_STRING_LENGTH - 1] + "…"
+    return value
+
+
 def message_text(value: object) -> str | None:
     """Return nonempty assistant text within the telemetry detail limit.
 
@@ -137,9 +151,7 @@ def message_text(value: object) -> str | None:
     """
     if not isinstance(value, str) or not value.strip():
         return None
-    if len(value) > _MAX_MESSAGE_LENGTH:
-        return value[: _MAX_MESSAGE_LENGTH - 1] + "…"
-    return value
+    return truncate_text(value)
 
 
 def private_directory(name: str) -> Path:
@@ -611,7 +623,11 @@ def publish_telemetry(
                 "workspace": workspace,
                 "session_id": session_id,
                 "state": state,
-                "details": details,
+                # A value over the schema's limit would drop the whole event.
+                "details": {
+                    key: truncate_text(value) if isinstance(value, str) else value
+                    for key, value in details.items()
+                },
             }
             for state, details in events
         ]

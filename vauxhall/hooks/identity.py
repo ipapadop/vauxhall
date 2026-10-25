@@ -8,6 +8,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from vauxhall.core.telemetry import MAX_SESSION_ID_LENGTH
+
 
 def _non_empty_string(value: object) -> str | None:
     """Return a stripped non-empty string.
@@ -21,6 +23,25 @@ def _non_empty_string(value: object) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip()
+
+
+def _publishable(source: str, identifier: str) -> str:
+    """Prefix an identifier with its source, hashing it if too long to publish.
+
+    Truncating instead could give two sessions the same identity.
+
+    Args:
+        source: The source the identifier came from.
+        identifier: The identifier.
+
+    Returns:
+        ``<source>:<identifier>``, or ``<source>:sha256:<digest>`` when that
+        exceeds the telemetry limit.
+    """
+    session_id = f"{source}:{identifier}"
+    if len(session_id) <= MAX_SESSION_ID_LENGTH:
+        return session_id
+    return f"{source}:sha256:{hashlib.sha256(identifier.encode()).hexdigest()}"
 
 
 def resolve_session_id(
@@ -40,7 +61,7 @@ def resolve_session_id(
     """
     native_id = _non_empty_string(input_data.get("session_id"))
     if native_id is not None:
-        return f"native:{native_id}"
+        return _publishable("native", native_id)
     transcript_path = _non_empty_string(input_data.get("transcript_path"))
     if transcript_path is not None:
         digest = hashlib.sha256(transcript_path.encode()).hexdigest()
@@ -48,5 +69,5 @@ def resolve_session_id(
     source = os.environ if environment is None else environment
     configured_id = _non_empty_string(source.get("VAUXHALL_SESSION_ID"))
     if configured_id is not None:
-        return f"environment:{configured_id}"
+        return _publishable("environment", configured_id)
     return None

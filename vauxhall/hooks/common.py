@@ -181,6 +181,8 @@ def private_directory(name: str) -> Path:
         private = private and info.st_uid == os.getuid() and not info.st_mode & 0o077
     if not private:
         message = f"{directory} is not a private directory"
+        # Callers treat OSError as "no state", so say why it is missing.
+        logger.warning("%s; remove it to restore hook state", message)
         raise OSError(message)
     return directory
 

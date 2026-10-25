@@ -129,12 +129,13 @@ def test_record_tool_start_creates_an_owner_only_directory(tmp_path: Path) -> No
     "per account",
 )
 def test_tool_timing_ignores_a_directory_another_account_could_reach(
-    tmp_path: Path,
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A timing directory others can write to is neither written nor read.
 
     Args:
         tmp_path: Pytest temporary directory.
+        caplog: Pytest log capture fixture.
     """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         common.record_tool_start("test", IDENTITY)
@@ -147,6 +148,7 @@ def test_tool_timing_ignores_a_directory_another_account_could_reach(
 
     assert duration is None
     assert list(spoofed.parent.iterdir()) == [spoofed]
+    assert "is not a private directory" in caplog.text
 
 
 def test_record_tool_start_writes_nothing_through_a_planted_symlink(

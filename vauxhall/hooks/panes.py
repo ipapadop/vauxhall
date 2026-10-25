@@ -20,7 +20,10 @@ from vauxhall.hooks.files import remove_old_files
 
 _PANE_PATTERN = re.compile(r"%\d+")
 _MAX_AGE_SECONDS = 30 * 24 * 60 * 60
-TMUX_TIMEOUT_SECONDS = 1
+# Per command, for the hooks: SessionStart runs two, tmux and ps.
+TMUX_TIMEOUT_SECONDS = 1.0
+
+Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
 
 
 @dataclass(frozen=True)
@@ -32,16 +35,16 @@ class PaneTarget:
         socket: Path of the tmux server's socket, or ``None`` for the default.
         server_pid: Process ID of the tmux server the pane belonged to, used to
             tell that pane from an unrelated one after the server restarts.
-        command: The pane's foreground command when the session started, such
-            as ``claude`` or ``node``, used to tell the agent from the shell
-            left behind when it exits without ending its session; ``None``
-            when unknown.
+        process_group: The pane terminal's foreground process group when the
+            session started, the agent's own, used to tell the agent from
+            the shell it leaves behind, or from another program started in
+            the pane; ``None`` when unknown.
     """
 
     pane: str
     socket: str | None
     server_pid: int | None
-    command: str | None = None
+    process_group: int | None = None
 
 
 def panes_directory() -> Path:
@@ -91,19 +94,106 @@ def _server_details(tmux: str) -> tuple[str | None, int | None]:
     return parts[0], int(parts[1]) if parts[1].isdecimal() else None
 
 
-def foreground_command(
-    environment: Mapping[str, str] | None = None,
-    run: Callable[..., "subprocess.CompletedProcess[bytes]"] = subprocess.run,
-) -> str | None:
-    """Return the name of the command running in the foreground of this pane.
+def run_tmux(
+    socket: str | None,
+    *arguments: str,
+    data: bytes | None = None,
+    run: Runner = subprocess.run,
+    timeout: float = TMUX_TIMEOUT_SECONDS,
+) -> "subprocess.CompletedProcess[bytes]":
+    """Run one tmux command against a tmux server.
+
+    Args:
+        socket: The server's socket path, or ``None`` for the default server.
+        *arguments: The tmux command and its arguments.
+        data: Text for the command's standard input.
+        run: Function that runs the command, ``subprocess.run`` by default.
+        timeout: Seconds to wait for the command.
+
+    Returns:
+        The completed process.
+
+    Raises:
+        OSError: If tmux can't be run.
+        subprocess.SubprocessError: If tmux fails or times out.
+    """
+    command = ["tmux", "-S", socket] if socket else ["tmux"]
+    return run(
+        [*command, *arguments],
+        input=data,
+        capture_output=True,
+        timeout=timeout,
+        check=True,
+    )
+
+
+def pane_process_group(
+    socket: str | None,
+    pane: str,
+    run: Runner = subprocess.run,
+    timeout: float = TMUX_TIMEOUT_SECONDS,
+) -> tuple[str, int | None]:
+    """Return a pane's tmux server PID and its terminal's foreground process group.
+
+    tmux has no format for the process group, so ``ps`` reads it from the
+    pane's first process. A program the pane runs leads its own group, so a
+    restarted agent gets a new one even though its command name is the same.
+
+    Args:
+        socket: The tmux server's socket path, or ``None`` for the default.
+        pane: The pane identifier.
+        run: Function that runs tmux and ``ps``, ``subprocess.run`` by default.
+        timeout: Seconds to wait for each command.
+
+    Returns:
+        The server PID as tmux prints it, and the process group, ``None`` when
+        ``ps`` can't say.
+
+    Raises:
+        OSError: If tmux can't be run.
+        subprocess.SubprocessError: If tmux doesn't know the pane.
+    """
+    result = run_tmux(
+        socket,
+        "display-message",
+        "-p",
+        "-t",
+        pane,
+        "#{pid} #{pane_pid}",
+        run=run,
+        timeout=timeout,
+    )
+    server_pid, _, pane_pid = (
+        result.stdout.decode(errors="replace").strip().partition(" ")
+    )
+    if not pane_pid.isdecimal():
+        return server_pid, None
+    try:
+        group = run(
+            ["ps", "-o", "tpgid=", "-p", pane_pid],
+            capture_output=True,
+            timeout=timeout,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return server_pid, None
+    # ps prints -1 for a process without a controlling terminal.
+    value = group.stdout.decode(errors="replace").strip()
+    return server_pid, int(value) if value.isdecimal() else None
+
+
+def foreground_process_group(
+    environment: Mapping[str, str] | None = None, run: Runner = subprocess.run
+) -> int | None:
+    """Return the foreground process group of the pane this process runs in.
 
     Args:
         environment: Environment to read ``TMUX_PANE`` and ``TMUX`` from,
             defaulting to the process environment.
-        run: Function that runs tmux, ``subprocess.run`` by default.
+        run: Function that runs tmux and ``ps``, ``subprocess.run`` by default.
 
     Returns:
-        The command name, or ``None`` outside tmux or when tmux can't say.
+        The process group, or ``None`` outside tmux or when it can't be read.
     """
     source = os.environ if environment is None else environment
     pane = source.get("TMUX_PANE", "")
@@ -111,31 +201,16 @@ def foreground_command(
     if not _PANE_PATTERN.fullmatch(pane) or socket is None:
         return None
     try:
-        result = run(
-            [
-                "tmux",
-                "-S",
-                socket,
-                "display-message",
-                "-p",
-                "-t",
-                pane,
-                "#{pane_current_command}",
-            ],
-            capture_output=True,
-            timeout=TMUX_TIMEOUT_SECONDS,
-            check=True,
-        )
+        return pane_process_group(socket, pane, run)[1]
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.stdout.decode(errors="replace").strip() or None
 
 
 def record_pane(
     agent: str,
     session_id: str,
     environment: Mapping[str, str] | None = None,
-    command: str | None = None,
+    process_group: int | None = None,
 ) -> None:
     """Remember the tmux pane a session started in, or forget a stale one.
 
@@ -147,7 +222,8 @@ def record_pane(
         session_id: The session identity.
         environment: Environment to read ``TMUX_PANE`` and ``TMUX`` from,
             defaulting to the process environment.
-        command: The pane's foreground command, from ``foreground_command``.
+        process_group: The pane's foreground process group, from
+            ``foreground_process_group``.
 
     Raises:
         OSError: If the record cannot be written.
@@ -167,7 +243,7 @@ def record_pane(
                 "pane": pane,
                 "socket": socket,
                 "server_pid": server_pid,
-                "command": command,
+                "process_group": process_group,
             },
             handle,
         )
@@ -204,11 +280,11 @@ def load_pane(agent: str, session_id: str) -> PaneTarget | None:
         return None
     if not isinstance(data, dict):
         return None
-    pane, socket, server_pid, command = (
+    pane, socket, server_pid, process_group = (
         data.get("pane"),
         data.get("socket"),
         data.get("server_pid"),
-        data.get("command"),
+        data.get("process_group"),
     )
     if not isinstance(pane, str) or not _PANE_PATTERN.fullmatch(pane):
         return None
@@ -216,6 +292,10 @@ def load_pane(agent: str, session_id: str) -> PaneTarget | None:
         socket = None
     if isinstance(server_pid, bool) or not isinstance(server_pid, int):
         server_pid = None
-    if not isinstance(command, str) or not command:
-        command = None
-    return PaneTarget(pane, socket, server_pid, command)
+    if (
+        isinstance(process_group, bool)
+        or not isinstance(process_group, int)
+        or process_group <= 0
+    ):
+        process_group = None
+    return PaneTarget(pane, socket, server_pid, process_group)

@@ -30,19 +30,22 @@ from vauxhall.core.prompts import (
     parse_session_topic,
     session_topic,
 )
-from vauxhall.hooks.panes import PaneTarget, load_pane
+from vauxhall.hooks.panes import (
+    PaneTarget,
+    Runner,
+    load_pane,
+    pane_process_group,
+    run_tmux,
+)
 
 logger = get_logger(__name__)
 
+# Longer than the hooks' limit: a tmux command that times out may still have
+# run, and a paste reported as failed after it was typed would be resent.
 TMUX_TIMEOUT_SECONDS = 5.0
 # The agent's terminal input needs a moment to take the paste before Enter.
 SUBMIT_DELAY_SECONDS = 0.2
 _SEEN_LIMIT = 256
-# A recorded shell means a wrapper started the agent, so the shell left behind
-# when the agent exits passes the command check.
-_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh", "fish", "csh", "tcsh"})
-
-Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
 
 
 def _tmux(
@@ -54,20 +57,13 @@ def _tmux(
         target: The pane whose tmux server is addressed.
         *arguments: The tmux command and its arguments.
         data: Text for the command's standard input.
-        run: Function that runs the command, ``subprocess.run`` by default.
+        run: Function that runs the command.
 
     Returns:
         The completed process.
     """
-    command = ["tmux"]
-    if target.socket:
-        command += ["-S", target.socket]
-    return run(
-        [*command, *arguments],
-        input=data,
-        capture_output=True,
-        timeout=TMUX_TIMEOUT_SECONDS,
-        check=True,
+    return run_tmux(
+        target.socket, *arguments, data=data, run=run, timeout=TMUX_TIMEOUT_SECONDS
     )
 
 
@@ -113,41 +109,42 @@ def deliver_prompt(
         ``None`` on success, otherwise the failure reason to acknowledge.
     """
     try:
-        # The pane id alone can name an unrelated pane after tmux restarts.
-        pane = _tmux(
-            target,
-            "display-message",
-            "-p",
-            "-t",
-            target.pane,
-            "#{pid}\t#{pane_current_command}",
-            run=run,
+        server_pid, group = pane_process_group(
+            target.socket, target.pane, run, TMUX_TIMEOUT_SECONDS
         )
     except (OSError, subprocess.SubprocessError):
         return "pane-unavailable"
-    server_pid, _, command = (
-        pane.stdout.decode(errors="replace").strip().partition("\t")
-    )
+    # The pane id alone can name an unrelated pane after tmux restarts.
     if target.server_pid is not None and server_pid != str(target.server_pid):
         return "pane-unavailable"
-    # An agent that exited without ending its session leaves its shell in
-    # the pane, which would run the prompt as a command.
-    if target.command is not None and command != target.command:
-        return "pane-unavailable"
-    if target.command is None or target.command in _SHELLS:
+    # An agent that exited without ending its session leaves its shell in the
+    # pane, which would run the prompt as a command, and an agent started
+    # there since belongs to another session; each leads another group. A
+    # group not known then, or now, can't be shown to be the agent's.
+    if target.process_group is None:
         logger.warning(
-            "Cannot tell whether pane %s still runs the agent: its command at "
-            "session start was %s",
+            "Not typing into pane %s: its foreground process group at session "
+            "start is unknown; restart the session in tmux",
             target.pane,
-            target.command or "unknown",
         )
+        return "pane-unavailable"
+    if group != target.process_group:
+        return "pane-unavailable"
 
     buffer = "vauxhall-" + hashlib.sha256(message_id.encode()).hexdigest()[:16]
     try:
         _leave_pane_mode(target, run)
         _tmux(target, "load-buffer", "-b", buffer, "-", data=text.encode(), run=run)
         _tmux(
-            target, "paste-buffer", "-d", "-p", "-b", buffer, "-t", target.pane, run=run
+            target,
+            "paste-buffer",
+            "-d",
+            "-p",
+            "-b",
+            buffer,
+            "-t",
+            target.pane,
+            run=run,
         )
         sleep(SUBMIT_DELAY_SECONDS)
         # The user may have entered a mode during the wait.

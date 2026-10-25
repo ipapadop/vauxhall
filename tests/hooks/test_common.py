@@ -557,19 +557,19 @@ def test_publish_telemetry_records_the_pane_at_session_start(
     assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
 
 
-def test_track_pane_records_the_agent_command_at_session_start(
+def test_track_pane_records_the_agent_process_group_at_session_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The relay can later tell the agent from a shell left in its pane.
+    """The relay can later tell the agent from whatever else runs in its pane.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setenv("TMUX_PANE", "%5")
 
-    common.track_pane("SessionStart", "Claude", "native:one", lambda: "claude")
+    common.track_pane("SessionStart", "Claude", "native:one", lambda: 500)
 
-    assert load_pane("claude", "native:one") == PaneTarget("%5", None, None, "claude")
+    assert load_pane("claude", "native:one") == PaneTarget("%5", None, None, 500)
 
 
 def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:

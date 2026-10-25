@@ -143,8 +143,8 @@ handles the text like any other prompt you enter. See
 ### On disk
 
 The hooks also record, for each session started inside tmux, its tmux pane
-ID, tmux server socket path, server process ID, and the name of the command
-running in the pane's foreground (normally the agent, such as `claude`) in
+ID, tmux server socket path, server process ID, and the process group
+running in the pane's foreground (normally the agent's) in
 `~/.config/vauxhall/panes/`, readable only by you. These are used only by
 `vauxhall-relay` on the same machine and are never published. They are deleted
 when the session ends, and any left behind are removed after 30 days.

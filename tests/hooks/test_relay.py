@@ -3,6 +3,7 @@
 
 """Tests for the tmux prompt relay."""
 
+import json
 import subprocess
 from dataclasses import dataclass, field
 
@@ -19,12 +20,12 @@ from vauxhall.core.prompts import (
 from vauxhall.hooks import panes, relay
 from vauxhall.hooks.panes import PaneTarget
 
-TARGET = PaneTarget("%3", "/run/tmux-1000/default", 4242)
+TARGET = PaneTarget("%3", "/run/tmux-1000/default", 4242, 500)
 TEXT = "line one\nline two; rm -rf ~ #{pid} `x`"
 
 
 def command_name(command: list[str]) -> str:
-    """Return the tmux subcommand of a command line.
+    """Return the tmux subcommand of a command line, or ``ps``.
 
     Args:
         command: The command line, with or without ``-S <socket>``.
@@ -32,31 +33,32 @@ def command_name(command: list[str]) -> str:
     Returns:
         The subcommand name.
     """
+    if command[0] == "ps":
+        return "ps"
     return command[3] if command[1] == "-S" else command[1]
 
 
 class FakeTmux:
-    """Records tmux commands and answers like a healthy server."""
+    """Records tmux and ``ps`` commands and answers like a healthy server."""
 
     def __init__(
         self,
         server_pid: str = "4242",
         fail_on: frozenset[str] = frozenset(),
-        command: str = "claude",
+        group: str = "500",
     ) -> None:
         """Create the fake.
 
         Args:
             server_pid: What ``display-message`` reports as the server PID.
-            fail_on: The tmux subcommands that fail.
-            command: What ``display-message`` reports as the pane's
-                foreground command.
+            fail_on: The tmux subcommands, or ``ps``, that fail.
+            group: What ``ps`` reports as the pane's foreground process group.
         """
         self.commands: list[list[str]] = []
         self.inputs: list[bytes | None] = []
         self.server_pid = server_pid
         self.fail_on = fail_on
-        self.command = command
+        self.group = group
 
     def __call__(
         self, command: list[str], **options: object
@@ -81,11 +83,10 @@ class FakeTmux:
         name = command_name(command)
         if name in self.fail_on:
             raise subprocess.CalledProcessError(1, command)
-        stdout = (
-            f"{self.server_pid}\t{self.command}\n".encode()
-            if name == "display-message"
-            else b""
-        )
+        stdout = {
+            "display-message": f"{self.server_pid} 100\n".encode(),
+            "ps": f"{self.group:>7}\n".encode(),
+        }.get(name, b"")
         return subprocess.CompletedProcess(command, 0, stdout, b"")
 
 
@@ -111,19 +112,24 @@ def test_deliver_pastes_the_text_and_submits() -> None:
     assert result is None
     assert names(tmux) == [
         "display-message",
+        "ps",
         "copy-mode",
         "load-buffer",
         "paste-buffer",
         "copy-mode",
         "send-keys",
     ]
+    display, ps, leave, load, paste, _, keys = tmux.commands
     assert all(
-        command[:3] == ["tmux", "-S", TARGET.socket] for command in tmux.commands
+        command[:3] == ["tmux", "-S", TARGET.socket]
+        for command in tmux.commands
+        if command is not ps
     )
-    _, leave, load, paste, _, keys = tmux.commands
+    assert display[-1] == "#{pid} #{pane_pid}"
+    assert ps == ["ps", "-o", "tpgid=", "-p", "100"]
     # A pane mode would take Enter and drop the paste's brackets.
     assert leave[3:] == ["copy-mode", "-q", "-t", "%3"]
-    assert tmux.inputs[2] == TEXT.encode()
+    assert tmux.inputs[3] == TEXT.encode()
     assert "-p" in paste
     assert paste[paste.index("-t") + 1] == "%3"
     assert paste[paste.index("-b") + 1] == load[load.index("-b") + 1]
@@ -138,11 +144,13 @@ def test_deliver_uses_the_default_socket_when_none_was_recorded() -> None:
     tmux = FakeTmux()
 
     relay.deliver_prompt(
-        PaneTarget("%3", None, None), "id-1", "hi", tmux, lambda _: None
+        PaneTarget("%3", None, None, 500), "id-1", "hi", tmux, lambda _: None
     )
 
     assert all(
-        command[0] == "tmux" and "-S" not in command for command in tmux.commands
+        command[0] == "tmux" and "-S" not in command
+        for command in tmux.commands
+        if command[0] != "ps"
     )
 
 
@@ -153,72 +161,91 @@ def test_deliver_refuses_a_pane_of_a_restarted_server() -> None:
     result = relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None)
 
     assert result == "pane-unavailable"
-    assert names(tmux) == ["display-message"]
+    assert names(tmux) == ["display-message", "ps"]
 
 
-def test_deliver_refuses_a_pane_whose_agent_exited() -> None:
-    """An agent that died without ending its session leaves a shell behind."""
-    tmux = FakeTmux(command="bash")
-    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
+@pytest.mark.parametrize("group", ["600", "-1"])
+def test_deliver_refuses_a_pane_no_longer_running_the_agent(group: str) -> None:
+    """Another foreground group means a shell left behind or another program.
 
-    result = relay.deliver_prompt(target, "id-1", "rm -rf ~", tmux, lambda _: None)
-
-    assert result == "pane-unavailable"
-    assert names(tmux) == ["display-message"]
-
-
-def test_deliver_types_into_the_agent_the_session_started_with() -> None:
-    """The pane still runs the recorded command, so the prompt is delivered."""
-    tmux = FakeTmux(command="claude")
-    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
-
-    assert relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None) is None
-    assert names(tmux)[0] == "display-message"
-    assert "send-keys" in names(tmux)
-
-
-def test_deliver_skips_the_command_check_for_an_older_record() -> None:
-    """A record written before commands were recorded still receives prompts."""
-    tmux = FakeTmux(command="bash")
-
-    assert relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None) is None
-
-
-@pytest.mark.parametrize("recorded", [None, "bash", "zsh"])
-def test_deliver_warns_when_it_cannot_tell_the_agent_from_a_shell(
-    recorded: str | None, caplog: pytest.LogCaptureFixture
-) -> None:
-    """An unknown command, or a wrapper's shell, makes the command check moot.
+    A restarted agent has the same command name as the session's agent, so
+    only the process group tells them apart.
 
     Args:
-        recorded: The command recorded at session start.
+        group: What ``ps`` reports: another group, or none.
+    """
+    tmux = FakeTmux(group=group)
+
+    result = relay.deliver_prompt(TARGET, "id-1", "rm -rf ~", tmux, lambda _: None)
+
+    assert result == "pane-unavailable"
+    assert names(tmux) == ["display-message", "ps"]
+
+
+def test_deliver_refuses_when_ps_cannot_read_the_group() -> None:
+    """A group that can't be read can't be shown to be the agent's."""
+    tmux = FakeTmux(fail_on=frozenset({"ps"}))
+
+    result = relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None)
+
+    assert result == "pane-unavailable"
+    assert names(tmux) == ["display-message", "ps"]
+
+
+def test_deliver_types_into_the_agent_the_session_started_with(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The pane's foreground group is still the agent's, so it gets the prompt.
+
+    Args:
         caplog: Pytest log capture fixture.
     """
-    tmux = FakeTmux(command=recorded or "bash")
-    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, recorded)
+    tmux = FakeTmux()
+
+    with caplog.at_level("WARNING"):
+        result = relay.deliver_prompt(TARGET, "id-1", "hi", tmux, lambda _: None)
+
+    assert result is None
+    assert "send-keys" in names(tmux)
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        pytest.param({"pane": "%3", "server_pid": 4242}, id="no-group"),
+        pytest.param(
+            {"pane": "%3", "server_pid": 4242, "command": "claude"},
+            id="command-from-an-older-hook",
+        ),
+    ],
+)
+def test_deliver_refuses_a_record_without_a_process_group(
+    record: dict[str, object], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Nothing shows the pane still runs the agent, so nothing is typed.
+
+    A record from an older hook, or from a ``ps`` without ``tpgid``, has no
+    group; the pane may hold the shell an agent left behind.
+
+    Args:
+        record: The pane record on disk.
+        caplog: Pytest log capture fixture.
+    """
+    panes.record_pane("claude", "s1", {"TMUX_PANE": "%3"})
+    (path,) = panes.panes_directory().glob("*.json")
+    path.write_text(json.dumps(record), encoding="utf-8")
+    target = panes.load_pane("claude", "s1")
+    assert target is not None
+    tmux = FakeTmux()
 
     with caplog.at_level("WARNING"):
         result = relay.deliver_prompt(target, "id-1", "hi", tmux, lambda _: None)
 
-    assert result is None
-    assert "Cannot tell whether pane %3 still runs the agent" in caplog.text
+    assert result == "pane-unavailable"
+    assert "send-keys" not in names(tmux)
+    assert "Not typing into pane %3" in caplog.text
     assert "hi" not in caplog.text
-
-
-def test_deliver_does_not_warn_for_a_recorded_agent(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A recorded agent command is checked, so there is nothing to warn about.
-
-    Args:
-        caplog: Pytest log capture fixture.
-    """
-    target = PaneTarget("%3", "/run/tmux-1000/default", 4242, "claude")
-
-    with caplog.at_level("WARNING"):
-        relay.deliver_prompt(target, "id-1", "hi", FakeTmux(), lambda _: None)
-
-    assert caplog.records == []
 
 
 def test_deliver_reports_a_missing_pane() -> None:

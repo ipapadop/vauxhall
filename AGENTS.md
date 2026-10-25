@@ -160,9 +160,16 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   UTF-8 bytes per character.
 - **Pane record**: `vauxhall.hooks.panes` writes
   `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
-  0700 directory, tightened if it already exists with a looser mode) holding `pane`, `socket`, `server_pid`, and `command`, the
-  pane's foreground command (`#{pane_current_command}`, such as `claude` or
-  `node`) when the session started, or `null` when tmux can't say. It is
+  0700 directory, tightened if it already exists with a looser mode) holding
+  `pane`, `socket`, `server_pid`, and `process_group`, the foreground process
+  group of the pane's terminal when the session started, which is the
+  agent's, or `null` when it can't be read. tmux has no format for it, so
+  `panes.pane_process_group` asks tmux for `#{pane_pid}` and reads that
+  process's `tpgid` with `ps`. `panes.run_tmux` runs every tmux command, for
+  the hooks and the relay; the hooks wait `panes.TMUX_TIMEOUT_SECONDS` (1
+  second) per command, and the relay `relay.TMUX_TIMEOUT_SECONDS` (5
+  seconds), because a command that times out may still have run, and a
+  paste acknowledged as failed after it was typed would be resent. It is
   written by `common.track_pane`, called from `publish_telemetry` on
   `SessionStart`, and deleted on `SessionEnd`; a `SessionStart` outside tmux
   removes any old record, records older than 30 days are swept, and failures
@@ -179,12 +186,15 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   is logged instead of letting paho re-raise it out of the network loop,
   which would end the relay. Delivery checks that the pane's tmux server PID
   still matches the record (pane IDs restart from `%0` after tmux restarts)
-  and, when the record has a `command`, that the pane still runs it: an agent
-  that exited without `SessionEnd` leaves its shell in the foreground, which
-  would run the prompt as a command. A record without a `command` (from an
-  older hook, or when tmux couldn't say) skips that check, and a recorded
-  shell (an agent started by a wrapper script) passes it for the shell left
-  behind; in both cases it delivers and logs a warning. It leaves any pane
+  and, when the record has a `process_group`, that the pane's foreground
+  group is still that one: an agent that exited without `SessionEnd` leaves
+  its shell in the foreground, which would run the prompt as a command, and
+  an agent started in the pane since then belongs to another session. Both
+  lead another group, though a restarted agent has the same command name. A
+  group that can't be read now is refused, and so is a record without a
+  `process_group` (from an older hook, which recorded `command` instead, or
+  from a `ps` without `tpgid`), with a warning: nothing then shows that the
+  pane still runs the agent. It leaves any pane
   mode, such as copy mode, with `copy-mode -q` before pasting and again
   before Enter: a mode takes `send-keys Enter` for itself and drops the
   paste's brackets, which would submit a multi-line prompt line by line.

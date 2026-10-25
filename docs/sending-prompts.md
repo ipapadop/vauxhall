@@ -64,8 +64,8 @@ never queued for later.
 
 1. At `SessionStart`, each hook records the session's tmux pane in
    `~/.config/vauxhall/panes/`: the pane ID (`$TMUX_PANE`), the tmux server
-   socket, the server's process ID (both from `$TMUX`), and the name of the
-   command running in the pane's foreground, normally the agent. It is
+   socket, the server's process ID (both from `$TMUX`), and the process group
+   in the pane's foreground, which is the agent's. It is
    deleted at `SessionEnd`, and a session that starts outside tmux has any
    earlier record removed. Nothing about the pane is published over MQTT.
 2. The dashboard publishes `{"schema_version": 1, "id": "...", "text": "..."}`
@@ -76,12 +76,15 @@ never queued for later.
    session up in its own records. A relay that doesn't know the session stays
    silent, so one broker can serve relays on several machines.
 4. The relay checks that the recorded tmux server is still the one running
-   and that the pane still runs the recorded command. An agent that crashed
-   without ending its session leaves a shell in the pane, which would run the
-   prompt as a command, so the relay refuses. If the session's command is
-   unknown (it started before this check existed, or tmux didn't answer) or
-   is a shell (a wrapper script started the agent without `exec`), the relay
-   can't tell the agent from a shell: it delivers and logs a warning. It then
+   and that the recorded process group is still in the pane's foreground. An
+   agent that crashed without ending its session leaves a shell in the pane,
+   which would run the prompt as a command, and an agent you start in the
+   pane afterwards is another session; both have another process group, so
+   the relay refuses. If the session's process group is unknown (it started
+   before this check existed, or `ps` didn't answer), the relay can't tell,
+   so it refuses too and logs a warning. A wrapper script that runs the agent
+   without `exec` and keeps running after it shares its process group, so
+   whatever the script starts next in the pane passes the check. It then
    leaves copy mode (or any other tmux mode) if you have the pane in one
    (tmux 3.1a or later),
    loads the text into a private tmux buffer, pastes it into the pane as a
@@ -111,8 +114,13 @@ replays are ignored, so a relay that connects afterwards never types it.
 4. Watch the traffic:
    `mosquitto_sub -t 'vauxhall/agents/+/sessions/#' -v`.
 
-**`its tmux pane is no longer available`.** The pane was closed or tmux was
-restarted. Restart the agent in a live pane.
+**`its tmux pane is no longer available`.** The pane was closed, tmux was
+restarted, or the agent that started the session no longer runs in the pane,
+even if the same agent was started there again. Send to the card of the
+session that runs there now, or restart the agent in a live pane. If the
+relay logs `foreground process group at session start is unknown`, the
+session started before upgrading, or `ps` lacks `-o tpgid` (as BusyBox's
+may): restart the session, and install procps if needed.
 
 **The text arrives but isn't submitted, or a multi-line prompt is split.**
 If the pane was in copy mode and tmux is older than 3.1a, the relay can't

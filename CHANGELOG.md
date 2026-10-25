@@ -226,12 +226,13 @@ The first release, planned as 0.1.0. It is alpha software; see
 - The prompt relay no longer types a prompt into a shell. An agent that
   exited without ending its session, for example after a crash, left the
   shell in its tmux pane, and the relay pasted the prompt there, where it ran
-  as a command. Hooks now record the pane's foreground command at session
-  start, and the relay refuses delivery (`pane-unavailable`) when the pane
-  runs something else. When the recorded command is unknown, as for
-  sessions started before upgrading, or is a shell, as for an agent started
-  by a wrapper script, the relay can't tell the agent from a shell; it
-  delivers as before and logs a warning.
+  as a command. Hooks now record the pane's foreground process group at
+  session start, and the relay refuses delivery (`pane-unavailable`) when
+  another group is in the foreground: the shell, or another program,
+  including the same agent restarted in that pane. When the recorded group
+  is unknown, as for sessions started before upgrading, the relay can't
+  tell, so it refuses too and logs a warning; restarting the session
+  records the group.
 - The dashboard window checks HTTPS certificates. Pyloid turns those checks
   off for every page with `--ignore-certificate-errors` and
   `--allow-insecure-localhost`; the dashboard now removes both, since its UI

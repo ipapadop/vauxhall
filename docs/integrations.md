@@ -230,7 +230,9 @@ The installer:
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
   or wheel file, or otherwise the matching PyPI release. Agents named in one
-  command share that environment, so it is built once.
+  command share that environment, so it is built once. If building it fails,
+  the installer shows pip's error, restores the previous environment, and
+  changes no settings.
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
@@ -355,7 +357,9 @@ The installer:
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
   or wheel file, or otherwise the matching PyPI release. Agents named in one
-  command share that environment, so it is built once.
+  command share that environment, so it is built once. If building it fails,
+  the installer shows pip's error, restores the previous environment, and
+  changes no settings.
 - Replaces existing Vauxhall handlers, keeps all other configuration, and
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
@@ -475,7 +479,9 @@ The installer:
 - Recreates `.vauxhall-venv` and installs `vauxhall[hooks]` into it from the
   same source as the running installer: the same Git commit, local directory,
   or wheel file, or otherwise the matching PyPI release. Agents named in one
-  command share that environment, so it is built once.
+  command share that environment, so it is built once. If building it fails,
+  the installer shows pip's error, restores the previous environment, and
+  changes no settings.
 - Removes only handlers that Vauxhall generated: commands with the installed
   hook module invocation, or the named handlers from earlier installers that
   ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including

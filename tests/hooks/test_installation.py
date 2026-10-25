@@ -7,7 +7,9 @@ import base64
 import importlib
 import json
 import shlex
+import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import ModuleType
 from unittest.mock import MagicMock, call, patch
@@ -247,6 +249,82 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
             capture_output=True,
         ),
     ]
+
+
+def _fake_run(*, pip_fails: bool) -> Callable[..., None]:
+    """Return a ``subprocess.run`` stand-in that builds a venv marked "new".
+
+    Args:
+        pip_fails: Whether the pip step fails as an unavailable package would.
+
+    Returns:
+        The stand-in.
+    """
+
+    def run(command: list[str], **_kwargs: object) -> None:
+        if command[1:3] == ["-m", "venv"]:
+            venv_dir = Path(command[3])
+            venv_dir.mkdir()
+            (venv_dir / "marker").write_text("new")
+        elif pip_fails:
+            stderr = b"ERROR: No matching distribution found for vauxhall"
+            raise subprocess.CalledProcessError(1, command, stderr=stderr)
+
+    return run
+
+
+@pytest.mark.parametrize(("pip_fails", "expected"), [(True, "old"), (False, "new")])
+def test_setup_venv_keeps_the_existing_venv_until_the_new_one_is_built(
+    tmp_path: Path, *, pip_fails: bool, expected: str
+) -> None:
+    """Registered hooks keep a working interpreter if the rebuild fails.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        pip_fails: Whether the pip step fails.
+        expected: Which venv's marker is left at the venv path.
+    """
+    venv_dir = tmp_path / ".vauxhall-venv"
+    venv_dir.mkdir()
+    (venv_dir / "marker").write_text("old")
+
+    with patch.object(installation.subprocess, "run", _fake_run(pip_fails=pip_fails)):
+        if pip_fails:
+            with pytest.raises(subprocess.CalledProcessError):
+                installation.setup_venv(venv_dir)
+        else:
+            installation.setup_venv(venv_dir)
+
+    assert (venv_dir / "marker").read_text() == expected
+    assert [path.name for path in tmp_path.iterdir()] == [".vauxhall-venv"]
+
+
+@INSTALLERS
+def test_installer_shows_pip_errors_and_changes_nothing(
+    installer: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed install names the command and shows pip's output.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+        capsys: Pytest output capture fixture.
+    """
+    settings_file = _settings_file(installer, tmp_path)
+
+    with (
+        patch.object(Path, "cwd", return_value=tmp_path),
+        patch.object(installation.subprocess, "run", _fake_run(pip_fails=True)),
+        pytest.raises(SystemExit) as exit_info,
+    ):
+        installation.install_hooks([installer.INSTALLER])
+
+    output = capsys.readouterr().out
+    assert exit_info.value.code == 1
+    assert "-m pip install" in output
+    assert "exited with 1" in output
+    assert "No matching distribution found for vauxhall" in output
+    assert not settings_file.exists()
 
 
 @INSTALLERS
@@ -517,3 +595,28 @@ def test_hook_environment_installs_from_the_installer_source(
         installation.importlib.metadata, "distribution", return_value=distribution
     ):
         assert installation._hooks_requirement() == requirement
+
+
+def test_installer_reports_a_venv_it_cannot_move_aside(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A venv in use (on Windows) can't be renamed; the installer says so.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        capsys: Pytest output capture fixture.
+    """
+    (tmp_path / ".vauxhall-venv").mkdir()
+
+    with (
+        patch.object(Path, "cwd", return_value=tmp_path),
+        patch.object(Path, "rename", side_effect=PermissionError("in use")),
+        pytest.raises(SystemExit) as exit_info,
+    ):
+        installation.install_hooks([claude_install.INSTALLER])
+
+    output = capsys.readouterr().out
+    assert exit_info.value.code == 1
+    assert "Error setting up" in output
+    assert "in use" in output
+    assert (tmp_path / ".vauxhall-venv").is_dir()

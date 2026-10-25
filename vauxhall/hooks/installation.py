@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from vauxhall import __version__
 from vauxhall.core.config_store import write_json_atomically
@@ -306,16 +307,52 @@ def _hooks_requirement() -> str:
 def setup_venv(venv_dir: Path) -> Path:
     """Create an isolated environment containing the Vauxhall hooks package.
 
+    An existing environment is moved aside first and restored if the new one
+    can't be built, so the registered hooks keep a working interpreter. The new
+    one is built in place rather than moved there, because entry-point scripts
+    such as ``vauxhall-relay`` record its absolute path.
+
     Args:
         venv_dir: Destination for the virtual environment.
 
     Returns:
         Path to the environment's Python executable.
-    """
-    if venv_dir.exists():
-        print(f"Removing existing venv at {venv_dir}...")
-        shutil.rmtree(venv_dir)
 
+    Raises:
+        subprocess.CalledProcessError: If creating the environment or
+            installing the package fails; ``stderr`` holds pip's output.
+        OSError: If the existing environment can't be moved aside or removed.
+    """
+    previous = None
+    if venv_dir.exists():
+        previous = venv_dir.with_name(f"{venv_dir.name}.old-{uuid4().hex}")
+        venv_dir.rename(previous)
+    try:
+        venv_python = _build_venv(venv_dir)
+    except BaseException:
+        if previous is not None:
+            shutil.rmtree(venv_dir, ignore_errors=True)
+            try:
+                previous.rename(venv_dir)
+            except OSError as error:
+                print(f"Error: could not restore the previous venv {previous}: {error}")
+            else:
+                print(f"Kept the existing venv at {venv_dir}")
+        raise
+    if previous is not None:
+        shutil.rmtree(previous)
+    return venv_python
+
+
+def _build_venv(venv_dir: Path) -> Path:
+    """Create a virtual environment and install the Vauxhall hooks package in it.
+
+    Args:
+        venv_dir: Destination for the virtual environment, which must not exist.
+
+    Returns:
+        Path to the environment's Python executable.
+    """
     print(f"Creating virtual environment in {venv_dir}...")
     subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
     if os.name == "nt":
@@ -384,7 +421,21 @@ def install_hooks(installers: Sequence[HookInstaller]) -> None:
             sys.exit(1)
         loaded.append((installer, settings_path, settings))
 
-    venv_python = setup_venv(venv_dir)
+    try:
+        venv_python = setup_venv(venv_dir)
+    except subprocess.CalledProcessError as error:
+        print(
+            f"Error: {shlex.join(map(str, error.cmd))} exited with {error.returncode}"
+        )
+        if error.stderr:
+            print(error.stderr.decode(errors="replace").rstrip())
+        print("No agent settings were changed.")
+        sys.exit(1)
+    except OSError as error:
+        # Such as a venv in use on Windows, which can't be moved aside.
+        print(f"Error setting up {venv_dir}: {error}")
+        print("No agent settings were changed.")
+        sys.exit(1)
     for installer, settings_path, settings in loaded:
         _register_hooks(installer, settings, venv_python)
         try:

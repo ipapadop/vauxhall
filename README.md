@@ -224,7 +224,9 @@ The installer recreates `.vauxhall-venv` in the workspace and installs
 Vauxhall into it from the same source as the running copy: the same Git
 commit, local directory, or wheel file, or otherwise the matching PyPI
 release. Agents named in one command share that environment, so it is built
-once however many you install. It then registers hooks that run the installed
+once however many you install. If that fails, for example because pip can't
+reach the package, the installer shows pip's error, puts the previous
+`.vauxhall-venv` back, and changes no settings. It then registers hooks that run the installed
 hook module, so the hooks don't run code from a source checkout. Before
 changing an existing hook or settings file, the installer backs it up and
 validates it. Every named agent's settings are validated before the

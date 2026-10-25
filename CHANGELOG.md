@@ -62,6 +62,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Hook events that run at once no longer lose or repeat each other's work:
+  concurrent Claude Code `MessageDisplay` or Gemini CLI `AfterModel` chunks
+  could drop part of a message, concurrent Codex hooks could publish the same
+  interim message twice, and two `SessionStart` hooks for one session could
+  fail to record its tmux pane.
 - Prompt and acknowledgment messages with a `schema_version` other than the
   integer 1 (such as `true` or `1.0`), or a message ID that holds control
   characters, are now dropped like other invalid messages, as telemetry

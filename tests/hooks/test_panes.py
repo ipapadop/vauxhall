@@ -11,6 +11,7 @@ import time
 
 import pytest
 
+from tests.hooks.interleaving import after_first_write_open
 from vauxhall.hooks import panes
 
 TMUX_ENV = {"TMUX_PANE": "%3", "TMUX": "/run/tmux-1000/default,4242,0"}
@@ -229,3 +230,16 @@ def test_session_with_a_lone_surrogate_gets_a_record() -> None:
     assert panes.load_pane("codex", "native:\ud800abc") == panes.PaneTarget(
         "%3", "/run/tmux-1000/default", 4242
     )
+
+
+def test_concurrent_records_of_one_session_do_not_clobber_each_other() -> None:
+    """A second writer for the session leaves the first one's write intact."""
+    with after_first_write_open(
+        lambda: panes.record_pane("codex", "native:1", {"TMUX_PANE": "%9"})
+    ):
+        panes.record_pane("codex", "native:1", TMUX_ENV)
+
+    assert panes.load_pane("codex", "native:1") == panes.PaneTarget(
+        "%3", "/run/tmux-1000/default", 4242
+    )
+    assert [path.suffix for path in panes.panes_directory().iterdir()] == [".json"]

@@ -4,6 +4,7 @@
 """Helpers shared by the built-in agent hook installers."""
 
 import base64
+import contextlib
 import importlib.metadata
 import json
 import os
@@ -188,10 +189,14 @@ def load_hook_settings(
 
     print(f"Reading existing settings from {path}")
     backup_path = path.with_suffix(".json.bak")
-    try:
-        # "x" mode also never follows a symlink planted at the backup path.
-        backup = backup_path.open("xb")
-    except FileExistsError:
+    # A symlink planted at the backup path is never written through. On POSIX
+    # "x" mode refuses it; Windows would create a dangling link's target, so
+    # any existing entry counts.
+    backup = None
+    if not os.path.lexists(backup_path):
+        with contextlib.suppress(FileExistsError):
+            backup = backup_path.open("xb")
+    if backup is None:
         print(f"Keeping the existing backup at {backup_path}")
     else:
         try:

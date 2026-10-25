@@ -174,6 +174,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- Logs show control characters in messages, tracebacks, and stacks as
+  `\xNN`. A terminal escape sequence in an MQTT topic, which the dashboard
+  and relay log when they drop a message, could otherwise rewrite the
+  terminal showing the log.
 - A shell command over 4,096 characters, such as a heredoc that writes a
   file, is now published cut to its first 4,096 characters; before, the
   whole event was dropped. Short commands were always published in full.

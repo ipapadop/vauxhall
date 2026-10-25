@@ -151,27 +151,22 @@ def test_record_tool_start_creates_an_owner_only_directory(tmp_path: Path) -> No
     reason="Windows has no mode bits to plant, and its temporary directory is "
     "per account",
 )
-def test_tool_timing_ignores_a_directory_another_account_could_reach(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """A timing directory others can write to is neither written nor read.
+def test_tool_timing_repairs_a_directory_others_could_reach(tmp_path: Path) -> None:
+    """Durations keep working in a timing directory left reachable.
 
     Args:
         tmp_path: Pytest temporary directory.
-        caplog: Pytest log capture fixture.
     """
     with patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)):
         common.record_tool_start("test", IDENTITY)
-        [spoofed] = tmp_path.rglob("*.time")
-        spoofed.write_text("0")
-        spoofed.parent.chmod(0o777)
+        [start] = tmp_path.rglob("*.time")
+        start.parent.chmod(0o775)
 
         common.record_tool_start("test", IDENTITY)
         duration = common.claim_tool_duration("test", IDENTITY)
 
-    assert duration is None
-    assert list(spoofed.parent.iterdir()) == [spoofed]
-    assert "is not a private directory" in caplog.text
+    assert duration is not None
+    assert start.parent.stat().st_mode & 0o777 == 0o700
 
 
 def test_record_tool_start_writes_nothing_through_a_planted_symlink(
@@ -302,23 +297,68 @@ def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
     reason="Windows has no mode bits to plant, and its temporary directory is "
     "per account",
 )
-def test_private_directory_rejects_a_directory_another_account_could_reach(
-    tmp_path: Path,
+def test_private_directory_makes_an_owned_reachable_directory_private(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A pre-created world-writable directory is refused, not reused.
+    """An owned directory others could reach is repaired, not refused.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+        caplog: Pytest log capture fixture.
+    """
+    loose = tmp_path / f"vauxhall-claude{common._USER_SUFFIX}"
+    loose.mkdir()
+    loose.chmod(0o775)
+    kept = loose / "start.time"
+    kept.write_text("1")
+
+    with (
+        patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
+        caplog.at_level("WARNING"),
+    ):
+        directory = common.private_directory("vauxhall-claude")
+
+    assert directory == loose
+    assert loose.stat().st_mode & 0o777 == 0o700
+    assert kept.exists()
+    assert "Made" in caplog.text
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "getuid"), reason="Windows names no owner and ignores modes"
+)
+def test_make_private_removes_entries_another_account_owns(tmp_path: Path) -> None:
+    """Entries planted while the directory was reachable are removed.
 
     Args:
         tmp_path: Pytest temporary directory.
     """
-    planted = tmp_path / f"vauxhall-messages-claude{common._USER_SUFFIX}"
-    planted.mkdir()
-    planted.chmod(0o777)
+    loose = tmp_path / "loose"
+    loose.mkdir()
+    loose.chmod(0o777)
+    (loose / "mine").write_text("1")
+    (loose / "planted").symlink_to(tmp_path / "elsewhere")
+    real_scandir = os.scandir
 
-    with (
-        patch.object(common.tempfile, "gettempdir", return_value=str(tmp_path)),
-        pytest.raises(OSError, match="not a private directory"),
+    class Foreign:
+        """A directory entry owned by another account."""
+
+        def __init__(self, entry: os.DirEntry[str]) -> None:
+            self.path = entry.path
+            self._entry = entry
+
+        def stat(self, *, follow_symlinks: bool) -> os.stat_result:
+            info = self._entry.stat(follow_symlinks=follow_symlinks)
+            if self._entry.name != "planted":
+                return info
+            return os.stat_result((info.st_mode, 0, 0, 0, os.getuid() + 1, *info[5:]))
+
+    with patch.object(
+        common.os, "scandir", lambda path: [Foreign(e) for e in real_scandir(path)]
     ):
-        common.private_directory("vauxhall-messages-claude")
+        common._make_private(loose)
+
+    assert sorted(path.name for path in loose.iterdir()) == ["mine"]
 
 
 def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(

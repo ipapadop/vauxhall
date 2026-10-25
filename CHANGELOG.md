@@ -217,5 +217,7 @@ The first release, planned as 0.1.0. It is alpha software; see
   describes. The directory was readable by other accounts, and one that
   another account created first, or a symlink, was used as found, so that
   account could read tool timing or plant start times that faked a tool's
-  duration. Such a directory is now refused with a warning, and the duration
-  left out.
+  duration. A directory another account owns, or a symlink, is now refused
+  with a warning, and the duration left out. One you own that others can
+  reach, such as one an earlier version created, is made owner-only, and
+  entries other accounts put in it are removed.

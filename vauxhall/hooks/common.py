@@ -157,12 +157,35 @@ def message_text(value: object) -> str | None:
     return truncate_text(value)
 
 
+def _make_private(directory: Path) -> None:
+    """Make an owned directory owner-only and remove what others put in it.
+
+    While the directory was reachable, other accounts could add entries, such
+    as a symlink where a hook will write; the sticky system temporary
+    directory keeps them from replacing the directory itself.
+
+    Args:
+        directory: A directory this user owns.
+
+    Raises:
+        OSError: If its mode can't be changed.
+    """
+    directory.chmod(0o700)
+    for entry in os.scandir(directory):
+        with suppress(OSError):
+            if entry.stat(follow_symlinks=False).st_uid != os.getuid():
+                Path(entry.path).unlink()
+    logger.warning("Made %s private; it was reachable by other accounts", directory)
+
+
 def private_directory(name: str) -> Path:
     """Return a per-user directory in the system temporary directory.
 
     The system temporary directory is shared, so another account can pre-create
-    the name. A directory that is a symlink, is owned by somebody else, or is
-    reachable by anybody else is rejected rather than used.
+    the name. A directory that is a symlink or is owned by somebody else is
+    rejected rather than used. One this user owns that others can reach, such
+    as one created under a permissive umask by an older version, is made
+    owner-only.
 
     Args:
         name: Directory name, to which the user suffix is added.
@@ -181,7 +204,9 @@ def private_directory(name: str) -> Path:
         # Windows ignores the creation mode, reports every directory as world
         # accessible, and names no owner, so these checks would always fail
         # there. It gives each account its own temporary directory instead.
-        private = private and info.st_uid == os.getuid() and not info.st_mode & 0o077
+        private = private and info.st_uid == os.getuid()
+        if private and info.st_mode & 0o077:
+            _make_private(directory)
     if not private:
         message = f"{directory} is not a private directory"
         # Callers treat OSError as "no state", so say why it is missing.

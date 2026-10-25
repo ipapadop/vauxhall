@@ -152,7 +152,9 @@ when the session ends, and any left behind are removed after 30 days.
 The hooks keep short-lived files in owner-only directories in the system
 temporary directory, named `vauxhall-<agent>-<uid>`,
 `vauxhall-messages-<agent>-<uid>`, and `vauxhall-codex-cursors-<uid>`
-(without the `-<uid>` suffix on Windows):
+(without the `-<uid>` suffix on Windows). A directory with that name that
+another account owns is not used; one you own that others can reach is made
+owner-only, and entries other accounts put in it are removed:
 
 - Tool start times, under hashed names, deleted when the tool finishes, or
   after 24 hours if it never does.

@@ -86,3 +86,15 @@ def test_resolve_dataclass() -> None:
         assert config.host == "env.host"
         assert config.port == 1234
         assert config.enabled is False
+
+
+def test_resolve_dataclass_reads_only_the_given_environment() -> None:
+    """An injected environment replaces the process environment."""
+    with patch.dict(os.environ, {"VAUXHALL_TEST_HOST": "process"}):
+        resolver = ConfigResolver(
+            "missing.json", environment={"VAUXHALL_TEST_PORT": "1884"}
+        )
+        config = resolver.resolve_dataclass(MockConfig, "test")
+
+    assert config.host == "localhost"
+    assert config.port == 1884

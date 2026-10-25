@@ -273,3 +273,40 @@ def test_sources_ignore_a_hooks_file_in_the_current_directory() -> None:
         "file", str(user_file.resolve()), editable=True
     )
     assert sources["mqtt.host"] == FieldSource("default", None, editable=True)
+
+
+def test_hooks_file_is_validated_without_the_dashboard_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A hooks file valid only with the saver's variables is refused.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        tmp_path: Pytest temporary directory.
+    """
+    monkeypatch.setenv("VAUXHALL_MQTT_TLS", "true")
+    ca_file = tmp_path / "ca.pem"
+    ca_file.write_text("ca", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="ca_certs requires"):
+        save_user_config(HOOKS_FILE, HookConfig, {"mqtt": {"ca_certs": str(ca_file)}})
+
+    assert not user_config_path(HOOKS_FILE).exists()
+
+
+def test_hooks_fields_set_in_the_dashboard_environment_stay_editable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dashboard's variables don't override what hooks read.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    monkeypatch.setenv("VAUXHALL_MQTT_HOST", "dashboard-broker")
+    monkeypatch.setenv("VAUXHALL_MQTT_PASSWORD", "pw")
+
+    assert field_sources(HOOKS_FILE, HookConfig)["mqtt.host"] == FieldSource(
+        "default", None, editable=True
+    )
+    path = save_user_config(HOOKS_FILE, HookConfig, {"mqtt": {"host": "broker"}})
+    assert json.loads(path.read_text()) == {"mqtt": {"host": "broker"}}

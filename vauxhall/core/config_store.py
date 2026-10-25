@@ -48,6 +48,19 @@ def user_config_path(filename: str) -> Path:
     return Path.home() / ".config" / "vauxhall" / filename
 
 
+def saver_environment(config_type: type[Any]) -> Mapping[str, str]:
+    """Return the environment variables that apply to a saved configuration.
+
+    Args:
+        config_type: The configuration dataclass being saved.
+
+    Returns:
+        The process environment when the process that reads the file shares
+        it, as the dashboard does, or an empty mapping, as for hooks.
+    """
+    return os.environ if config_type.SAVER_ENVIRONMENT_APPLIES else {}
+
+
 def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSource]:
     """Report where each field of a configuration comes from.
 
@@ -71,6 +84,7 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
     # the user file entirely.
     editable = location in (None, str(user_config_path(filename).resolve()))
 
+    environment = saver_environment(config_type)
     sources = {}
     for section, values in asdict(config_type()).items():
         section_data = data.get(section, {})
@@ -79,7 +93,7 @@ def field_sources(filename: str, config_type: type[Any]) -> dict[str, FieldSourc
             raise ConfigurationError(message)
         for key in values:
             environment_variable = env_var_name(section, key)
-            if environment_variable in os.environ:
+            if environment_variable in environment:
                 source = FieldSource(
                     "environment", environment_variable, editable=False
                 )
@@ -238,7 +252,7 @@ def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
         candidate = Path(directory) / path.name
         candidate.write_text(json.dumps(data), encoding="utf-8")
         try:
-            config_type.load(candidate)
+            config_type.load(candidate, saver_environment(config_type))
         except ConfigurationError as error:
             message = str(error).replace(str(candidate.resolve()), str(path))
             raise ConfigurationError(message) from None

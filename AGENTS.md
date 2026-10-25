@@ -494,7 +494,12 @@ writing JSON directly. `save_user_config` writes only
 `~/.config/vauxhall/<filename>`, validates with the unchanged
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
 `field_sources` reports each field's source (`environment`, `file`, or
-`default`) and whether it is editable. Fields set by `VAUXHALL_*` environment
+`default`) and whether it is editable. Both, and the settings editor's
+`hooks_mqtt`, read the environment only when the config type's
+`SAVER_ENVIRONMENT_APPLIES` is true: `DashboardConfig` yes, `HookConfig` no,
+because hooks run in the agents' environments, so the hooks file is
+validated on its own (`ConfigResolver` and `MQTTConfig.validate` take an
+`environment`). Fields set by `VAUXHALL_*` environment
 variables are read-only, and so is every field when a `vauxhall_dashboard.json`
 exists in the current directory. Saving a read-only or unknown field, or saving to a
 malformed file, raises `ConfigurationError` without writing. See

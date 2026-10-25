@@ -8,7 +8,11 @@ from dataclasses import asdict, fields
 from typing import Any
 
 from vauxhall.core.config import HOOKS_FILE, ConfigurationError, MQTTConfig
-from vauxhall.core.config_store import field_sources, user_config_path
+from vauxhall.core.config_store import (
+    field_sources,
+    saver_environment,
+    user_config_path,
+)
 from vauxhall.dashboard.config import DashboardConfig
 
 DASHBOARD_FILE = "vauxhall_dashboard.json"
@@ -66,6 +70,19 @@ def hook_config_type() -> type[Any]:
     return HookConfig
 
 
+def _load_hook_config() -> Any:  # noqa: ANN401
+    """Load the hooks file as hooks read it, without the dashboard's environment.
+
+    Returns:
+        The loaded ``HookConfig``.
+
+    Raises:
+        ConfigurationError: If the hooks file is malformed or invalid.
+    """
+    config_type = hook_config_type()
+    return config_type.load(environment=saver_environment(config_type))
+
+
 def _field_type(default: object) -> str:
     """Return the settings editor input type for a field's default value.
 
@@ -105,7 +122,7 @@ def _hooks_mqtt() -> tuple[dict[str, Any] | None, str | None]:
             fail.
     """
     try:
-        hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
+        hooks_mqtt = _synced_mqtt(_load_hook_config().mqtt)
     except ConfigurationError as error:
         return None, str(error)
     return hooks_mqtt, None
@@ -210,7 +227,7 @@ def hook_changes_for(
         ConfigurationError: If the dashboard or hooks configuration is malformed.
     """
     sources = field_sources(DASHBOARD_FILE, DashboardConfig)
-    hooks_mqtt = _synced_mqtt(hook_config_type().load().mqtt)
+    hooks_mqtt = _synced_mqtt(_load_hook_config().mqtt)
     form = {**asdict(current_mqtt), **changes.get("mqtt", {})}
     differing = {
         key: value

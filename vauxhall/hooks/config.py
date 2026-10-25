@@ -3,6 +3,7 @@
 
 """Configuration for Vauxhall hooks."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -35,15 +36,24 @@ class HookConfig:
     # a hooks file there could send telemetry, and the MQTT password, to any
     # broker.
     SEARCHES_CURRENT_DIRECTORY: ClassVar[bool] = False
+    # The dashboard saves this file, but hooks run in the agents' environments,
+    # so the dashboard's VAUXHALL_* variables don't apply to it.
+    SAVER_ENVIRONMENT_APPLIES: ClassVar[bool] = False
 
     @classmethod
-    def load(cls, config_path: Path | None = None) -> "HookConfig":
+    def load(
+        cls,
+        config_path: Path | None = None,
+        environment: Mapping[str, str] | None = None,
+    ) -> "HookConfig":
         """Load hook configuration from environment or JSON file.
 
         Args:
             config_path: Path to the configuration file. If None, reads
                 ``~/.config/vauxhall/vauxhall_hooks.json``, ignoring one in
                 the current directory.
+            environment: The environment variables that override the file,
+                defaulting to the process environment.
 
         Returns:
             HookConfig: The loaded configuration.
@@ -52,6 +62,7 @@ class HookConfig:
             HOOKS_FILE,
             config_path,
             search_current_directory=cls.SEARCHES_CURRENT_DIRECTORY,
+            environment=environment,
         )
         return cls(
             mqtt=resolver.resolve_dataclass(MQTTConfig, "mqtt"),

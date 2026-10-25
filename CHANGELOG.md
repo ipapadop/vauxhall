@@ -62,6 +62,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- **Also update hooks configuration** no longer validates the hooks file
+  with the dashboard's `VAUXHALL_*` environment variables, which the hooks
+  may not have. A dashboard given `VAUXHALL_MQTT_TLS=true` could write
+  `ca_certs` without `tls`, a file that hooks without that variable
+  rejected. Those variables also no longer make hooks fields read-only.
 - A prompt, command, or other text over 4,096 characters no longer stops
   hooks from publishing the event; it is cut off with an ellipsis, as
   assistant messages already were, so a long shell command, such as a

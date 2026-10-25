@@ -125,9 +125,12 @@ for other tools:
   an environment variable, a file, or its default, and whether saving can
   change it.
 
-A field can't be saved when an environment variable sets it, or when a
-`vauxhall_dashboard.json` exists in the current directory, because that file
-hides the per-user file entirely. Unknown or read-only fields, malformed files, and
+A dashboard field can't be saved when an environment variable sets it, or
+when a `vauxhall_dashboard.json` exists in the current directory, because that
+file hides the per-user file entirely. The hooks file is checked without the
+saving process's environment variables, because hooks run in the agents'
+environments: it must be valid on its own, and a variable such as
+`VAUXHALL_MQTT_HOST` doesn't make its fields read-only. Unknown or read-only fields, malformed files, and
 invalid values raise `ConfigurationError` and leave the file unchanged.
 
 ## Settings dialog
@@ -155,7 +158,9 @@ dialog differ from the ones the hooks use, including after a reset,
 are unchanged. The user name, password file, and client certificate are never
 copied, because the dashboard and the hooks should use different broker
 identities. Both files are validated
-before either is written. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
+before either is written, the hooks file without the dashboard's environment
+variables, so a dashboard that gets `tls` from `VAUXHALL_MQTT_TLS` can't
+write `ca_certs` to a hooks file that doesn't also set `tls`. This doesn't affect hooks that get `VAUXHALL_MQTT_*`
 environment variables or run on another machine. The option is unavailable,
 with the reason shown, when the hooks configuration is malformed.
 

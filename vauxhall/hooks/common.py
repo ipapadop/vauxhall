@@ -19,7 +19,7 @@ from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
 from vauxhall.hooks.files import remove_old_files
-from vauxhall.hooks.identity import resolve_session_id
+from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
 from vauxhall.hooks.panes import foreground_command, forget_pane, record_pane
 
 logger = get_logger(__name__)
@@ -619,6 +619,8 @@ def publish_telemetry(
         from vauxhall.hooks.client import publish  # noqa: PLC0415
 
     workspace = input_data.get("cwd", str(Path.cwd()))
+    if isinstance(workspace, str):
+        workspace = publishable_workspace(workspace)
     publish(
         [
             {

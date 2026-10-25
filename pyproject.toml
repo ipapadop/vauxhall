@@ -10,7 +10,7 @@ name = "vauxhall"
 version = "0.1.0"
 description = "Vauxhall Agent Dashboard & Hooks"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -28,7 +28,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -89,7 +88,7 @@ include = ["vauxhall*"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["ALL",]
@@ -130,7 +129,7 @@ quote-style = "double"
 
 [tool.pyright]
 include = ["vauxhall", "scripts"]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
 # paho-mqtt re-exports CallbackAPIVersion, ReasonCode, and Properties from

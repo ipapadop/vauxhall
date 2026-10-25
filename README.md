@@ -170,12 +170,12 @@ and about 670 MB once installed. Machines that only run agents need just the
 
 Requirements:
 
-- Python 3.10, 3.11, 3.12, or 3.13
+- Python 3.11, 3.12, or 3.13
 - An MQTT broker, such as [Mosquitto](https://mosquitto.org/) 2
 
 | | Dashboard | Hooks |
 | --- | --- | --- |
-| Python | 3.10 - 3.13 | 3.10 - 3.13 |
+| Python | 3.11 - 3.13 | 3.11 - 3.13 |
 | Linux | glibc 2.28+ on x86-64, glibc 2.39+ on ARM64 | any |
 | macOS | 12 or newer, Intel or Apple silicon | any |
 | Windows | 10 or newer, x86-64 or ARM64 | any |
@@ -192,7 +192,7 @@ dashboard on all three.
 | Claude Code | Built in | `.claude/settings.local.json` | A release with command hooks, including `MessageDisplay`, `PostCompact`, and `StopFailure` |
 | Codex | Built in | `.codex/hooks.json` | A release with the stable `hooks` feature, including `Interrupt` and `SubagentStart` |
 | Gemini CLI | Built in | `.gemini/settings.json` | A release with hooks, including `AfterModel` and `PreCompress` |
-| Anything else | `publish()` or raw MQTT | None | Python 3.10+, or any MQTT client |
+| Anything else | `publish()` or raw MQTT | None | Python 3.11+, or any MQTT client |
 
 The hooks follow each agent's documented hook format. An agent release
 without one of the events still works, without that event's updates. The

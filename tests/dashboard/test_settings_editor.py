@@ -674,6 +674,25 @@ def test_ipc_get_settings_reports_malformed_file() -> None:
     assert "mqtt must be an object" in described["error"]
 
 
+def test_ipc_get_settings_reports_an_unexpected_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Any other failure is logged with its traceback and reported to the window.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    with (
+        patch("vauxhall.dashboard.ipc.describe_settings", side_effect=TypeError("x")),
+        caplog.at_level("ERROR"),
+    ):
+        described = json.loads(DashboardIPC().get_settings())
+
+    assert "dashboard log" in described["error"]
+    assert "Failed to describe settings" in caplog.text
+    assert caplog.records[-1].exc_info is not None
+
+
 def test_ipc_save_settings_forwards_request() -> None:
     """A valid request is passed to the save callback and its result returned."""
     callback = MagicMock(return_value={"ok": True})

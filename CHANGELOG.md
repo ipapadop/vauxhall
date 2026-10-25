@@ -62,6 +62,10 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- The settings dialog shows "Settings could not be loaded; the dashboard
+  log has details." for any failure, and the dashboard logs the error with
+  its traceback. Before, a failure other than a configuration error was
+  logged nowhere.
 - A prompt whose acknowledgment arrives before the dashboard has the
   prompt's message ID is no longer left waiting when acknowledgments of
   earlier, replaced prompts arrive around the same time.

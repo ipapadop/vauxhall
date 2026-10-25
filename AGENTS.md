@@ -304,7 +304,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   other setting; a `get_settings()` error or a read-only `agent_denylist`
   (its `agent_denylist_editable`) is logged and the save is skipped.
 - **Settings**: The ⚙️ button opens a `<dialog>` built from
-  `DashboardIPC.get_settings()`, with a source badge, reset button, and inline
+  `DashboardIPC.get_settings()` (which logs any unexpected error and returns
+  it as `error` rather than raising), with a source badge, reset button, and inline
   error per field. Read-only fields are disabled with the reason shown. Escape
   or Cancel closes it and focus returns to the button. The hooks option
   appears when an editable MQTT value differs from `hooks_mqtt`, the values

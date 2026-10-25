@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.hooks.interleaving import after_first_write_open
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH, MAX_WORKSPACE_LENGTH
 from vauxhall.hooks import common
 from vauxhall.hooks.claude import telemetry_hook as claude_hook
@@ -218,7 +219,7 @@ def test_collect_message_chunks_returns_one_bounded_message(tmp_path: Path) -> N
             == "Hello world"
         )
 
-    assert not list(tmp_path.rglob("*.message"))
+    assert not list(tmp_path.rglob("*.chunk"))
 
 
 def test_collect_message_chunks_caps_long_text(tmp_path: Path) -> None:
@@ -263,7 +264,7 @@ def test_collect_message_chunk_sweeps_text_of_long_abandoned_responses(
         common.collect_message_chunk("codex", ["old"], "old", final=False)
         common.collect_message_chunk("codex", ["recent"], "recent", final=False)
         old, recent = sorted(
-            tmp_path.rglob("*.message"), key=lambda path: path.read_text()
+            tmp_path.rglob("*.chunk"), key=lambda path: path.read_text()
         )
         day_ago = time.time() - 25 * 60 * 60
         os.utime(old, (day_ago, day_ago))
@@ -316,6 +317,43 @@ def test_collect_message_chunk_writes_nothing_through_a_planted_symlink(
 
     assert message is None
     assert not list(elsewhere.iterdir())
+
+
+def test_concurrent_chunks_of_one_message_are_all_kept(
+    isolated_tempdir: Path,
+) -> None:
+    """A chunk stored while another is being stored does not replace it.
+
+    Args:
+        isolated_tempdir: The directory standing in for the system one.
+    """
+    with after_first_write_open(
+        lambda: common.collect_message_chunk("claude", ["s"], "second ", final=False)
+    ):
+        common.collect_message_chunk("claude", ["s"], "first ", final=False)
+    message = common.collect_message_chunk("claude", ["s"], "end", final=True)
+
+    assert message in {"first second end", "second first end"}
+    assert not [path for path in isolated_tempdir.rglob("*") if path.is_file()]
+
+
+def test_concurrent_final_chunks_never_share_text() -> None:
+    """Two hooks ending one message publish each stored chunk only once."""
+    common.collect_message_chunk("claude", ["s"], "stored ", final=False)
+    claim = common.claim
+    pending = [lambda: common.collect_message_chunk("claude", ["s"], "a", final=True)]
+    other: list[str | None] = []
+
+    def claim_after_other_final(path: Path) -> Path:
+        # Another hook ends the message just before this one claims a chunk.
+        while pending:
+            other.append(pending.pop()())
+        return claim(path)
+
+    with patch.object(common, "claim", claim_after_other_final):
+        message = common.collect_message_chunk("claude", ["s"], "b", final=True)
+
+    assert sorted([message, *other]) == ["b", "stored a"]
 
 
 class RecordingPublisher:

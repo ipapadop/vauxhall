@@ -18,7 +18,13 @@ from typing import Any
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
-from vauxhall.hooks.files import remove_old_files
+from vauxhall.hooks.files import (
+    NOFOLLOW,
+    claim,
+    remove_old_files,
+    unique_name,
+    write_atomically,
+)
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
 from vauxhall.hooks.panes import foreground_command, forget_pane, record_pane
 
@@ -40,9 +46,6 @@ _COMPACTION_TRIGGERS = ("manual", "auto")
 _MESSAGE_MAX_AGE_SECONDS = 86400
 # Timing directories are per user because the system temporary directory is shared.
 _USER_SUFFIX = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
-# The system temporary directory is shared, so a name another account could
-# pre-create is opened without following a symlink into somewhere it owns.
-NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def is_cancelled(response: dict[str, Any]) -> bool:
@@ -187,25 +190,22 @@ def private_directory(name: str) -> Path:
     return directory
 
 
-def _message_path(agent: str, identity: object) -> Path:
-    """Return a private path for one in-progress assistant message.
+def _hashed_location(name: str, identity: object) -> tuple[Path, str]:
+    """Return a private directory and a file name prefix for one identity.
 
     Args:
-        agent: The agent whose message directory is used.
-        identity: Value identifying the message, hashed into the file name.
+        name: The directory name, passed to ``private_directory``.
+        identity: Value identifying the files, hashed into the prefix.
 
     Returns:
-        The path holding that message's text so far.
+        The private directory and the identity's file name prefix.
 
     Raises:
-        OSError: If the message directory is not a private one this user owns.
+        OSError: If the directory is not a private one this user owns.
     """
-    key = hashlib.sha256(
-        json.dumps(identity, sort_keys=True, default=str).encode()
-    ).hexdigest()
-    directory = private_directory(f"vauxhall-messages-{agent}")
-    remove_old_files(directory, "*.message", _MESSAGE_MAX_AGE_SECONDS)
-    return directory / f"{key}.message"
+    key = json.dumps(identity, sort_keys=True, default=str)
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    return private_directory(name), f"{digest}-"
 
 
 def discard_message_chunks(agent: str, identity: object) -> None:
@@ -216,13 +216,22 @@ def discard_message_chunks(agent: str, identity: object) -> None:
         identity: Value identifying the message.
     """
     with suppress(OSError):
-        _message_path(agent, identity).unlink(missing_ok=True)
+        directory, prefix = _hashed_location(f"vauxhall-messages-{agent}", identity)
+        remove_old_files(directory, "*", _MESSAGE_MAX_AGE_SECONDS)
+        for path in directory.glob(f"{prefix}*.chunk"):
+            path.unlink(missing_ok=True)
 
 
 def collect_message_chunk(
     agent: str, identity: object, delta: object, *, final: bool
 ) -> str | None:
     """Collect streamed assistant text and return it when the message ends.
+
+    Each chunk is stored in its own file, because chunk hooks can run at once
+    and a shared file would lose one of two concurrent updates. The final
+    chunk joins them in the order their hooks stored them. Hooks that run at
+    once have no defined order, and a chunk still being stored when the final
+    one arrives is left out.
 
     Args:
         agent: The agent whose message directory is used.
@@ -237,26 +246,34 @@ def collect_message_chunk(
     if not isinstance(delta, str):
         return None
     try:
-        path = _message_path(agent, identity)
-        try:
-            source = os.open(path, os.O_RDONLY | NOFOLLOW)
-        except FileNotFoundError:
-            previous = ""
-        else:
-            with os.fdopen(source, encoding="utf-8") as existing:
-                previous = existing.read()
-        combined = previous + delta
-        bounded = message_text(combined) or ""
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NOFOLLOW, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as output:
-            output.write(bounded)
-        if final:
-            path.unlink()
-            return bounded or None
+        directory, prefix = _hashed_location(f"vauxhall-messages-{agent}", identity)
+        remove_old_files(directory, "*", _MESSAGE_MAX_AGE_SECONDS)
+        if not final:
+            if delta:
+                # Text past the detail limit is cut when published anyway.
+                text = delta[: MAX_DETAIL_STRING_LENGTH + 1]
+                write_atomically(directory / f"{unique_name(prefix)}.chunk", text)
+            return None
+        parts: list[str] = []
+        length = 0
+        for path in sorted(directory.glob(f"{prefix}*.chunk")):
+            try:
+                claimed = claim(path)
+            except OSError:
+                continue  # Another hook ending or discarding the message took it.
+            try:
+                # A long response has many chunks; past the limit, only remove them.
+                if length <= MAX_DETAIL_STRING_LENGTH:
+                    source = os.open(claimed, os.O_RDONLY | NOFOLLOW)
+                    with os.fdopen(source, encoding="utf-8") as chunk:
+                        parts.append(chunk.read())
+                    length += len(parts[-1])
+            finally:
+                claimed.unlink(missing_ok=True)
+        return message_text("".join(parts) + delta)
     except (OSError, UnicodeDecodeError):
         # A partially written chunk must not suppress the event's own telemetry.
         return None
-    return None
 
 
 def ready_telemetry(_input_data: dict[str, Any]) -> Telemetry:
@@ -427,24 +444,6 @@ def tool_use_identity(input_data: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
-def _tool_start_location(agent: str, identity: object) -> tuple[Path, str]:
-    """Return an agent's timing directory and the file prefix for one tool call.
-
-    Args:
-        agent: The agent whose timing directory is used.
-        identity: Value identifying the tool call, hashed into the prefix.
-
-    Returns:
-        The per-user timing directory and the call's file name prefix.
-
-    Raises:
-        OSError: If the timing directory is not a private one this user owns.
-    """
-    key = json.dumps(identity, sort_keys=True, default=str)
-    digest = hashlib.sha256(key.encode()).hexdigest()
-    return private_directory(f"vauxhall-{agent}"), f"{digest}-"
-
-
 def record_tool_start(agent: str, identity: object) -> None:
     """Record one tool call's start time in its own file.
 
@@ -456,11 +455,8 @@ def record_tool_start(agent: str, identity: object) -> None:
         identity: Value identifying the tool call.
     """
     with suppress(OSError):
-        directory, prefix = _tool_start_location(agent, identity)
-        name = f"{prefix}{time.time_ns():020d}-{os.urandom(8).hex()}"
-        pending = directory / f"{name}.tmp"
-        pending.write_text(str(time.time()))
-        pending.replace(directory / f"{name}.time")
+        directory, prefix = _hashed_location(f"vauxhall-{agent}", identity)
+        write_atomically(directory / f"{unique_name(prefix)}.time", str(time.time()))
 
 
 def claim_tool_duration(agent: str, identity: object) -> float | None:
@@ -480,14 +476,13 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
         The call's duration in seconds, or ``None`` when no start can be claimed.
     """
     try:
-        directory, prefix = _tool_start_location(agent, identity)
+        directory, prefix = _hashed_location(f"vauxhall-{agent}", identity)
         starts = sorted(directory.glob(f"{prefix}*.time"), reverse=True)
     except OSError:
         return None
     for path in starts:
-        claimed = path.with_name(f"{path.stem}.{os.urandom(8).hex()}.claimed")
         try:
-            path.rename(claimed)
+            claimed = claim(path)
         except OSError:
             continue  # Another finishing hook claimed this start first.
         try:

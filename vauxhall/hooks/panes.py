@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from vauxhall.hooks.files import remove_old_files
+from vauxhall.hooks.files import remove_old_files, write_atomically
 
 _PANE_PATTERN = re.compile(r"%\d+")
 _MAX_AGE_SECONDS = 30 * 24 * 60 * 60
@@ -154,20 +154,19 @@ def record_pane(
         path.unlink(missing_ok=True)
         return
     socket, server_pid = _server_details(source.get("TMUX", ""))
-    temporary = path.with_suffix(".tmp")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        json.dump(
+    write_atomically(
+        path,
+        json.dumps(
             {
                 "pane": pane,
                 "socket": socket,
                 "server_pid": server_pid,
                 "command": command,
-            },
-            handle,
-        )
-    temporary.replace(path)
-    remove_old_files(path.parent, "*.json", _MAX_AGE_SECONDS)
+            }
+        ),
+    )
+    # Also sweeps temporary files left by a writer that died.
+    remove_old_files(path.parent, "*", _MAX_AGE_SECONDS)
 
 
 def forget_pane(agent: str, session_id: str) -> None:

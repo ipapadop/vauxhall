@@ -9,9 +9,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-from vauxhall.hooks.common import NOFOLLOW, message_text, private_directory
+from vauxhall.core.logging import get_logger
+from vauxhall.hooks.common import message_text, private_directory
+from vauxhall.hooks.files import NOFOLLOW, claim, remove_old_files, write_atomically
+
+logger = get_logger(__name__)
 
 _MAX_READ_BYTES = 1_048_576
+# Claimed cursors and temporary files are left only by a hook that died.
+_LEFTOVER_MAX_AGE_SECONDS = 86400
 
 
 def _cursor_path(session_id: str, transcript_path: str) -> Path:
@@ -30,19 +36,6 @@ def _cursor_path(session_id: str, transcript_path: str) -> Path:
     directory = private_directory("vauxhall-codex-cursors")
     key = hashlib.sha256(f"{session_id}\0{transcript_path}".encode()).hexdigest()
     return directory / key
-
-
-def _write_cursor(path: Path, offset: int) -> None:
-    """Save the last complete record offset for a later hook invocation.
-
-    Args:
-        path: The cursor file to write.
-        offset: Byte offset of the first record not yet reported.
-    """
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NOFOLLOW
-    fd = os.open(path, flags, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as output:
-        output.write(str(offset))
 
 
 def _commentary_text(line: bytes, turn_id: str) -> str | None:
@@ -76,6 +69,52 @@ def _commentary_text(line: bytes, turn_id: str) -> str | None:
     return message_text(item.get("content"))
 
 
+def _read_from_cursor(
+    cursor: Path, transcript: Path, size: int, turn_id: str
+) -> tuple[list[str], int]:
+    """Read the commentary completed past a cursor.
+
+    Args:
+        cursor: The file holding the offset read so far.
+        transcript: The session record.
+        size: The session record's size.
+        turn_id: The turn whose commentary is wanted.
+
+    Returns:
+        The commentary, oldest first, and the offset of the first record not
+        read.
+
+    Raises:
+        OSError: If the session record cannot be read.
+    """
+    try:
+        saved = os.open(cursor, os.O_RDONLY | NOFOLLOW)
+        with os.fdopen(saved, encoding="ascii") as source:
+            offset = int(source.read())
+    except (OSError, ValueError):
+        offset = 0
+    if offset > size:
+        offset = 0
+    with transcript.open("rb") as source:
+        source.seek(offset)
+        data = source.read(_MAX_READ_BYTES)
+    last_newline = data.rfind(b"\n")
+    if last_newline == -1:
+        # A record longer than one read has no usable line; skip past it so
+        # the cursor still advances instead of re-reading the same bytes.
+        complete = b""
+        next_offset = offset + len(data)
+    else:
+        complete = data[:last_newline]
+        next_offset = offset + last_newline + 1
+    messages = [
+        message
+        for line in complete.splitlines()
+        if (message := _commentary_text(line, turn_id)) is not None
+    ]
+    return messages, next_offset
+
+
 def new_messages(input_data: dict[str, Any]) -> list[str]:
     """Read new completed commentary from the current Codex turn, if possible.
 
@@ -102,10 +141,11 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         return []
     try:
         transcript = Path(transcript_path)
-        size = transcript.stat().st_size
         cursor = _cursor_path(session_id, transcript_path)
         if input_data.get("hook_event_name") == "UserPromptSubmit":
-            _write_cursor(cursor, size)
+            write_atomically(cursor, str(transcript.stat().st_size))
+            # Cursors are named by a bare hash; only leftovers have a suffix.
+            remove_old_files(cursor.parent, "*.*", _LEFTOVER_MAX_AGE_SECONDS)
             return []
         if input_data.get("hook_event_name") not in {
             "PreToolUse",
@@ -114,32 +154,27 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
             "Stop",
         }:
             return []
+        # Hooks run as separate processes. Renaming the cursor claims it, so a
+        # concurrent event neither reports the same records nor moves the
+        # cursor back. While it is claimed, or before UserPromptSubmit writes
+        # it, the rename fails and the event reports nothing; a later event in
+        # the turn catches up.
+        claimed = claim(cursor)
         try:
-            saved = os.open(cursor, os.O_RDONLY | NOFOLLOW)
-            with os.fdopen(saved, encoding="ascii") as source:
-                offset = int(source.read())
-        except (OSError, ValueError):
-            offset = 0
-        if offset > size:
-            offset = 0
-        with transcript.open("rb") as source:
-            source.seek(offset)
-            data = source.read(_MAX_READ_BYTES)
-        last_newline = data.rfind(b"\n")
-        if last_newline == -1:
-            # A record longer than one read has no usable line; skip past it so
-            # the cursor still advances instead of re-reading the same bytes.
-            complete = b""
-            next_offset = offset + len(data)
-        else:
-            complete = data[:last_newline]
-            next_offset = offset + last_newline + 1
-        messages = [
-            message
-            for line in complete.splitlines()
-            if (message := _commentary_text(line, turn_id)) is not None
-        ]
-        _write_cursor(cursor, next_offset)
+            # Sized after claiming: an event that claimed it first may have
+            # read past an earlier size, which would look like a new record.
+            size = transcript.stat().st_size
+            messages, next_offset = _read_from_cursor(
+                claimed, transcript, size, turn_id
+            )
+            write_atomically(cursor, str(next_offset))
+        except BaseException:
+            claimed.replace(cursor)
+            raise
+        try:
+            claimed.unlink()
+        except OSError as error:
+            logger.warning("Could not remove a claimed Codex cursor: %s", error)
     except (OSError, ValueError):
         return []
     else:

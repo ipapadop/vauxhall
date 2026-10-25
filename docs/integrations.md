@@ -206,9 +206,10 @@ Some signals are intentionally absent:
   when present.
 - `tool_response` and `error` contents are never published. For `StopFailure`,
   only the error type is published, not `error_details` or the error message.
-- `MessageDisplay` batches are assembled in a private temporary file and
-  published when the message ends, including messages shown during a turn.
-  The file is then removed. Claude Code runs the final message's
+- Each `MessageDisplay` batch is kept in its own private temporary file, so
+  hooks running at once don't lose each other's text. The batches are
+  assembled and published when the message ends, including messages shown
+  during a turn, and the files are then removed. Claude Code runs the final message's
   `MessageDisplay` and `Stop` hooks at the same time, so that `Thinking`
   event can arrive after `Stop`; the dashboard ignores it when it only
   repeats the message `Stop` published. Messages longer than 4,096 characters end with
@@ -338,7 +339,9 @@ not registered, for the same reasons as for Claude Code.
   local session record and publishes each once. This is best effort: Codex
   does not provide an interim message hook, the record format can change,
   and its writes may lag. The reader keeps only a private byte cursor in the
-  system temporary directory and limits each read to 1 MiB. Messages over
+  system temporary directory and limits each read to 1 MiB. One hook reads at
+  a time: a hook that runs while another reads publishes no commentary, and
+  a later hook in the same turn publishes it. Messages over
   4,096 characters end with an ellipsis.
 - Tool durations use a timing file per session and `tool_use_id` in the system
   temporary directory, so concurrent tool calls do not overwrite each other.
@@ -452,8 +455,9 @@ reason values are not published.
   `write_file`, and `replace`. When the JSON exceeds 4,096 characters, `args`
   is left out and the event is published without it.
 - `tool_response` content is never published.
-- `AfterModel` text chunks are assembled in a private temporary file and
-  published when that model response ends, including responses before tool
+- Each `AfterModel` text chunk is kept in its own private temporary file, so
+  hooks running at once don't lose each other's text. The chunks are
+  assembled and published when that model response ends, including responses before tool
   calls. `BeforeAgent` discards text left by an unfinished prior response.
   Messages over 4,096 characters end with an ellipsis.
 - Each `BeforeTool` records its start time in its own file in the system

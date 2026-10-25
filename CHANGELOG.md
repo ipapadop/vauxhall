@@ -62,6 +62,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- Hook events that run at once no longer lose or repeat each other's work:
+  concurrent Claude Code `MessageDisplay` or Gemini CLI `AfterModel` chunks
+  could drop part of a message, concurrent Codex hooks could publish the same
+  interim message twice, and two `SessionStart` hooks for one session could
+  fail to record its tmux pane.
 - A dashboard window closed narrower than 320 pixels, or wider than 16,384,
   now reopens where it was. Before, its width was not saved, and the window
   reopened at the default position and size. A window size outside these

@@ -262,10 +262,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   while a card stays in an attention state.
 - **Activity log**: Each card shows its last 5 events, newest first, with
   `[HH:mm:ss]` timestamps. An event whose message matches the previous one is
-  not repeated. The message is, in order of precedence: the prompt for waiting
-  states, `Error: <error>`, `Agent: <message>`, `Running: <tool> <cmd>` (or
-  `Completed: <tool>` for a completed `Thinking` event), `Prompt: <prompt>`,
-  or the status.
+  not repeated. The message is, in order of precedence: for a waiting state,
+  `Prompt: <prompt>` or else the bare `<message>`; `Error: <error>`;
+  `Agent: <message>`; `Running: <tool> <cmd>` (or `Completed: <tool>` for a
+  `Thinking` event with status `completed`), except that a placeholder tool
+  (`unknown` or `unknown_tool`) yields to `Prompt: <prompt>`, then the status;
+  `Prompt: <prompt>`; or the status. `tests/dashboard/ui/card_behavior.test.js`
+  pins this order.
 - **Late final message**: A `Thinking` event whose only detail is a `message`
   equal to the message of the card's latest event, when that event is `Idle`,
   is ignored. Claude Code runs the final message's `MessageDisplay` hook and

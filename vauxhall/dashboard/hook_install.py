@@ -63,9 +63,19 @@ class HookInstallRunner:
                 return {"ok": False, "error": ALREADY_RUNNING}
             try:
                 # -u: a piped child buffers its output, which would arrive
-                # in one burst at exit instead of as a live log.
+                # in one burst at exit instead of as a live log. -X utf8: on
+                # Windows a piped child writes the ANSI code page, which can't
+                # encode every workspace path the installer prints.
                 process = self._launch(
-                    [sys.executable, "-u", "-m", "vauxhall.hooks.cli", *agents],
+                    [
+                        sys.executable,
+                        "-u",
+                        "-X",
+                        "utf8",
+                        "-m",
+                        "vauxhall.hooks.cli",
+                        *agents,
+                    ],
                     cwd=workspace,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,

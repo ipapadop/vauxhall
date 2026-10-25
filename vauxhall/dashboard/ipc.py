@@ -4,6 +4,7 @@
 """IPC Bridge for the Vauxhall Dashboard."""
 
 import json
+import os
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
@@ -88,7 +89,8 @@ def _install_directory(value: object) -> Path | str:
     if not isinstance(value, str) or not Path(value).is_absolute():
         return "Not an absolute path"
     directory = Path(value)
-    if not directory.is_dir():
+    # Unlike Path.is_dir before Python 3.14, it is False on a PermissionError.
+    if not os.path.isdir(directory):  # noqa: PTH112
         return f"Not a directory: {value}"
     return directory
 

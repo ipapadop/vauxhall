@@ -748,3 +748,16 @@ def test_shutdown_stops_a_running_install(
 
     mock_serve.assert_called_once()
     assert process.calls[0] == "terminate"
+
+
+def test_select_install_directory_skips_an_unreadable_saved_directory(
+    unsearchable_dir: Path,
+) -> None:
+    """A remembered directory that can't be checked opens the picker at home."""
+    update_ui_state({"install_directory": str(unsearchable_dir)})
+    app = MagicMock()
+    app.select_directory_dialog.return_value = None
+
+    DashboardApp(app).select_install_directory()
+
+    app.select_directory_dialog.assert_called_once_with(dir=str(Path.home()))

@@ -191,3 +191,11 @@ def test_detect_agents_writes_nothing(tmp_path: Path) -> None:
     agents.detect_agents(tmp_path)
 
     assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == before
+
+
+def test_detect_agents_reports_an_unreadable_workspace(unsearchable_dir: Path) -> None:
+    """A workspace that can't be checked is reported per agent, not raised."""
+    found = agents.detect_agents(unsearchable_dir)
+
+    assert [entry["detected"] for entry in found] == [False, False, False]
+    assert all(entry["error"] for entry in found)

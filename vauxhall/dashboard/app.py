@@ -350,7 +350,9 @@ class DashboardApp:
             false alone when cancelled.
         """
         last = load_ui_state().get(INSTALL_DIRECTORY_KEY)
-        start = last if last and Path(last).is_dir() else str(Path.home())
+        # Unlike Path.is_dir before Python 3.14, it is False on a
+        # PermissionError, so an unreadable directory can't block the picker.
+        start = last if last and os.path.isdir(last) else str(Path.home())  # noqa: PTH112
         chosen = self.app.select_directory_dialog(dir=start)
         if not chosen:
             return {"ok": False}

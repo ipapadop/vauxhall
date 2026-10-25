@@ -302,3 +302,31 @@ test('closing returns focus to the toolbar button', async (t) => {
 
     assert.equal(focused, 'install-hooks-btn');
 });
+
+test('a dialog closed during an install opens again', async (t) => {
+    const { $ } = await openWith(t);
+    $('install-run').dispatchEvent(new Event('click'));
+    await flush();
+
+    // Chromium may let a repeated Escape close it despite preventDefault.
+    $('install-dialog').removeAttribute('open');
+    $('install-dialog').dispatchEvent(new Event('close'));
+
+    assert.ok($('install-dialog').hasAttribute('open'));
+});
+
+test('the toolbar button returns to a running install without the picker', async (t) => {
+    const { ipc, handlers, $ } = await openWith(t);
+    $('install-run').dispatchEvent(new Event('click'));
+    await flush();
+    handlers.onOutput({ line: 'Creating virtual environment...' });
+    $('install-dialog').removeAttribute('open');
+
+    $('install-hooks-btn').dispatchEvent(new Event('click'));
+    await flush();
+
+    assert.equal(ipc.calls.select_install_directory.length, 1);
+    assert.ok($('install-dialog').hasAttribute('open'));
+    assert.equal($('install-path').textContent, '/work/a');
+    assert.equal($('install-log').textContent, 'Creating virtual environment...\n');
+});

@@ -57,7 +57,11 @@ def _runner(*processes: FakeProcess) -> tuple[HookInstallRunner, Launcher, Poste
 
 
 def test_start_runs_the_installer_cli(tmp_path: Path) -> None:
-    """The child runs the CLI unbuffered, with merged, lossless text output."""
+    """The child runs the CLI unbuffered, in UTF-8 mode, with merged text output.
+
+    Without UTF-8 mode a Windows child writes its pipe in the ANSI code page,
+    and printing a workspace path outside it fails.
+    """
     runner, launcher, posted = _runner(FakeProcess())
 
     assert runner.start(tmp_path, ["claude", "gemini"]) == {"ok": True}
@@ -67,6 +71,8 @@ def test_start_runs_the_installer_cli(tmp_path: Path) -> None:
     assert args == [
         sys.executable,
         "-u",
+        "-X",
+        "utf8",
         "-m",
         "vauxhall.hooks.cli",
         "claude",

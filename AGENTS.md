@@ -121,8 +121,9 @@ sequenceDiagram
    search and sort.
 
 Information also flows the other way, from the UI to the backend over
-`DashboardIPC`: reading settings and view state, saving them, and copying a
-workspace path. Saved settings that change the broker restart the subscriber,
+`DashboardIPC`: reading settings and view state, saving them, copying a
+workspace path, and picking a directory, detecting its agents, and installing
+their hooks. Saved settings that change the broker restart the subscriber,
 and the backend pushes the new stale threshold and card limit back to the UI.
 
 ## Prompt Delivery
@@ -326,7 +327,10 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   settings error is shown in the label. **Install** sends the ticked agents
   to `DashboardIPC.install_hooks`; the installer's lines fill a `role="log"`
   region and the outcome a `role="status"` one. While it runs, every control
-  is disabled and the dialog's `cancel` event is prevented. Afterwards the
+  is disabled and the dialog's `cancel` event is prevented; because Chromium
+  can let a repeated Escape through anyway, a `close` during an install opens
+  the dialog again, and the toolbar button reopens it without the picker, so
+  the running install keeps its directory. Afterwards the
   agents are detected again and focus moves to **Close**; **Choose another
   directory…** starts over for the next workspace. Logic lives in
   `js/install.js`.
@@ -353,7 +357,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   buttons, and the card's own click-to-copy handler sits on top of the
   workspace button rather than replacing it. The history, agent menu, prompt,
   install, and settings modals are `<dialog>` elements opened with `showModal()`, so the
-  browser contains focus and Escape closes them; closing returns focus to the
+  browser contains focus and Escape closes them (the install dialog
+  ignores it while an install runs); closing returns focus to the
   control that opened it, or to the agent grid when that control's card was
   evicted, hidden, or filtered out meanwhile, since a hidden control can't
   take focus. Each card is a `group` named by agent and session, and its
@@ -484,7 +489,9 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   as the child's `cwd`, so the CLI runs unchanged and the dashboard never
   calls `os.chdir`, which would change where it reads
   `vauxhall_dashboard.json`. `-u` keeps a piped child from buffering the log
-  until exit. Output is decoded as UTF-8 with `errors="replace"`. One install
+  until exit; `-X utf8` makes the child write UTF-8, since on Windows a piped
+  child writes the ANSI code page, which can't encode every path the
+  installer prints. Output is decoded as UTF-8 with `errors="replace"`. One install
   runs at a time. A daemon thread posts each line as `install-output` and
   then `install-done` through `queue_to_ui_thread`, so they keep their order
   in the outbox; it posts `install-done` even when reading fails, after

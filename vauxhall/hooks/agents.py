@@ -4,6 +4,7 @@
 """The agents Vauxhall installs hooks for, and which of them a workspace uses."""
 
 import json
+import os
 from pathlib import Path
 
 from vauxhall.hooks.claude import install as claude
@@ -51,7 +52,8 @@ def _detect(workspace: Path, agent: str, installer: HookInstaller) -> dict[str, 
     entry: dict[str, object] = {
         "agent": agent,
         "name": installer.agent,
-        "detected": (workspace / installer.settings_path.parts[0]).is_dir(),
+        # Unlike Path.is_dir before Python 3.14, it is False on a PermissionError.
+        "detected": os.path.isdir(workspace / installer.settings_path.parts[0]),  # noqa: PTH112
         "installed": False,
         "error": None,
     }

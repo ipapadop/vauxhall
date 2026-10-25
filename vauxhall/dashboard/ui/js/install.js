@@ -111,14 +111,21 @@ export function initInstall(ipc) {
     };
 
     button.addEventListener('click', async () => {
-        if (await choose($('js-status'))) openDialog(dialog);
+        // A running install keeps its directory; choosing another would
+        // relabel its log and results.
+        if (running || await choose($('js-status'))) openDialog(dialog);
     });
     another.addEventListener('click', () => choose(error));
     close.addEventListener('click', () => closeDialog(dialog));
     list.addEventListener('change', refreshControls);
     // A closed dialog would leave a running install with no visible owner.
+    // Chromium can let a repeated Escape through despite preventDefault, so a
+    // close during an install opens the dialog again.
     dialog.addEventListener('cancel', (event) => { if (running) event.preventDefault(); });
-    dialog.addEventListener('close', () => button.focus());
+    dialog.addEventListener('close', () => {
+        if (running) openDialog(dialog);
+        else button.focus();
+    });
 
     run.addEventListener('click', async () => {
         const agents = checkboxes().filter(box => box.checked).map(box => box.value);

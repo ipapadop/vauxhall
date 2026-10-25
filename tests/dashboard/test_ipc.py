@@ -239,3 +239,11 @@ def test_detect_agents_rejects_a_missing_directory(tmp_path: Path) -> None:
 
     assert result["ok"] is False
     assert result["error"].startswith("Not a directory")
+
+
+def test_detect_agents_rejects_an_unreadable_directory(unsearchable_dir: Path) -> None:
+    """A directory that can't be checked is refused, not raised."""
+    result = json.loads(DashboardIPC().detect_agents(str(unsearchable_dir)))
+
+    assert result["ok"] is False
+    assert result["error"].startswith("Not a directory")

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from vauxhall import __version__
 from vauxhall.core.config_store import write_json_atomically
@@ -306,16 +307,70 @@ def _hooks_requirement() -> str:
 def setup_venv(venv_dir: Path) -> Path:
     """Create an isolated environment containing the Vauxhall hooks package.
 
+    An existing environment is moved aside first and restored if the new one
+    can't be built, so the registered hooks keep a working interpreter; a
+    half-built one, which lacks Vauxhall, is removed either way. The new one is
+    built in place rather than moved there, because entry-point scripts such as
+    ``vauxhall-relay`` record its absolute path.
+
     Args:
         venv_dir: Destination for the virtual environment.
 
     Returns:
         Path to the environment's Python executable.
-    """
-    if venv_dir.exists():
-        print(f"Removing existing venv at {venv_dir}...")
-        shutil.rmtree(venv_dir)
 
+    Raises:
+        subprocess.CalledProcessError: If creating the environment or
+            installing the package fails.
+        OSError: If the existing environment can't be moved aside.
+    """
+    previous = None
+    if venv_dir.exists():
+        previous = venv_dir.with_name(f"{venv_dir.name}.old-{uuid4().hex}")
+        venv_dir.rename(previous)
+    try:
+        venv_python = _build_venv(venv_dir)
+    except BaseException:
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        if previous is not None:
+            _restore_venv(previous, venv_dir)
+        raise
+    if previous is not None:
+        try:
+            shutil.rmtree(previous)
+        except OSError as error:
+            # The new environment works; only the copy is left behind.
+            print(f"Warning: could not remove the previous venv {previous}: {error}")
+    return venv_python
+
+
+def _restore_venv(previous: Path, venv_dir: Path) -> None:
+    """Move the environment set aside by ``setup_venv`` back into place.
+
+    A failure is reported rather than raised, so the build error that caused
+    the restore is the one the caller sees.
+
+    Args:
+        previous: Where the environment was moved.
+        venv_dir: Where it belongs.
+    """
+    try:
+        previous.rename(venv_dir)
+    except OSError as error:
+        print(f"Error: could not restore the previous venv {previous}: {error}")
+    else:
+        print(f"Kept the existing venv at {venv_dir}")
+
+
+def _build_venv(venv_dir: Path) -> Path:
+    """Create a virtual environment and install the Vauxhall hooks package in it.
+
+    Args:
+        venv_dir: Destination for the virtual environment, which must not exist.
+
+    Returns:
+        Path to the environment's Python executable.
+    """
     print(f"Creating virtual environment in {venv_dir}...")
     subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
     if os.name == "nt":
@@ -324,11 +379,21 @@ def setup_venv(venv_dir: Path) -> Path:
         venv_python = venv_dir / "bin" / "python"
 
     requirement = _hooks_requirement()
-    print(f"Installing {requirement}...")
+    # Flushed so pip's stderr lands after it when stdout is a pipe.
+    print(f"Installing {requirement}...", flush=True)
+    # pip's progress is noise here; its errors and warnings go to stderr, so
+    # they show. The version check would add a notice to every install.
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", requirement],
+        [
+            str(venv_python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            requirement,
+        ],
         check=True,
-        capture_output=True,
+        stdout=subprocess.DEVNULL,
     )
     return venv_python
 
@@ -384,7 +449,18 @@ def install_hooks(installers: Sequence[HookInstaller]) -> None:
             sys.exit(1)
         loaded.append((installer, settings_path, settings))
 
-    venv_python = setup_venv(venv_dir)
+    try:
+        venv_python = setup_venv(venv_dir)
+    except subprocess.CalledProcessError as error:
+        command = shlex.join(map(str, error.cmd))
+        print(f"Error: {command} exited with {error.returncode}")
+        print("No agent settings were changed.")
+        sys.exit(1)
+    except OSError as error:
+        # Such as a venv in use on Windows, which can't be moved aside.
+        print(f"Error setting up {venv_dir}: {error}")
+        print("No agent settings were changed.")
+        sys.exit(1)
     for installer, settings_path, settings in loaded:
         _register_hooks(installer, settings, venv_python)
         try:

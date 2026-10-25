@@ -16,36 +16,47 @@ const FAILURE_REASONS = {
     'pane-unavailable': 'its tmux pane is no longer available',
     'delivery-failed': 'tmux could not type it in',
 };
-const MAX_REMEMBERED = 20;
+const MAX_UNMATCHED_ACKS = 20;
 
-/** Prompts waiting for a relay: message id -> the card and its timeout. */
-const pending = new Map();
-/** Timed-out prompts whose late acknowledgment can still be shown: message id -> card. */
-const expired = new Map();
+/**
+ * Each card's latest prompt still without an acknowledgment: message id -> the
+ * card and its timeout, or a null timeout once timed out, so a late
+ * acknowledgment is still shown.
+ */
+const prompts = new Map();
 /** Acknowledgments that beat the bridge's reply carrying their message id. */
 const unmatched = new Map();
 
 /**
- * Adds an entry to a map, dropping the oldest once it holds more than MAX_REMEMBERED.
- * @param {Map<string, any>} map - The map to add to.
- * @param {string} key - The message id.
- * @param {any} value - The value to keep.
+ * Stops tracking a prompt.
+ * @param {string} id - The prompt's message id.
  */
-function remember(map, key, value) {
-    map.set(key, value);
-    if (map.size > MAX_REMEMBERED) map.delete(map.keys().next().value);
+function forget(id) {
+    const entry = prompts.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    prompts.delete(id);
 }
 
 /**
- * Shows the delivery state of a prompt on a card's live region, unless a newer
- * prompt from the same card has replaced it, so an older prompt's timeout or
- * late acknowledgment never overwrites the latest one's outcome.
+ * Stops tracking a card's previous prompt, so its timeout or late
+ * acknowledgment can't overwrite the new prompt's outcome, and the prompts of
+ * cards that have left the page.
+ * @param {HTMLElement} card - The card about to send a prompt.
+ */
+function forgetReplaced(card) {
+    forget(card.latestPromptId);
+    for (const [id, entry] of prompts) {
+        if (!entry.card.isConnected) forget(id);
+    }
+}
+
+/**
+ * Shows the delivery state of a card's latest prompt on its live region.
  * @param {HTMLElement} card - The agent card.
- * @param {string} id - The message id of the prompt the state is about.
  * @param {string} text - The state to show.
  */
-function setCardStatus(card, id, text) {
-    if (card.latestPromptId !== id) return;
+function setCardStatus(card, text) {
     const element = card.querySelector('.prompt-status');
     if (element) element.textContent = text;
 }
@@ -79,21 +90,24 @@ export async function sendPrompt(dashboardIpc, card, text) {
     }
     if (!result.ok) return { ok: false, error: result.error || 'The prompt could not be sent' };
 
+    forgetReplaced(card);
     card.latestPromptId = result.id;
     const early = unmatched.get(result.id);
     if (early) {
         unmatched.delete(result.id);
-        setCardStatus(card, result.id, describeAck(early));
+        setCardStatus(card, describeAck(early));
         return { ok: true };
     }
 
-    setCardStatus(card, result.id, 'Prompt sent, waiting for the relay…');
-    const timer = setTimeout(() => {
-        pending.delete(result.id);
-        remember(expired, result.id, card);
-        setCardStatus(card, result.id, 'No relay acknowledged the prompt');
-    }, ACK_TIMEOUT_MS);
-    pending.set(result.id, { card, timer });
+    setCardStatus(card, 'Prompt sent, waiting for the relay…');
+    const entry = {
+        card,
+        timer: setTimeout(() => {
+            entry.timer = null;
+            setCardStatus(card, 'No relay acknowledged the prompt');
+        }, ACK_TIMEOUT_MS),
+    };
+    prompts.set(result.id, entry);
     return { ok: true };
 }
 
@@ -103,18 +117,12 @@ export async function sendPrompt(dashboardIpc, card, text) {
  */
 export function handleAck(ack) {
     if (!ack || typeof ack.id !== 'string') return;
-    const entry = pending.get(ack.id);
-    if (entry) {
-        clearTimeout(entry.timer);
-        pending.delete(ack.id);
-        setCardStatus(entry.card, ack.id, describeAck(ack));
+    const entry = prompts.get(ack.id);
+    if (!entry) {
+        unmatched.set(ack.id, ack);
+        if (unmatched.size > MAX_UNMATCHED_ACKS) unmatched.delete(unmatched.keys().next().value);
         return;
     }
-    const card = expired.get(ack.id);
-    if (card) {
-        expired.delete(ack.id);
-        setCardStatus(card, ack.id, describeAck(ack));
-        return;
-    }
-    remember(unmatched, ack.id, ack);
+    forget(ack.id);
+    setCardStatus(entry.card, describeAck(ack));
 }

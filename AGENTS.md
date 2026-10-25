@@ -199,11 +199,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   question or permission request. `js/prompt.js` sends the request and shows
   the state in the card's `.prompt-status` live region: waiting for the relay,
   delivered, not delivered with a reason, or, after 10 seconds, no
-  acknowledgment, which an acknowledgment for one of the last 20 timed-out
-  prompts still replaces. An acknowledgment that beats the bridge's reply is kept
-  briefly and matched afterwards. Only a card's latest prompt updates its
-  status, so an older prompt's timeout or late acknowledgment can't overwrite
-  the newer outcome. The dialog closes when its card is evicted,
+  acknowledgment, which a later acknowledgment still replaces. It tracks
+  only each card's latest prompt: sending another forgets the previous one, so
+  an older prompt's timeout or late acknowledgment can't overwrite the newer
+  outcome, and a send also forgets the prompts of cards that have left the
+  page. An acknowledgment that beats the bridge's reply is kept briefly and
+  matched afterwards. The dialog closes when its card is evicted,
   cleared, or denylisted.
 - **Security**: Anyone who can publish to the broker can send prompts, and a
   prompt can make an agent run commands, unless the broker's ACL restricts

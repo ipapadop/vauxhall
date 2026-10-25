@@ -12,14 +12,16 @@ import { createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
 
 /**
- * Builds a card in a fresh document.
+ * Builds a card on the page of a fresh document.
  * @returns {HTMLElement} The card.
  */
 function makeCard() {
     const { document, window } = parseHTML('<html><body></body></html>');
     globalThis.document = document;
     globalThis.window = window;
-    return createCard({ ...IDENTITY }, {}, () => {});
+    const card = createCard({ ...IDENTITY }, {}, () => {});
+    document.body.append(card);
+    return card;
 }
 
 /**
@@ -93,6 +95,7 @@ test('no acknowledgment within the timeout is reported', async (t) => {
     t.mock.timers.tick(ACK_TIMEOUT_MS);
 
     assert.equal(status(card), 'No relay acknowledged the prompt');
+    handleAck({ id: 'a5', status: 'delivered' });
 });
 
 test('an acknowledgment that arrives before the bridge replies is not lost', async (t) => {
@@ -186,25 +189,41 @@ test('an acknowledgment after the timeout replaces the timeout message', async (
     const card = makeCard();
     await sendPrompt(bridge({ ok: true, id: 'late-1' }).ipc, card, 'hello');
     t.mock.timers.tick(ACK_TIMEOUT_MS);
+    assert.equal(status(card), 'No relay acknowledged the prompt');
 
     handleAck({ id: 'late-1', status: 'delivered' });
 
     assert.equal(status(card), 'Prompt delivered');
 });
 
-test('timed-out prompts are remembered only up to a limit', async (t) => {
+test('late acknowledgments reach every card, however many timed out', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const cards = [];
     for (let index = 0; index < 25; index++) {
         const card = makeCard();
         cards.push(card);
-        await sendPrompt(bridge({ ok: true, id: `expired-${index}` }).ipc, card, 'hello');
-        t.mock.timers.tick(ACK_TIMEOUT_MS);
+        await sendPrompt(bridge({ ok: true, id: `outage-${index}` }).ipc, card, 'hello');
     }
+    t.mock.timers.tick(ACK_TIMEOUT_MS);
 
-    handleAck({ id: 'expired-0', status: 'delivered' });
-    handleAck({ id: 'expired-24', status: 'delivered' });
+    cards.forEach((card, index) => handleAck({ id: `outage-${index}`, status: 'delivered' }));
 
-    assert.equal(status(cards[0]), 'No relay acknowledged the prompt');
-    assert.equal(status(cards[24]), 'Prompt delivered');
+    assert.deepEqual(cards.map(status), cards.map(() => 'Prompt delivered'));
+});
+
+test('a prompt from a card that left the page is forgotten', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const removed = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'gone-1' }).ipc, removed, 'hello');
+    t.mock.timers.tick(ACK_TIMEOUT_MS);
+    removed.remove();
+    const other = makeCard();
+    await sendPrompt(bridge({ ok: true, id: 'other-1' }).ipc, other, 'hello');
+
+    handleAck({ id: 'gone-1', status: 'delivered' });
+
+    assert.equal(status(removed), 'No relay acknowledged the prompt');
+    handleAck({ id: 'other-1', status: 'delivered' });
+    // The forgotten prompt's acknowledgment is now held as an early one; use it up.
+    await sendPrompt(bridge({ ok: true, id: 'gone-1' }).ipc, other, 'hello');
 });

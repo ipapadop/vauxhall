@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 
@@ -363,7 +363,7 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
     old_subscriber.discard.assert_called_once_with()
     subscriber_type.assert_called_once_with(
         dashboard.on_telemetry,
-        dashboard.on_status,
+        ANY,
         "broker",
         1883,
         ack_callback=dashboard.on_ack,
@@ -393,6 +393,31 @@ def test_second_mqtt_change_replaces_reconnected_subscriber(
     first.discard.assert_called_once_with()
     second.start.assert_called_once_with()
     assert dashboard.mqtt is second
+
+
+def test_replaced_subscriber_status_is_dropped(dashboard: DashboardApp) -> None:
+    """A status the discarded subscriber posts after its replacement is dropped.
+
+    Its network thread can be past its stopping check when it is discarded.
+
+    Args:
+        dashboard: Dashboard whose frontend is ready and MQTT is not started.
+    """
+    dashboard.mqtt = MagicMock()
+
+    with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
+        dashboard.save_settings({"mqtt": {"host": "one"}})
+        dashboard.save_settings({"mqtt": {"host": "two"}})
+    old_status, new_status = (args.args[1] for args in subscriber_type.call_args_list)
+    dashboard.window.invoke.reset_mock()
+
+    new_status("Connecting...")
+    old_status("Connected to Agent Fleet")
+
+    assert dashboard.window.invoke.call_args_list == [
+        call("status-update", "Connecting...")
+    ]
+    assert dashboard.last_status == "Connecting..."
 
 
 def test_reconnect_failure_keeps_saved_settings(dashboard: DashboardApp) -> None:

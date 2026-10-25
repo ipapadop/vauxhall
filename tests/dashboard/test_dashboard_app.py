@@ -437,7 +437,7 @@ def test_events_still_queued_at_shutdown_are_not_sent_to_the_closed_window() -> 
     dashboard.window = MagicMock()
     dashboard.ipc.is_ready = True
     dashboard.on_telemetry(valid_event())
-    dashboard.on_status("Connected to Agent Fleet")
+    dashboard.on_status("Connected to Agent Fleet", 0)
 
     dashboard.ipc.is_ready = False
     queue.run()
@@ -451,9 +451,9 @@ def test_readiness_posts_the_last_status_before_queued_updates() -> None:
     queue = DeferredQueue()
     dashboard = DashboardApp(MagicMock(), queue_to_ui=queue.wrap)
     dashboard.window = MagicMock()
-    dashboard.on_status("Connecting...")
+    dashboard.on_status("Connecting...", 0)
     dashboard.on_telemetry(valid_event())
-    dashboard.on_status("Connected to Agent Fleet")
+    dashboard.on_status("Connected to Agent Fleet", 0)
     queue.run()
     dashboard.window.invoke.assert_not_called()
 
@@ -549,8 +549,8 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
     app.run.side_effect = close_ready_window
 
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
-        subscriber_type.return_value.stop.side_effect = lambda: dashboard.on_status(
-            "Disconnected"
+        subscriber_type.return_value.stop.side_effect = lambda: (
+            subscriber_type.call_args.args[1]("Disconnected")
         )
         with pytest.raises(SystemExit):
             dashboard.run()

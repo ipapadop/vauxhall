@@ -373,8 +373,11 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   stay. `discard()` stops the old client's callbacks and status reports at
   once and disconnects it on a daemon thread, because `loop_stop()` joins a
   network thread that can be inside a connect attempt for up to paho's
-  5-second connect timeout, and the save runs on the UI thread. Shutdown
-  still calls `stop()`, which waits and reports `Disconnected`. If the frontend is
+  5-second connect timeout, and the save runs on the UI thread. Its network
+  thread can still be inside a callback, past the stopping check, so each
+  subscriber's statuses carry a generation, and the UI thread drops those
+  from a replaced one. Shutdown still calls `stop()`, which waits and reports
+  `Disconnected`. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
   card limit, and agent denylist; the frontend removes any card whose agent is
   newly denylisted. `vauxhall.hooks.config` loads `hook_settings` on first

@@ -65,6 +65,8 @@ The first release, planned as 0.1.0. It is alpha software; see
 - Saving a broker change in the settings dialog no longer freezes the
   window for up to 5 seconds while the old connection is still trying to
   reach its broker. The old connection now closes in the background.
+- Closing the dashboard while the broker is unreachable no longer keeps the
+  process running for up to 5 seconds; it waits at most 1 second.
 - **Hide until next event** moves keyboard focus to the card grid. Before,
   focus went back to the hidden card's ⋮ button, which can't take focus, so
   it was lost.

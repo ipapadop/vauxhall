@@ -378,5 +378,5 @@ def test_window_state_save_failure_does_not_stop_shutdown() -> None:
 
     subscriber_type = run_dashboard(app)
 
-    subscriber_type.return_value.stop.assert_called_once_with()
+    subscriber_type.return_value.close.assert_called_once()
     assert not state_path().exists()

@@ -26,7 +26,7 @@ from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.graphics import set_graphics_backend
 from vauxhall.dashboard.ipc import DashboardIPC
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
 from vauxhall.dashboard.settings_editor import (
     DASHBOARD_FILE,
     HOOKS_FILE,
@@ -47,6 +47,9 @@ logger = get_logger(__name__)
 
 UI_DIR = (Path(__file__).parent / "ui").resolve()
 ICON_FILE = UI_DIR / "icon.png"
+# At exit, long enough for a connected client to send its DISCONNECT; a client
+# still inside a connect attempt has nothing to close cleanly.
+SHUTDOWN_CLOSE_SECONDS = 1.0
 
 WindowEvent = Callable[[str, object], None]
 
@@ -138,6 +141,7 @@ class DashboardApp:
         self._outbox: deque[tuple[str, object]] = deque()
         self._sending = False
         self.mqtt: DashboardSubscriber | None = None
+        self.mqtt_closer = SubscriberCloser()
         self._subscriber_generation = 0
 
     def _on_frontend_ready(self) -> None:
@@ -418,7 +422,7 @@ class DashboardApp:
     def _reconnect(self) -> None:
         """Replace the MQTT subscriber with one using the current broker settings."""
         assert self.mqtt is not None
-        self.mqtt.discard()
+        self.mqtt.close(self.mqtt_closer)
         self.mqtt = DashboardSubscriber(
             self.on_telemetry,
             self._status_callback(),
@@ -491,7 +495,9 @@ class DashboardApp:
             # The window is gone once the UI loop exits; hold any late updates.
             self.ipc.is_ready = False
             self._save_window_state(saved_window)
-            self.mqtt.stop()
+            self.mqtt.close(self.mqtt_closer)
+            if not self.mqtt_closer.finish(SHUTDOWN_CLOSE_SECONDS):
+                logger.warning("Exiting before the MQTT connection finished closing")
             logger.info("Vauxhall Dashboard shutting down...")
 
 

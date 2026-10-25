@@ -20,7 +20,7 @@ from tests.fake_broker import FakeBroker
 from vauxhall.core.config import PASSWORD_ENV, MQTTConfig
 from vauxhall.core.mqtt import configure_client
 from vauxhall.dashboard.config import dashboard_settings
-from vauxhall.dashboard.mqtt_client import DashboardSubscriber
+from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
 from vauxhall.hooks.client import publish
 from vauxhall.hooks.config import hook_settings
 from vauxhall.hooks.relay import PromptRelay
@@ -346,7 +346,9 @@ def test_dashboard_subscriber_authenticates(monkeypatch: pytest.MonkeyPatch) -> 
         try:
             attempt = broker.next_attempt()
         finally:
-            subscriber.stop()
+            closer = SubscriberCloser()
+            subscriber.close(closer)
+            assert closer.finish(timeout=5)
 
     assert attempt.connect is not None
     assert attempt.connect.username == "dashboard"
@@ -370,7 +372,6 @@ def test_dashboard_subscriber_reports_failed_tls_setup(
         subscriber = DashboardSubscriber(MagicMock(), statuses.append, port=broker.port)
 
         subscriber.start()
-        subscriber.stop()
 
         with pytest.raises(queue.Empty):
             broker.next_attempt(timeout=0.3)
@@ -402,7 +403,6 @@ def test_dashboard_subscriber_reports_a_password_file_it_cannot_decode(
         subscriber = DashboardSubscriber(MagicMock(), statuses.append, port=broker.port)
 
         subscriber.start()
-        subscriber.stop()
 
         with pytest.raises(queue.Empty):
             broker.next_attempt(timeout=0.3)

@@ -347,7 +347,7 @@ def test_environment_field_is_rejected(
 
 
 def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
-    """Broker changes discard the subscriber and start one with the new settings.
+    """Broker changes close the subscriber and start one with the new settings.
 
     Args:
         dashboard: Dashboard whose frontend is ready and MQTT is not started.
@@ -360,7 +360,7 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
 
     assert result["reconnecting"] is True
     assert result["restart_required"] == []
-    old_subscriber.discard.assert_called_once_with()
+    old_subscriber.close.assert_called_once_with(dashboard.mqtt_closer)
     subscriber_type.assert_called_once_with(
         dashboard.on_telemetry,
         ANY,
@@ -376,7 +376,7 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
 def test_second_mqtt_change_replaces_reconnected_subscriber(
     dashboard: DashboardApp,
 ) -> None:
-    """A later broker change discards the subscriber started by the previous one.
+    """A later broker change closes the subscriber started by the previous one.
 
     Args:
         dashboard: Dashboard whose frontend is ready and MQTT is not started.
@@ -390,15 +390,15 @@ def test_second_mqtt_change_replaces_reconnected_subscriber(
         dashboard.save_settings({"mqtt": {"host": "one"}})
         dashboard.save_settings({"mqtt": {"host": "two"}})
 
-    first.discard.assert_called_once_with()
+    first.close.assert_called_once_with(dashboard.mqtt_closer)
     second.start.assert_called_once_with()
     assert dashboard.mqtt is second
 
 
 def test_replaced_subscriber_status_is_dropped(dashboard: DashboardApp) -> None:
-    """A status the discarded subscriber posts after its replacement is dropped.
+    """A status the closed subscriber posts after its replacement is dropped.
 
-    Its network thread can be past its stopping check when it is discarded.
+    Its network thread can be past its stopping check when it is closed.
 
     Args:
         dashboard: Dashboard whose frontend is ready and MQTT is not started.
@@ -607,7 +607,7 @@ def test_credential_change_reconnects(dashboard: DashboardApp) -> None:
         result = dashboard.save_settings({"mqtt": {"username": "dashboard"}})
 
     assert result["reconnecting"] is True
-    old_subscriber.discard.assert_called_once_with()
+    old_subscriber.close.assert_called_once_with(dashboard.mqtt_closer)
     subscriber_type.return_value.start.assert_called_once_with()
 
 

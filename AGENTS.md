@@ -346,8 +346,7 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   Pyloid's `invoke` makes a caller on another thread wait for the UI thread.
   MQTT callbacks and settings saves post events through `queue_to_ui_thread`,
   a queued Qt signal, and return at once, so neither thread waits on the
-  other: a settings save during telemetry, or `loop_stop()` joining the
-  network thread at shutdown, can't deadlock. Events
+  other: a settings save during telemetry can't deadlock. Events
   run on the UI thread in the order they were posted. `DashboardApp` takes the
   queue as `queue_to_ui`, so tests can run events at once or hold them.
   Readiness, the pending updates, the last status, and the outbox of events
@@ -361,23 +360,26 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   earlier but run later goes out after them. Repeated readiness signals have
   no effect.
 - **Connection status**: The status line shows `Connecting...`,
-  `Connected to Agent Fleet`, retry messages after connection failures or
-  disconnects, and `Disconnected` on shutdown.
+  `Connected to Agent Fleet`, and retry messages after connection failures
+  or disconnects.
 - **Saving settings**: `DashboardApp.save_settings` runs on the UI thread, so
   saves never overlap. It checks the dashboard file and, when requested, the
   hooks file with `check_user_config` before writing either one. It then reloads
   `DashboardConfig`, replaces the running `mqtt`, `logging`, and `dashboard`
   settings, and sets the root log level if it changed. Broker changes call
-  `discard()` on the current `DashboardSubscriber` and start a new one with
+  `close()` on the current `DashboardSubscriber` and start a new one with
   the new host and port; a failed start is logged, and the saved settings
-  stay. `discard()` stops the old client's callbacks and status reports at
-  once and disconnects it on a daemon thread, because `loop_stop()` joins a
-  network thread that can be inside a connect attempt for up to paho's
-  5-second connect timeout, and the save runs on the UI thread. Its network
-  thread can still be inside a callback, past the stopping check, so each
-  subscriber's statuses carry a generation, and the UI thread drops those
-  from a replaced one. Shutdown still calls `stop()`, which waits and reports
-  `Disconnected`. If the frontend is
+  stay. `close()` stops the old client's connection and status callbacks,
+  sends its DISCONNECT, and hands it to the `SubscriberCloser`, whose one
+  daemon thread runs each closed client's `loop_stop()` in turn, because
+  `loop_stop()` joins a network thread that can be inside a connect attempt
+  for up to paho's 5-second connect timeout, and the save runs on the UI
+  thread. A closed subscriber still forwards telemetry and acknowledgments
+  that arrive before it disconnects, since they describe agents, and
+  acknowledgments are not replayed to its replacement; it can't be started
+  again. Its network thread can still be inside a callback, past the
+  stopping check, so each subscriber's statuses carry a generation, and the
+  UI thread drops those from a replaced one. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
   card limit, and agent denylist; the frontend removes any card whose agent is
   newly denylisted. `vauxhall.hooks.config` loads `hook_settings` on first
@@ -421,9 +423,12 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
 - **Shutdown**: When the UI loop exits, including after an exception or partial
-  startup failure, the dashboard marks the frontend not ready and stops the
-  MQTT client once. The final `Disconnected` status and any late telemetry are
-  kept instead of being sent to the destroyed window, and other events still
+  startup failure, the dashboard marks the frontend not ready, closes the
+  MQTT client, and waits up to `SHUTDOWN_CLOSE_SECONDS` (1 second) for every
+  closed client's network loop to end, logging a warning if one is still
+  inside a connect attempt; that daemon thread ends with the process. Late
+  telemetry is kept instead of being sent to the destroyed window, and other
+  events still
   queued for the UI thread are dropped: saving the window state calls Pyloid, whose
   nested event loop can run them, and sending one to the deleted web view
   makes Pyloid wait forever for a result.

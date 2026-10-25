@@ -24,6 +24,7 @@ sys_modules_patch.start()
 
 from vauxhall.dashboard.app import (  # noqa: E402
     ICON_FILE,
+    SHUTDOWN_CLOSE_SECONDS,
     DashboardApp,
     WindowEvent,
     _set_chromium_flags,
@@ -516,15 +517,17 @@ def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None
     app = MagicMock()
     app.run.side_effect = RuntimeError("UI failed")
 
+    dashboard = DashboardApp(app)
+
     with (
         patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type,
         pytest.raises(RuntimeError, match="UI failed"),
     ):
-        DashboardApp(app).run()
+        dashboard.run()
 
     mock_serve.assert_called_once()
     subscriber_type.return_value.start.assert_called_once_with()
-    subscriber_type.return_value.stop.assert_called_once_with()
+    subscriber_type.return_value.close.assert_called_once_with(dashboard.mqtt_closer)
 
 
 @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
@@ -549,16 +552,45 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
     app.run.side_effect = close_ready_window
 
     with patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type:
-        subscriber_type.return_value.stop.side_effect = lambda: (
-            subscriber_type.call_args.args[1]("Disconnected")
+        subscriber_type.return_value.close.side_effect = lambda _closer: (
+            subscriber_type.call_args.args[1]("Disconnected. Retrying...")
         )
         with pytest.raises(SystemExit):
             dashboard.run()
 
     mock_serve.assert_called_once()
-    subscriber_type.return_value.stop.assert_called_once_with()
+    subscriber_type.return_value.close.assert_called_once_with(dashboard.mqtt_closer)
     app.create_window.return_value.invoke.assert_not_called()
-    assert dashboard.last_status == "Disconnected"
+    assert dashboard.last_status == "Disconnected. Retrying..."
+
+
+@pytest.mark.parametrize("closed_in_time", [True, False])
+def test_shutdown_waits_briefly_for_mqtt_to_close(
+    closed_in_time: bool,  # noqa: FBT001
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Exit waits a bounded time for closing connections, and says if they didn't.
+
+    Args:
+        closed_in_time: Whether the closer finishes within the wait.
+        caplog: Captures the warning.
+    """
+    app = MagicMock()
+    app.run.side_effect = SystemExit(0)
+    dashboard = DashboardApp(app, queue_to_ui=run_now)
+    dashboard.mqtt_closer = MagicMock()
+    dashboard.mqtt_closer.finish.return_value = closed_in_time
+
+    with (
+        patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost"),
+        patch("vauxhall.dashboard.app.DashboardSubscriber"),
+        pytest.raises(SystemExit),
+    ):
+        dashboard.run()
+
+    dashboard.mqtt_closer.finish.assert_called_once_with(SHUTDOWN_CLOSE_SECONDS)
+    warned = "Exiting before the MQTT connection finished closing" in caplog.text
+    assert warned is not closed_in_time
 
 
 @pytest.mark.parametrize(

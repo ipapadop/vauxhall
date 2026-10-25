@@ -189,10 +189,12 @@ need to edit it.
   search text is not saved.
 - **Window size, position, and maximized state** are saved when the dashboard
   closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
-  only set the size on first start. A saved position is used only if the
-  window's top edge would still be on a connected screen. A maximized window
-  keeps the normal size and position it had when the dashboard started, so if
-  you move it to another monitor before maximizing, it reopens on the first one.
+  only set the size on first start. A size outside their limits (320 to
+  16,384 pixels) is saved as the nearest limit. A saved position is used only
+  if the window's top edge would still be on a connected screen. A maximized
+  window keeps the normal size and position it had when the dashboard started,
+  so if you move it to another monitor before maximizing, it reopens on the
+  first one.
 - **Theme on first paint**: the theme is also kept in the page's local storage,
   so the dashboard starts with the right theme before the state file is read.
   A theme saved there by earlier versions is copied to the state file the first

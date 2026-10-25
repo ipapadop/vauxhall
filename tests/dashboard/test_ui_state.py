@@ -218,6 +218,34 @@ def test_window_geometry_of_normal_window() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("size", "saved_size"),
+    [
+        ({"width": 200, "height": 150}, {"width": 320, "height": 320}),
+        ({"width": 20000, "height": 800}, {"width": 16384, "height": 800}),
+    ],
+)
+def test_out_of_range_window_size_keeps_position(
+    size: dict[str, int], saved_size: dict[str, int]
+) -> None:
+    """A window outside the size limits saves the nearest size and its position.
+
+    Args:
+        size: The window's current size.
+        saved_size: The size the case expects to be saved.
+    """
+    window = MagicMock()
+    window.is_maximized.return_value = False
+    window.get_size.return_value = size
+    window.get_position.return_value = {"x": 50, "y": 60}
+
+    update_ui_state({"window": window_geometry(window, {})})
+
+    saved = load_ui_state()["window"]
+    assert saved == {**saved_size, "x": 50, "y": 60, "maximized": False}
+    assert visible_position(saved, [SCREEN]) == (50, 60)
+
+
 def test_window_geometry_of_maximized_window_keeps_normal_size() -> None:
     """A maximized window keeps the previously saved normal size and position."""
     window = MagicMock()
@@ -369,6 +397,28 @@ def test_run_skips_off_screen_position() -> None:
     run_dashboard(app)
 
     app.create_window.return_value.set_position.assert_not_called()
+
+
+@pytest.mark.parametrize(("x", "expected_calls"), [(50, 1), (1870, 0)])
+def test_run_checks_position_with_created_width(x: int, expected_calls: int) -> None:
+    """A position saved without a width is checked with the width used to create.
+
+    Older versions saved no width for a window narrower than 320 pixels, and a
+    maximized close keeps that saved state.
+
+    Args:
+        x: The saved horizontal position.
+        expected_calls: How often the case expects ``set_position`` to be called.
+    """
+    write_state(json.dumps({"window": {"x": x, "y": 60, "maximized": True}}))
+    app = screen_app()
+    window = app.create_window.return_value
+    window.is_maximized.return_value = True
+
+    run_dashboard(app)
+
+    assert app.create_window.call_args.kwargs["width"] == 1000
+    assert window.set_position.call_args_list == [((x, 60),)] * expected_calls
 
 
 def test_window_state_save_failure_does_not_stop_shutdown() -> None:

@@ -895,3 +895,15 @@ test('an event with more than the repeated message is shown', async (t) => {
 
     assert.equal(agents[CLAUDE_KEY].dataset.state, 'Thinking');
 });
+
+test('installer events reach the Install Hooks dialog', async (t) => {
+    const { document, listeners } = await bootDashboard(t, {
+        select_install_directory: async () => JSON.stringify({ ok: true, path: '/w', agents: [] }),
+    });
+
+    listeners['install-output']({ line: 'Creating virtual environment...' });
+    await listeners['install-done']({ ok: false, returncode: 2 });
+
+    assert.equal(document.getElementById('install-log').textContent, 'Creating virtual environment...\n');
+    assert.equal(document.getElementById('install-outcome').textContent, 'Install failed (exit 2). See the log above.');
+});

@@ -23,6 +23,7 @@
             </div>
             <div class="toolbar">
                 <button id="settings-btn" class="secondary-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙️</button>
+                <button id="install-hooks-btn" class="secondary-btn" title="Install Vauxhall hooks into an agent's workspace" aria-haspopup="dialog">Install Hooks…</button>
                 <button id="theme-toggle" class="secondary-btn" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">🌓</button>
                 <input type="text" id="search-input" placeholder="Search agents or paths..." class="search-bar" title="Filter agents by name or workspace path" aria-label="Filter agents by name or workspace path">
                 <select id="sort-select" class="secondary-btn" title="Sort agent cards" aria-label="Sort agent cards">
@@ -134,6 +135,26 @@
                 <button type="submit" class="secondary-btn primary-btn">Save</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="install-dialog" class="settings-dialog" aria-labelledby="install-title">
+        <h2 id="install-title">Install Hooks</h2>
+        <p class="settings-note">Directory: <code id="install-path"></code></p>
+        <fieldset id="install-agents" class="settings-section">
+            <legend>Agents</legend>
+        </fieldset>
+        <p class="settings-note">
+            Agents installed together share one <code>.vauxhall-venv</code> in the directory.
+            Reinstalling replaces Vauxhall's hooks and keeps the others.
+        </p>
+        <p id="install-error" class="prompt-error" role="alert"></p>
+        <pre id="install-log" class="install-log" role="log" aria-live="polite" aria-label="Installer output"></pre>
+        <p id="install-outcome" class="settings-message" role="status"></p>
+        <div class="settings-actions">
+            <button type="button" id="install-another" class="secondary-btn">Choose another directory…</button>
+            <button type="button" id="install-close" class="secondary-btn">Close</button>
+            <button type="button" id="install-run" class="secondary-btn primary-btn">Install</button>
+        </div>
     </dialog>
 
     <script type="module" src="app.js"></script>

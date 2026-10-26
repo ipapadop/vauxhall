@@ -188,3 +188,13 @@ def test_detect_agents_reports_an_unreadable_workspace(unsearchable_dir: Path) -
 
     assert [entry["detected"] for entry in found] == [False, False, False]
     assert all(entry["error"] for entry in found)
+
+
+def test_detect_agents_treats_a_config_file_as_absent(tmp_path: Path) -> None:
+    """A file where the config directory belongs is not an agent or an error."""
+    (tmp_path / ".claude").write_text("")
+
+    entry = _by_agent(tmp_path)["claude"]
+
+    assert entry["detected"] is False
+    assert entry["error"] is None

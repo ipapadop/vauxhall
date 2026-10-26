@@ -59,10 +59,13 @@ def _detect(workspace: Path, agent: str, installer: HookInstaller) -> dict[str, 
     }
     path = workspace / installer.settings_path
     try:
-        if path.exists():
-            settings = json.loads(path.read_text(encoding="utf-8"))
-            validate_hook_settings(settings, installer.agent, installer.option_keys)
-            entry["installed"] = _has_owned_handler(settings, installer)
+        # Reading, not Path.exists, which from Python 3.14 is False on a
+        # PermissionError and would hide an unreadable workspace.
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        validate_hook_settings(settings, installer.agent, installer.option_keys)
+        entry["installed"] = _has_owned_handler(settings, installer)
+    except (FileNotFoundError, NotADirectoryError):
+        pass
     except (OSError, ValueError, TypeError) as error:
         entry["error"] = str(error)
     return entry

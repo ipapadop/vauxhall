@@ -13,6 +13,7 @@ import random
 import tempfile
 import threading
 import time
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -53,7 +54,9 @@ POSSIBLE_OPERATIONS: list[dict[str, Any]] = [
 ]
 
 
-def simulate_agent(agent_idx: int, transitions: int) -> None:
+def simulate_agent(
+    agent_idx: int, transitions: int, host: str = "localhost", port: int = 1883
+) -> None:
     """Simulate a single agent's activity.
 
     Publishes a random operation every second, stopping at the first one the
@@ -62,6 +65,8 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     Args:
         agent_idx: The index of the agent being simulated (used for unique naming).
         transitions: The number of event transitions to simulate for this agent.
+        host: The broker's host name.
+        port: The broker's port.
     """
     agent_name = f"Gemini-1.5-Pro-{agent_idx}"
     session_id = f"simulation:{agent_idx}"
@@ -69,8 +74,8 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
 
     env = random.choice(["local", "remote"])
 
-    # The hooks' credentials and TLS settings apply to the local broker too.
-    broker = replace(hook_settings.mqtt, host="localhost", port=1883)
+    # The hooks' credentials and TLS settings apply to the chosen broker too.
+    broker = replace(hook_settings.mqtt, host=host, port=port)
     for i in range(transitions):
         op = random.choice(POSSIBLE_OPERATIONS)
         event = {
@@ -101,8 +106,19 @@ def simulate_agent(agent_idx: int, transitions: int) -> None:
     logger.info("Agent %s finished %d transitions.", agent_name, transitions)
 
 
-if __name__ == "__main__":
-    setup_logging()
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse the command line.
+
+    The broker defaults to ``localhost:1883``, never the hooks' configured
+    one, so simulated telemetry can't reach a real fleet's dashboard by
+    accident.
+
+    Args:
+        argv: Arguments without the program name; ``sys.argv`` when omitted.
+
+    Returns:
+        The parsed options.
+    """
     parser = argparse.ArgumentParser(
         description="Simulate multi-agent activity for Vauxhall"
     )
@@ -120,7 +136,20 @@ if __name__ == "__main__":
         default=5,
         help="Number of telemetry events to send per agent",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Broker host (default: localhost, not the hooks' configured broker)",
+    )
+    parser.add_argument(
+        "--port", type=int, default=1883, help="Broker port (default: 1883)"
+    )
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    setup_logging()
+    args = parse_args()
 
     logger.info(
         "Starting simulation for %d agent(s) with %d transitions each...",
@@ -130,7 +159,10 @@ if __name__ == "__main__":
     threads = []
     for i in range(args.num_agents):
         # Each agent runs in its own thread to simulate concurrent activity
-        t = threading.Thread(target=simulate_agent, args=(i + 1, args.num_transitions))
+        t = threading.Thread(
+            target=simulate_agent,
+            args=(i + 1, args.num_transitions, args.host, args.port),
+        )
         threads.append(t)
         t.start()
 

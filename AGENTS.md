@@ -261,6 +261,13 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
 
 ## Dashboard Behavior
 
+- **Header**: Controls are grouped by what they act on, following the GNOME
+  header bar and Fluent command bar guidance. App-level actions trail the
+  title (`.app-actions`): **Install Hooks…** as the primary button, then the
+  theme toggle and ⚙️ Settings. The view bar below (`.view-bar`) holds search,
+  sort, and the two checkboxes, with **Clear Stale** and the red-outlined
+  **Clear Dashboard** pushed to its end. Both rows wrap on narrow windows.
+  `accessibility.test.js` pins the grouping and order.
 - **Cards**: A card is identified by `agent`, `workspace`, and `session_id`, so
   separate sessions get separate cards. The dashboard keeps up to
   `max_active_agents` cards (100 by default); a new identity at capacity evicts

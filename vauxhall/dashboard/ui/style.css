@@ -211,8 +211,40 @@ header {
 
 .toolbar {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: center;
+}
+
+/* App-level actions trail the title; the view bar holds what acts on the
+   cards, with the clear actions pushed to its end. */
+.app-actions {
+    margin-left: auto;
+}
+
+.view-bar {
+    margin-top: 12px;
+}
+
+.view-bar .search-bar {
+    flex: 1 1 250px;
+    max-width: 480px;
+}
+
+.view-bar-spacer {
+    flex: 1 1 0;
+}
+
+.danger-btn {
+    color: var(--error-color);
+    border-color: var(--error-color);
+    margin-left: 8px;
+}
+
+.danger-btn:hover {
+    background-color: var(--error-color);
+    border-color: var(--error-color);
+    color: #ffffff;
 }
 
 .toolbar-checkbox {

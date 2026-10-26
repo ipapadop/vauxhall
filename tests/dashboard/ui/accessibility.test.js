@@ -219,6 +219,18 @@ test('the fleet summary is a polite live region', () => {
     assert.equal(summary.getAttribute('aria-live'), 'polite');
 });
 
+test('app actions trail the title, and view controls precede the clear actions', () => {
+    const document = loadIndexPage();
+    const ids = (selector) => [...document.querySelectorAll(`${selector} [id]`)].map(el => el.id);
+
+    assert.deepEqual(ids('.app-actions'), ['install-hooks-btn', 'theme-toggle', 'settings-btn']);
+    assert.deepEqual(ids('.view-bar'), [
+        'search-input', 'sort-select', 'attention-first-toggle', 'notify-toggle', 'clear-stale-btn', 'clear-btn',
+    ]);
+    assert.ok(document.getElementById('install-hooks-btn').classList.contains('primary-btn'));
+    assert.ok(document.getElementById('clear-btn').classList.contains('danger-btn'));
+});
+
 test('the attention-first and notify toggles are checkboxes named by a wrapping label', () => {
     const document = loadIndexPage();
 

@@ -68,7 +68,7 @@ def test_repeated_agent_is_installed_once(tmp_path: Path) -> None:
         assert [handler for group in groups for handler in group["hooks"]] == [
             {
                 "type": "command",
-                "command": shlex.join([VENV_PYTHON, "-m", installer.module]),
+                "command": shlex.join([VENV_PYTHON, "-P", "-m", installer.module]),
                 "timeout": 3,
             }
         ]

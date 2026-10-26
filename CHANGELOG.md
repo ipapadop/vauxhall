@@ -220,6 +220,12 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Security
 
+- Hook commands now run `python -P -m vauxhall.hooks.<agent>.telemetry_hook`.
+  Agents run hooks in their workspace, and without `-P` Python searched it
+  first, so a repository containing its own `vauxhall` package ran that
+  code on every hook event. The installer's `venv` and `pip` steps use `-P`
+  too. Reinstall the hooks to update existing settings, for example with
+  **Install Hooks…** → Reinstall in the dashboard.
 - Logs show control characters in messages, tracebacks, and stacks as
   `\xNN`. A terminal escape sequence in an MQTT topic, which the dashboard
   and relay log when they drop a message, could otherwise rewrite the

@@ -103,21 +103,22 @@ def _is_hook_invocation(command: str, module: str) -> bool:
         module: The hook module the command is expected to run.
 
     Returns:
-        Whether the command is a Python interpreter running that module.
+        Whether the command is a Python interpreter running that module, with
+        or without the ``-P`` that commands written by older versions lack.
     """
     try:
         arguments = shlex.split(command)
     except ValueError:
         return False
-    if len(arguments) == 3:
-        executable = arguments[0]
-    elif len(arguments) == 4 and arguments[0] == "&":
-        executable = arguments[1]
-    else:
+    if arguments[:1] == ["&"]:
+        arguments = arguments[1:]
+    if arguments[1:2] == ["-P"]:
+        arguments = [arguments[0], *arguments[2:]]
+    if len(arguments) != 3:
         return False
-    executable_name = executable.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    executable_name = arguments[0].replace("\\", "/").rsplit("/", maxsplit=1)[-1]
     is_python = executable_name.casefold() in {"python", "python.exe"}
-    return is_python and arguments[-2:] == ["-m", module]
+    return is_python and arguments[1:] == ["-m", module]
 
 
 def validate_hook_settings(
@@ -298,12 +299,14 @@ def build_hook_command(venv_python: Path, module: str) -> str:
         The command to store in the agent's settings file, base64-encoded for
         PowerShell on Windows.
     """
+    # -P: agents run hooks in their workspace, and -m would put it first on
+    # sys.path, so a repository's own vauxhall package would run instead.
     if os.name == "nt":
         python_path = str(venv_python).replace("'", "''")
-        script = f"& '{python_path}' -m {module}"
+        script = f"& '{python_path}' -P -m {module}"
         encoded_script = base64.b64encode(script.encode("utf-16-le")).decode()
         return f"{WINDOWS_ENCODED_COMMAND_PREFIX}{encoded_script}"
-    return shlex.join([str(venv_python), "-m", module])
+    return shlex.join([str(venv_python), "-P", "-m", module])
 
 
 def _hooks_requirement() -> str:
@@ -453,7 +456,9 @@ def _build_venv(venv_dir: Path) -> Path:
         Path to the environment's Python executable.
     """
     print(f"Creating virtual environment in {venv_dir}...")
-    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+    # -P: the installer runs in the workspace, whose own venv or pip package
+    # would otherwise replace the standard one.
+    subprocess.run([sys.executable, "-P", "-m", "venv", str(venv_dir)], check=True)
     if os.name == "nt":
         venv_python = venv_dir / "Scripts" / "python.exe"
     else:
@@ -467,6 +472,7 @@ def _build_venv(venv_dir: Path) -> Path:
     subprocess.run(
         [
             str(venv_python),
+            "-P",
             "-m",
             "pip",
             "install",

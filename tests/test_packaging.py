@@ -511,7 +511,12 @@ def test_wheel_installer_is_independent_of_source_checkout(
             python_path = str(hook_python).replace("'", "''")
             assert script == f"& '{python_path}' -m {hook_module}"
         else:
-            assert shlex.split(hook_command) == [str(hook_python), "-m", hook_module]
+            assert shlex.split(hook_command) == [
+                str(hook_python),
+                "-P",
+                "-m",
+                hook_module,
+            ]
     installed_version = subprocess.run(
         [
             str(hook_python),

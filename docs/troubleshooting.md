@@ -17,7 +17,7 @@ And every hook can be run by hand, with debug logging, from the workspace:
 ```bash
 echo '{"hook_event_name": "Stop", "session_id": "test", "cwd": "'"$PWD"'"}' |
   VAUXHALL_LOGGING_LEVEL=DEBUG \
-  .vauxhall-venv/bin/python -m vauxhall.hooks.claude.telemetry_hook
+  .vauxhall-venv/bin/python -P -m vauxhall.hooks.claude.telemetry_hook
 ```
 
 It prints `{}` on stdout and logs to stderr either

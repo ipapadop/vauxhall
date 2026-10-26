@@ -122,7 +122,7 @@ def test_hook_command_quotes_posix_metacharacters() -> None:
     with patch.object(installation.os, "name", "posix"):
         command = installation.build_hook_command(python, MODULE)
 
-    assert command == f"'/opt/Vauxhall $(touch marker)/bin/python' -m {MODULE}"
+    assert command == f"'/opt/Vauxhall $(touch marker)/bin/python' -P -m {MODULE}"
 
 
 def test_hook_command_encodes_windows_metacharacters() -> None:
@@ -134,19 +134,28 @@ def test_hook_command_encodes_windows_metacharacters() -> None:
 
     assert command.startswith(PREFIX)
     assert _decode(command) == (
-        rf"& 'C:\Program Files\Vauxhall & %TEMP%\(owner''s)\python.exe' -m {MODULE}"
+        rf"& 'C:\Program Files\Vauxhall & %TEMP%\(owner''s)\python.exe' -P -m {MODULE}"
     )
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        pytest.param(f"/venv/bin/python -m {MODULE}", id="posix"),
-        pytest.param(_encode(f"& 'C:/Vauxhall/python.exe' -m {MODULE}"), id="windows"),
+        pytest.param(f"/venv/bin/python -P -m {MODULE}", id="posix"),
+        pytest.param(
+            _encode(f"& 'C:/Vauxhall/python.exe' -P -m {MODULE}"), id="windows"
+        ),
+        pytest.param(f"/venv/bin/python -m {MODULE}", id="posix-without-P"),
+        pytest.param(
+            _encode(f"& 'C:/Vauxhall/python.exe' -m {MODULE}"), id="windows-without-P"
+        ),
     ],
 )
 def test_is_hook_handler_matches_generated_commands(command: str) -> None:
     """Generated invocations of the hook module must be recognized.
+
+    Commands written before ``-P`` are still this installer's, so a reinstall
+    replaces them instead of adding a second handler.
 
     Args:
         command: The case's command.
@@ -162,6 +171,8 @@ def test_is_hook_handler_matches_generated_commands(command: str) -> None:
         pytest.param(f"python -c \"print('{MODULE}')\"", id="mentions-module"),
         pytest.param(f"echo -m {MODULE}", id="not-python"),
         pytest.param(f"/venv/bin/python -m {MODULE}.other", id="other-module"),
+        pytest.param(f"/venv/bin/python -X -m {MODULE}", id="other-option"),
+        pytest.param(f"/venv/bin/python -P -P -m {MODULE}", id="repeated-option"),
         pytest.param(
             _encode(f"Write-Output '{MODULE} is configured'"),
             id="windows-mentions-module",
@@ -378,10 +389,11 @@ def test_setup_venv_installs_exact_distribution_version(tmp_path: Path) -> None:
 
     assert result == venv_python
     assert run.call_args_list == [
-        call([sys.executable, "-m", "venv", str(venv_dir)], check=True),
+        call([sys.executable, "-P", "-m", "venv", str(venv_dir)], check=True),
         call(
             [
                 str(venv_python),
+                "-P",
                 "-m",
                 "pip",
                 "install",
@@ -405,8 +417,8 @@ def _fake_run(*, pip_fails: bool) -> Callable[..., None]:
     """
 
     def run(command: list[str], **_kwargs: object) -> None:
-        if command[1:3] == ["-m", "venv"]:
-            venv_dir = Path(command[3])
+        if command[1:4] == ["-P", "-m", "venv"]:
+            venv_dir = Path(command[4])
             venv_dir.mkdir()
             (venv_dir / "marker").write_text("new")
         elif pip_fails:
@@ -671,7 +683,7 @@ def test_install_registers_every_handler(installer: ModuleType, tmp_path: Path) 
     for event, fields in installer.HANDLERS.items():
         handler = {
             "type": "command",
-            "command": shlex.join([VENV_PYTHON, "-m", installer.HOOK_MODULE]),
+            "command": shlex.join([VENV_PYTHON, "-P", "-m", installer.HOOK_MODULE]),
             **fields,
         }
         assert settings["hooks"][event] == [{"matcher": "*", "hooks": [handler]}]
@@ -781,9 +793,69 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
             for handler in _handlers(settings, event)
             if installation.is_hook_handler(handler, installer.HOOK_MODULE)
         ]
-        assert commands == [[venv_python, "-m", installer.HOOK_MODULE]]
+        assert commands == [[venv_python, "-P", "-m", installer.HOOK_MODULE]]
     assert not list(settings_file.parent.glob("*.tmp"))
     assert json.loads(settings_file.with_suffix(".json.bak").read_text()) == original
+
+
+@INSTALLERS
+def test_reinstall_replaces_commands_written_before_isolation(
+    installer: ModuleType, tmp_path: Path
+) -> None:
+    """Handlers from before ``-P`` are replaced, not kept beside the new ones.
+
+    Args:
+        installer: The installer module under test.
+        tmp_path: Pytest temporary directory.
+    """
+    settings_file = _settings_file(installer, tmp_path)
+    settings_file.parent.mkdir()
+    old = shlex.join([VENV_PYTHON, "-m", installer.HOOK_MODULE])
+    settings_file.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    event: [
+                        {"matcher": "*", "hooks": [{"type": "command", "command": old}]}
+                    ]
+                    for event in installer.HANDLERS
+                }
+            }
+        )
+    )
+
+    _install(installer, tmp_path)
+
+    settings = json.loads(settings_file.read_text())
+    for event in installer.HANDLERS:
+        assert [handler["command"] for handler in _handlers(settings, event)] == [
+            shlex.join([VENV_PYTHON, "-P", "-m", installer.HOOK_MODULE])
+        ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="runs the POSIX command form")
+def test_hook_command_never_runs_the_workspace_package(tmp_path: Path) -> None:
+    """An agent runs the hook in its workspace, whose own package must not run.
+
+    ``-m`` puts the current directory first on ``sys.path``; without ``-P`` a
+    repository's ``vauxhall`` package would replace the installed one on every
+    hook event.
+    """
+    decoy = tmp_path / "vauxhall" / "core"
+    decoy.mkdir(parents=True)
+    (tmp_path / "vauxhall" / "__init__.py").write_text("")
+    (decoy / "__init__.py").write_text("")
+    (decoy / "telemetry.py").write_text("print('decoy')\n")
+    command = installation.build_hook_command(
+        Path(sys.executable), "vauxhall.core.telemetry"
+    )
+
+    # The shell would split the command the same way; shlex.join built it.
+    result = subprocess.run(
+        shlex.split(command), cwd=tmp_path, capture_output=True, text=True, check=True
+    )
+
+    assert "decoy" not in result.stdout
 
 
 @INSTALLERS

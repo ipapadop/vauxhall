@@ -640,14 +640,15 @@ if __name__ == "__main__":
 def test_select_install_directory_opens_at_the_saved_directory(
     tmp_path: Path,
 ) -> None:
-    """The picker starts where hooks were last installed."""
+    """The picker starts where hooks were last installed; cancelling changes nothing."""
     update_ui_state({"install_directory": str(tmp_path)})
     app = MagicMock()
     app.select_directory_dialog.return_value = None
 
-    DashboardApp(app).select_install_directory()
+    assert DashboardApp(app).select_install_directory() == {"ok": False}
 
     app.select_directory_dialog.assert_called_once_with(dir=str(tmp_path))
+    assert load_ui_state()["install_directory"] == str(tmp_path)
 
 
 def test_select_install_directory_falls_back_to_home(tmp_path: Path) -> None:
@@ -659,16 +660,6 @@ def test_select_install_directory_falls_back_to_home(tmp_path: Path) -> None:
     DashboardApp(app).select_install_directory()
 
     app.select_directory_dialog.assert_called_once_with(dir=str(Path.home()))
-
-
-def test_select_install_directory_cancel(tmp_path: Path) -> None:
-    """Cancelling the picker changes nothing."""
-    update_ui_state({"install_directory": str(tmp_path)})
-    app = MagicMock()
-    app.select_directory_dialog.return_value = None
-
-    assert DashboardApp(app).select_install_directory() == {"ok": False}
-    assert load_ui_state()["install_directory"] == str(tmp_path)
 
 
 def test_select_install_directory_saves_and_detects(tmp_path: Path) -> None:

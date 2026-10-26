@@ -60,11 +60,14 @@ def test_start_runs_the_installer_cli(tmp_path: Path) -> None:
     """The child runs the CLI unbuffered, in UTF-8 mode, with merged text output.
 
     Without UTF-8 mode a Windows child writes its pipe in the ANSI code page,
-    and printing a workspace path outside it fails.
+    and printing a workspace path outside it fails. The workspace is the
+    child's directory, never part of a shell command.
     """
+    workspace = tmp_path / "my wörkspace"
+    workspace.mkdir()
     runner, launcher, posted = _runner(FakeProcess())
 
-    assert runner.start(tmp_path, ["claude", "gemini"]) == {"ok": True}
+    assert runner.start(workspace, ["claude", "gemini"]) == {"ok": True}
     posted.wait()
 
     args, kwargs = launcher.launches[0]
@@ -85,18 +88,6 @@ def test_start_runs_the_installer_cli(tmp_path: Path) -> None:
     assert kwargs["text"] is True
     assert kwargs["encoding"] == "utf-8"
     assert kwargs["errors"] == "replace"
-
-
-def test_start_passes_the_workspace_as_cwd(tmp_path: Path) -> None:
-    """The workspace is the child's directory, never part of a shell command."""
-    workspace = tmp_path / "my wörkspace"
-    workspace.mkdir()
-    runner, launcher, posted = _runner(FakeProcess())
-
-    runner.start(workspace, ["codex"])
-    posted.wait()
-
-    _, kwargs = launcher.launches[0]
     assert kwargs["cwd"] == workspace
     assert "shell" not in kwargs
 
@@ -123,10 +114,10 @@ def test_nonzero_exit_reports_failure(tmp_path: Path) -> None:
     assert posted.wait()[-1] == ("install-done", {"ok": False, "returncode": 1})
 
 
-def test_second_start_while_running_is_refused(tmp_path: Path) -> None:
-    """Only one install runs at a time."""
+def test_one_install_runs_at_a_time(tmp_path: Path) -> None:
+    """A second start is refused while one runs, and accepted once it ends."""
     release = threading.Event()
-    runner, launcher, posted = _runner(FakeProcess(release=release))
+    runner, launcher, posted = _runner(FakeProcess(release=release), FakeProcess())
 
     runner.start(tmp_path, ["claude"])
     assert runner.running is True
@@ -136,19 +127,10 @@ def test_second_start_while_running_is_refused(tmp_path: Path) -> None:
     }
     release.set()
     posted.wait()
-
     assert len(launcher.launches) == 1
     assert runner.running is False
 
-
-def test_start_after_done_runs_again(tmp_path: Path) -> None:
-    """A finished install frees the runner for the next directory."""
-    runner, launcher, posted = _runner(FakeProcess(), FakeProcess())
-
-    runner.start(tmp_path, ["claude"])
-    posted.wait()
     posted.done.clear()
-
     assert runner.start(tmp_path, ["codex"]) == {"ok": True}
     posted.wait()
     assert len(launcher.launches) == 2

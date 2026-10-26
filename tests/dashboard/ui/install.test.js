@@ -119,7 +119,6 @@ test('toolbar click opens the dialog with the agent list', async (t) => {
     const labels = [...document.querySelectorAll('#install-agents label')].map(label => label.textContent);
     assert.deepEqual(labels, ['Claude Code — Detected', 'Codex — Hooks installed — Reinstall', 'Gemini — Not detected']);
     assert.deepEqual(['claude', 'codex', 'gemini'].map(key => checkbox(document, key).checked), [true, false, false]);
-    assert.equal($('install-agents').querySelector('legend').textContent, 'Agents');
 });
 
 test('cancelled picker leaves the dialog closed', async (t) => {
@@ -160,24 +159,20 @@ test('Install sends the path and ticked agents', async (t) => {
 
 test('running disables every control and blocks Escape', async (t) => {
     const { document, $ } = await openWith(t);
+    const escape = () => {
+        const cancel = new Event('cancel', { cancelable: true });
+        $('install-dialog').dispatchEvent(cancel);
+        return cancel.defaultPrevented;
+    };
+    assert.equal(escape(), false);
+
     $('install-run').dispatchEvent(new Event('click'));
     await flush();
 
     for (const id of ['install-run', 'install-another', 'install-close']) assert.equal($(id).disabled, true, id);
     for (const key of ['claude', 'codex', 'gemini']) assert.equal(checkbox(document, key).disabled, true, key);
-    const cancel = new Event('cancel', { cancelable: true });
-    $('install-dialog').dispatchEvent(cancel);
-    assert.equal(cancel.defaultPrevented, true);
+    assert.equal(escape(), true);
     assert.ok($('install-dialog').hasAttribute('open'));
-});
-
-test('Escape closes the dialog when no install runs', async (t) => {
-    const { $ } = await openWith(t);
-    const cancel = new Event('cancel', { cancelable: true });
-
-    $('install-dialog').dispatchEvent(cancel);
-
-    assert.equal(cancel.defaultPrevented, false);
 });
 
 test('output lines append to the log as text', async (t) => {

@@ -13,6 +13,7 @@ import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHisto
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
 import { handleAck, sendPrompt, showRejected } from './js/prompt.js';
+import { initInstall } from './js/install.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
 import { cacheTheme, cachedTheme, createDebounce, createPreferenceSaver, isTheme, restorePreferences } from './js/preferences.js';
@@ -298,6 +299,7 @@ async function init() {
         });
 
         initSettings(window.ipc?.DashboardIPC);
+        const install = initInstall(window.ipc?.DashboardIPC);
 
         if (window.ipc?.DashboardIPC) {
             try {
@@ -400,6 +402,8 @@ async function init() {
                 scheduleCardSave();
             },
             onPromptAck: handleAck,
+            onInstallOutput: install?.onOutput,
+            onInstallDone: install?.onDone,
             onReady: () => {
                 if (status) status.innerText = "Connected to Agent Fleet";
             },

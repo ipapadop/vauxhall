@@ -128,6 +128,9 @@ handles the text like any other prompt you enter. See
   event content is included. **Clear** and **Clear Stale** remove the
   matching cards from this file too. See
   [configuration.md](configuration.md#remembered-view).
+- **Install directory**: The last directory chosen with **Install Hooks…** is
+  saved in `~/.config/vauxhall/dashboard_state.json`, so the picker opens
+  there next time. It is never published.
 - **Broker**: Hooks publish at QoS 1 without the retain flag, and the dashboard
   connects with a clean session, so the broker doesn't keep telemetry for
   later subscribers. Check your broker's own logging and persistence

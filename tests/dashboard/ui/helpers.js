@@ -49,6 +49,17 @@ export const PAGE = `
                 <button type="submit" id="prompt-send"></button>
             </form>
         </dialog>
+        <button id="install-hooks-btn"></button>
+        <dialog id="install-dialog">
+            <code id="install-path"></code>
+            <fieldset id="install-agents"><legend>Agents</legend></fieldset>
+            <p id="install-error"></p>
+            <pre id="install-log"></pre>
+            <p id="install-outcome"></p>
+            <button type="button" id="install-run"></button>
+            <button type="button" id="install-another"></button>
+            <button type="button" id="install-close"></button>
+        </dialog>
     </body></html>
 `;
 

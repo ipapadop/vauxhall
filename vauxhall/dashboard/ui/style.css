@@ -211,8 +211,40 @@ header {
 
 .toolbar {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: center;
+}
+
+/* App-level actions trail the title; the view bar holds what acts on the
+   cards, with the clear actions pushed to its end. */
+.app-actions {
+    margin-left: auto;
+}
+
+.view-bar {
+    margin-top: 12px;
+}
+
+.view-bar .search-bar {
+    flex: 1 1 250px;
+    max-width: 480px;
+}
+
+.view-bar-spacer {
+    flex: 1 1 0;
+}
+
+.danger-btn {
+    color: var(--error-color);
+    border-color: var(--error-color);
+    margin-left: 8px;
+}
+
+.danger-btn:hover {
+    background-color: var(--error-color);
+    border-color: var(--error-color);
+    color: #ffffff;
 }
 
 .toolbar-checkbox {
@@ -676,6 +708,34 @@ header {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+}
+
+.install-agent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.install-log {
+    max-height: 240px;
+    min-height: 4em;
+    overflow: auto;
+    margin: 8px 0;
+    padding: 8px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+#install-dialog button:disabled,
+#install-dialog input:disabled + label {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .primary-btn {

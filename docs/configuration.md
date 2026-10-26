@@ -187,6 +187,8 @@ need to edit it.
   saved half a second after you change them, or right away when the dashboard
   closes. A change you make before the saved preferences load is kept. The
   search text is not saved.
+- **The last Install Hooks directory** is saved when you choose it. The
+  picker opens there, or at your home directory once it no longer exists.
 - **Window size, position, and maximized state** are saved when the dashboard
   closes. A saved size replaces `dashboard.width` and `dashboard.height`, which
   only set the size on first start. A size outside their limits (320 to

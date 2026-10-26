@@ -5,6 +5,7 @@
 
 import os
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -77,3 +78,25 @@ def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     return cwd
+
+
+@pytest.fixture
+def unsearchable_dir(tmp_path: Path) -> Iterator[Path]:
+    """Return a directory inside a parent that can't be searched.
+
+    ``Path.is_dir()`` raises ``PermissionError`` for it before Python 3.14.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+
+    Yields:
+        The directory.
+    """
+    if os.name == "nt" or os.geteuid() == 0:
+        pytest.skip("permission bits don't restrict this user")
+    parent = tmp_path / "locked"
+    inner = parent / "inner"
+    inner.mkdir(parents=True)
+    parent.chmod(0)
+    yield inner
+    parent.chmod(0o700)

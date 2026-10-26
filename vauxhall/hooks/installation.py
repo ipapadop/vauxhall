@@ -120,7 +120,7 @@ def _is_hook_invocation(command: str, module: str) -> bool:
     return is_python and arguments[-2:] == ["-m", module]
 
 
-def _validate_hook_settings(
+def validate_hook_settings(
     settings: object, agent: str, option_keys: frozenset[str]
 ) -> None:
     """Validate the nested settings structures modified by an installer.
@@ -233,7 +233,7 @@ def load_hook_settings(
     except Exception as error:
         msg = f"Could not read existing settings: {error}"
         raise ValueError(msg) from error
-    _validate_hook_settings(settings, agent, option_keys)
+    validate_hook_settings(settings, agent, option_keys)
     return settings
 
 

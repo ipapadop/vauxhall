@@ -61,6 +61,9 @@ session as a card in a grid.
   tmux pane and the card shows whether it was delivered. It works for Claude
   Code, Codex, and Gemini CLI, but only for sessions running in tmux, and it
   needs a trusted broker; see [docs/sending-prompts.md](docs/sending-prompts.md).
+- **Install hooks**: **Install Hooks…** picks a local workspace, shows which
+  agents it uses and which already have hooks, and installs or reinstalls
+  the ones you tick; see [Installing agent hooks](#installing-agent-hooks).
 - **Keyboard and screen reader support**: Every control is a real button or a
   labeled form control, the history and settings modals are native dialogs that
   close on Escape and return focus to the control that opened them, the
@@ -222,6 +225,15 @@ vauxhall-hook-install claude codex gemini
 ```
 
 The agents are `claude`, `codex`, and `gemini`; at least one is required.
+
+To install from the dashboard instead, click **Install Hooks…** and choose
+the workspace. The dialog lists each agent: agents whose config directory
+(`.claude/`, `.codex/`, or `.gemini/`) exists and that have no Vauxhall hooks
+start ticked, and agents that already have them can be ticked to reinstall.
+**Install** runs `vauxhall-hook-install` in that directory and shows its
+output as it runs; **Choose another directory…** installs into the next
+workspace without closing the dialog. The picker opens at the last chosen
+directory. The workspace must be on the dashboard's machine.
 
 The installer recreates `.vauxhall-venv` in the workspace and installs
 Vauxhall into it from the same source as the running copy: the same Git

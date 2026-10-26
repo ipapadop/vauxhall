@@ -7,15 +7,7 @@ import argparse
 from collections.abc import Sequence
 
 from vauxhall.hooks import installation
-from vauxhall.hooks.claude import install as claude
-from vauxhall.hooks.codex import install as codex
-from vauxhall.hooks.gemini import install as gemini
-
-INSTALLERS = {
-    "claude": claude.INSTALLER,
-    "codex": codex.INSTALLER,
-    "gemini": gemini.INSTALLER,
-}
+from vauxhall.hooks.agents import INSTALLERS
 
 
 def main(argv: Sequence[str] | None = None) -> None:

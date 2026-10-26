@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 
 import { closeDialog, openDialog } from '../../../vauxhall/dashboard/ui/js/dialog.js';
+import { initInstall } from '../../../vauxhall/dashboard/ui/js/install.js';
 import { createCard, sortGrid, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
@@ -218,6 +219,18 @@ test('the fleet summary is a polite live region', () => {
     assert.equal(summary.getAttribute('aria-live'), 'polite');
 });
 
+test('app actions trail the title, and view controls precede the clear actions', () => {
+    const document = loadIndexPage();
+    const ids = (selector) => [...document.querySelectorAll(`${selector} [id]`)].map(el => el.id);
+
+    assert.deepEqual(ids('.app-actions'), ['install-hooks-btn', 'theme-toggle', 'settings-btn']);
+    assert.deepEqual(ids('.view-bar'), [
+        'search-input', 'sort-select', 'attention-first-toggle', 'notify-toggle', 'clear-stale-btn', 'clear-btn',
+    ]);
+    assert.ok(document.getElementById('install-hooks-btn').classList.contains('primary-btn'));
+    assert.ok(document.getElementById('clear-btn').classList.contains('danger-btn'));
+});
+
 test('the attention-first and notify toggles are checkboxes named by a wrapping label', () => {
     const document = loadIndexPage();
 
@@ -246,4 +259,55 @@ test('without native support the open attribute stands in and still reports clos
     // Closing an already closed dialog reports nothing.
     closeDialog(dialog);
     assert.equal(closes, 1);
+});
+
+test('the Install Hooks button is named and opens a labeled modal dialog', () => {
+    const document = loadIndexPage();
+    const button = document.getElementById('install-hooks-btn');
+    const dialog = document.getElementById('install-dialog');
+
+    assert.equal(button.tagName, 'BUTTON');
+    assert.equal(button.textContent.trim(), 'Install Hooks…');
+    assert.equal(button.getAttribute('aria-haspopup'), 'dialog');
+    assert.equal(dialog.tagName, 'DIALOG');
+    assert.equal(document.getElementById(dialog.getAttribute('aria-labelledby')).textContent, 'Install Hooks');
+    for (const id of ['install-run', 'install-another', 'install-close']) {
+        const control = document.getElementById(id);
+        assert.equal(control.tagName, 'BUTTON', id);
+        assert.equal(control.getAttribute('type'), 'button', id);
+        assert.ok(control.textContent.trim(), `${id} has no text`);
+    }
+});
+
+test('the install log and outcome are live regions, and errors are alerts', () => {
+    const document = loadIndexPage();
+
+    assert.equal(document.getElementById('install-log').getAttribute('role'), 'log');
+    assert.equal(document.getElementById('install-log').getAttribute('aria-live'), 'polite');
+    assert.equal(document.getElementById('install-outcome').getAttribute('role'), 'status');
+    assert.equal(document.getElementById('install-error').getAttribute('role'), 'alert');
+    assert.equal(document.getElementById('install-agents').tagName, 'FIELDSET');
+    assert.ok(document.querySelector('#install-agents > legend').textContent.trim());
+});
+
+test('each install agent checkbox is named by a label for it', async (t) => {
+    const document = loadIndexPage();
+    const saved = { document: globalThis.document, window: globalThis.window };
+    globalThis.document = document;
+    t.after(() => Object.assign(globalThis, saved));
+    const agents = [
+        { agent: 'claude', name: 'Claude Code', detected: true, installed: false, error: null },
+        { agent: 'gemini', name: 'Gemini', detected: false, installed: false, error: null },
+    ];
+    initInstall({ select_install_directory: async () => JSON.stringify({ ok: true, path: '/w', agents }) });
+
+    document.getElementById('install-hooks-btn').dispatchEvent(new document.defaultView.Event('click'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const boxes = document.querySelectorAll('#install-agents input[type="checkbox"]');
+    assert.equal(boxes.length, 2);
+    for (const box of boxes) {
+        const label = document.querySelector(`label[for="${box.id}"]`);
+        assert.ok(label?.textContent.trim(), `${box.id} has no label`);
+    }
 });

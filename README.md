@@ -288,6 +288,10 @@ uv run python scripts/simulate_agent.py -n 5 -t 20
 
 - `-n`, `--num-agents`: Number of concurrent agents (default 1).
 - `-t`, `--num-transitions`: Events per agent (default 5).
+- `--host`, `--port`: The broker (default `localhost:1883`). The simulator
+  ignores the hooks' configured broker, `VAUXHALL_MQTT_HOST`, and
+  `VAUXHALL_MQTT_PORT`, so mock telemetry reaches another broker only when
+  you name it here; the hooks' credentials and TLS settings still apply.
 
 ## Uninstalling
 

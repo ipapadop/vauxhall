@@ -131,7 +131,12 @@ def test_reinstall_replaces_legacy_source_checkout_handlers(tmp_path: Path) -> N
                 {
                     "type": "command",
                     "command": shlex.join(
-                        [VENV_PYTHON, "-m", "vauxhall.hooks.gemini.telemetry_hook"]
+                        [
+                            VENV_PYTHON,
+                            "-P",
+                            "-m",
+                            "vauxhall.hooks.gemini.telemetry_hook",
+                        ]
                     ),
                     "name": "vauxhall-acting",
                     "description": "Vauxhall telemetry for Gemini tool execution",

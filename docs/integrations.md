@@ -250,7 +250,7 @@ The installer:
 - Replaces existing Vauxhall handlers, keeps all other settings, registers
   every event above, and replaces the settings file atomically. It uses local
   settings because the command contains a machine-specific path.
-- Writes commands that run `python -m vauxhall.hooks.claude.telemetry_hook`,
+- Writes commands that run `python -P -m vauxhall.hooks.claude.telemetry_hook`,
   quoted the same way as the Codex installer, with a 3-second timeout.
 
 Claude Code reads hooks at startup. Restart it, or open `/hooks` to review the
@@ -269,7 +269,7 @@ Add the command handler to each event in `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.claude.telemetry_hook",
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -P -m vauxhall.hooks.claude.telemetry_hook",
             "timeout": 3
           }
         ]
@@ -383,10 +383,13 @@ The installer:
   registers `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PermissionRequest`, `PostToolUse`, `SubagentStart`, `PreCompact`,
   `PostCompact`, `Stop`, `Interrupt`, and `SessionEnd`.
-- Writes commands that run `python -m vauxhall.hooks.codex.telemetry_hook` from
-  the isolated environment: shell-quoted on POSIX, and as UTF-16LE
+- Writes commands that run `python -P -m vauxhall.hooks.codex.telemetry_hook`
+  from the isolated environment: shell-quoted on POSIX, and as UTF-16LE
   Base64-encoded PowerShell on Windows, so path metacharacters are not
-  interpreted.
+  interpreted. `-P` keeps the workspace off `sys.path`: the agent runs hooks
+  there, and without it a repository's own `vauxhall` package would run in
+  place of the installed hooks. Handlers written without `-P` are still
+  recognized, so a reinstall replaces them.
 - Gives each handler a 3-second timeout; the MQTT connection attempt is limited
   to 1 second. Handlers are synchronous so tool start and completion events stay
   in order.
@@ -407,7 +410,7 @@ Add the command handler to each event in `.codex/hooks.json`. For example:
         "hooks": [
           {
             "type": "command",
-            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.codex.telemetry_hook",
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -P -m vauxhall.hooks.codex.telemetry_hook",
             "statusMessage": "Sending Vauxhall telemetry",
             "timeout": 3
           }
@@ -518,7 +521,7 @@ The installer:
   (`Notification`), `vauxhall-session-start` (`SessionStart`),
   `vauxhall-compress` (`PreCompress`), and `vauxhall-session-end`
   (`SessionEnd`), and replaces the settings file atomically.
-- Writes commands that run `python -m vauxhall.hooks.gemini.telemetry_hook`,
+- Writes commands that run `python -P -m vauxhall.hooks.gemini.telemetry_hook`,
   quoted the same way as the Codex installer.
 
 ### Manual Configuration
@@ -535,7 +538,7 @@ Add the hook to each event in `.gemini/settings.json`:
           {
             "name": "vauxhall-telemetry",
             "type": "command",
-            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -m vauxhall.hooks.gemini.telemetry_hook"
+            "command": "'/absolute/path/to/.vauxhall-venv/bin/python' -P -m vauxhall.hooks.gemini.telemetry_hook"
           }
         ]
       }

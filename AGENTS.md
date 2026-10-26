@@ -85,8 +85,11 @@ sequenceDiagram
 ```
 
 1. **The agent runs a hook.** On each event the agent runs the registered
-   command from the workspace's `.vauxhall-venv` and writes the event to its
-   stdin.
+   command, `python -P -m vauxhall.hooks.<agent>.telemetry_hook` from the
+   workspace's `.vauxhall-venv`, and writes the event to its stdin. `-P` keeps
+   the workspace, the agent's current directory, off `sys.path`, so a
+   repository's own `vauxhall` package can't replace the hooks; the
+   installer's `venv` and `pip` steps use it for the same reason.
 2. **The hook builds telemetry.** It maps the event to a state (`Acting`,
    `Thinking`, `Waiting for Input`, `Error`, or `Idle`) and details such as
    `tool`, `cmd`, `prompt`, `message`, `status`, `tokens`, and `duration`, and

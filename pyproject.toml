@@ -154,4 +154,4 @@ show_missing = true
 # The floor sits just under the coverage the default suite measures today, so
 # a change that leaves new code untested fails instead of quietly lowering it.
 # Raise it when coverage rises; never lower it to make a change pass.
-fail_under = 92
+fail_under = 95

@@ -9,6 +9,8 @@
  */
 
 import { closeDialog, openDialog } from './dialog.js';
+import { growFrom, prefersReducedMotion } from './motion.js';
+import { cardIdentity, historyDurations } from './state.js';
 
 const WAITING_STATES = new Set(['Waiting for Input', 'Input Required']);
 const STATUS_ORDER = { 'Error': 0, 'Input Required': 1, 'Waiting for Input': 1, 'Acting': 2, 'Thinking': 2, 'Idle': 3, 'STALE': 4 };
@@ -51,10 +53,37 @@ const isAttentionCard = (card) => card.classList.contains('error') || card.class
 const formatTokens = (count) => count > 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
 
 /**
- * Returns whether the viewer asked for reduced motion.
- * @returns {boolean} Whether animations should be skipped.
+ * Formats a duration as seconds, minutes and seconds, or hours and minutes.
+ * @param {number} ms - The duration in milliseconds.
+ * @returns {string} The formatted duration.
  */
-const prefersReducedMotion = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+export function formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 1) return '<1s';
+    if (seconds < 60) return `${seconds}s`;
+    const pad = (value) => String(value).padStart(2, '0');
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
+    return `${Math.floor(seconds / 3600)}h ${pad(Math.floor(seconds / 60) % 60)}m`;
+}
+
+/**
+ * Returns the color category of a state, shared by cards and history rows.
+ * @param {string} state - The telemetry state.
+ * @returns {string} One of `error`, `waiting`, `acting`, `thinking`, or `idle`.
+ */
+function stateCategory(state) {
+    if (state === 'Error') return 'error';
+    if (WAITING_STATES.has(state)) return 'waiting';
+    if (state === 'Acting') return 'acting';
+    if (state === 'Thinking') return 'thinking';
+    return 'idle';
+}
+
+// A card colors acting and thinking alike, and idle not at all.
+const CARD_CLASSES = { error: 'error', waiting: 'waiting', acting: 'working', thinking: 'working' };
+
+// The shortest bar, as a percentage, so brief events stay visible.
+const MIN_BAR_PERCENT = 2;
 
 const CARD_COMPARATORS = {
     name: (a, b) => textOf(a, '.agent-name').localeCompare(textOf(b, '.agent-name')),
@@ -79,13 +108,12 @@ function textSpan(className, value) {
 /**
  * Creates an agent card element.
  * @param {object} data - Initial telemetry data.
- * @param {any} pyloidIpc - Pyloid IPC bridge.
- * @param {Function} openHistoryCallback - Called with the history button when it is activated.
+ * @param {Function} openPaneCallback - Called with the workspace button, the
+ *   control to focus again, when the card is clicked or that button activated.
  * @param {Function} [openMenuCallback] - Called with the menu button when it is activated.
- * @param {Function} [openPromptCallback] - Called with the prompt button when it is activated.
  * @returns {HTMLElement} The created card.
  */
-export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallback, openPromptCallback) {
+export function createCard(data, openPaneCallback, openMenuCallback) {
     const agent = String(data.agent ?? '');
     const workspace = String(data.workspace ?? '');
     const sessionId = String(data.session_id ?? '');
@@ -94,7 +122,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
 
     const card = document.createElement('div');
     card.className = 'agent-card';
-    card.title = "Click to copy workspace path";
+    card.title = "Click to open the activity timeline";
     card.innerHTML = `
         <div class="agent-header">
             <div class="agent-info">
@@ -102,7 +130,7 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
                     <span class="env-badge" title="Execution environment"></span>
                     <div class="agent-name" title="Agent name"></div>
                 </div>
-                <button type="button" class="agent-workspace" title="Copy workspace path"></button>
+                <button type="button" class="agent-workspace" title="Open the activity timeline"></button>
                 <div class="agent-session" title="Agent session identifier"></div>
             </div>
             <div class="header-actions">
@@ -116,11 +144,6 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
             <div class="footer-meta">
                 <span class="last-seen-timer" title="Time since last activity">just now</span>
                 <div class="metric-badges" title="Recent operation metrics"></div>
-                <span class="prompt-status" role="status" aria-live="polite" title="Delivery of the last prompt sent"></span>
-            </div>
-            <div class="footer-actions">
-                <button type="button" class="prompt-icon" title="Send a prompt to this session">✉️</button>
-                <button type="button" class="history-icon" title="View historical operations">🕒</button>
             </div>
         </div>
     `;
@@ -139,20 +162,6 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
     // carry the whole card identity.
     card.setAttribute('role', 'group');
     card.setAttribute('aria-label', `${agent} session ${sessionId}`);
-    const historyButton = card.querySelector('.history-icon');
-    historyButton.setAttribute('aria-label', `View history for ${agent} in ${workspace}, session ${sessionId}`);
-    historyButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openHistoryCallback(historyButton);
-    });
-
-    const promptButton = card.querySelector('.prompt-icon');
-    promptButton.setAttribute('aria-label', `Send a prompt to ${agent} in ${workspace}, session ${sessionId}`);
-    promptButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openPromptCallback?.(promptButton);
-    });
-
     const menuButton = card.querySelector('.menu-icon');
     menuButton.setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
     menuButton.addEventListener('click', (e) => {
@@ -160,18 +169,11 @@ export function createCard(data, pyloidIpc, openHistoryCallback, openMenuCallbac
         openMenuCallback?.(menuButton);
     });
 
-    // Copy the raw workspace path; never build a shell command from it
-    const copyWorkspace = () => {
-        pyloidIpc?.DashboardIPC?.copy_to_clipboard(workspace).then((success) => {
-            if (success) showCopyFeedback(card);
-        });
-    };
-    // The workspace button is the keyboard route to the whole-card click below.
-    card.querySelector('.agent-workspace').addEventListener('click', (e) => {
-        e.stopPropagation();
-        copyWorkspace();
-    });
-    card.addEventListener('click', copyWorkspace);
+    // The workspace button is the keyboard route to the whole-card click; its
+    // click bubbles here, and focus returns to it when the pane closes.
+    const workspaceButton = card.querySelector('.agent-workspace');
+    workspaceButton.setAttribute('aria-label', `Open activity for ${agent} in ${workspace}, session ${sessionId}`);
+    card.addEventListener('click', () => openPaneCallback(workspaceButton));
 
     return card;
 }
@@ -267,13 +269,8 @@ export function updateCard(card, data) {
 
     // Update color-coded state classes
     card.classList.remove('error', 'waiting', 'working');
-    if (data.state === 'Error') {
-        card.classList.add('error');
-    } else if (WAITING_STATES.has(data.state)) {
-        card.classList.add('waiting');
-    } else if (data.state === 'Acting' || data.state === 'Thinking') {
-        card.classList.add('working');
-    }
+    const cardClass = CARD_CLASSES[stateCategory(data.state)];
+    if (cardClass) card.classList.add(cardClass);
 
     const details = data.details || {};
 
@@ -340,12 +337,20 @@ export function updateCard(card, data) {
 }
 
 /**
- * Shows "Copied!" feedback on a card.
- * @param {HTMLElement} card - The agent card element.
+ * Copies a raw workspace path, never a shell command built from it.
+ * @param {any} ipc - The DashboardIPC bridge.
+ * @param {string} workspace - The path to copy.
+ * @returns {Promise<string>} `Copied!`, or `Copy failed` when the bridge is
+ *   missing, refuses, or throws.
  */
-function showCopyFeedback(card) {
-    card.classList.add('copied');
-    setTimeout(() => card.classList.remove('copied'), 2000);
+export async function copyWorkspacePath(ipc, workspace) {
+    let copied = false;
+    try {
+        copied = Boolean(await ipc?.copy_to_clipboard?.(workspace));
+    } catch (err) {
+        console.error('Failed to copy workspace path:', err);
+    }
+    return copied ? 'Copied!' : 'Copy failed';
 }
 
 /**
@@ -482,6 +487,44 @@ export function checkStaleness(agents, staleThresholdMs = 120000) {
 let isInteractingWithModal = false;
 
 /**
+ * Builds one timeline row: time, state, details, and timing, over a bar.
+ * @param {object} item - The history entry.
+ * @param {number} duration - Milliseconds spent in the entry's state.
+ * @param {string} width - The bar's CSS width.
+ * @returns {HTMLElement} The row, remembering its entry as `historyEntry`.
+ */
+function historyRow(item, duration, width) {
+    const row = document.createElement('div');
+    row.className = `history-item state-${stateCategory(item.state)}`;
+    row.historyEntry = item;
+    row.appendChild(textSpan('history-time', item.time));
+    row.appendChild(textSpan('history-state', item.state));
+    const details = textSpan('history-details', '');
+    appendDetails(details, item);
+    row.appendChild(details);
+    const timing = textSpan('history-timing', '');
+    const durationLabel = textSpan('history-duration', formatDuration(duration));
+    durationLabel.title = 'Time in this state';
+    timing.appendChild(durationLabel);
+    if (isPositiveNumber(item.details?.duration)) {
+        const toolLabel = textSpan('history-tool-duration', `tool ${item.details.duration}s`);
+        toolLabel.title = 'Duration reported by the tool';
+        timing.appendChild(toolLabel);
+    }
+    row.appendChild(timing);
+    // The bar repeats the duration label, so screen readers skip it.
+    const bar = document.createElement('div');
+    bar.className = 'history-bar';
+    bar.setAttribute('aria-hidden', 'true');
+    const fill = document.createElement('div');
+    fill.className = 'history-bar-fill';
+    fill.style.width = width;
+    bar.appendChild(fill);
+    row.appendChild(bar);
+    return row;
+}
+
+/**
  * Populates and opens the history modal.
  * Supports real-time updates and resizable behavior.
  *
@@ -494,8 +537,13 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     if (!card || !card.history) return;
 
     if (!isSilent) {
+        const { agent, workspace, session_id: sessionId } = cardIdentity(card);
         const modalAgentName = document.getElementById('modal-agent-name');
-        if (modalAgentName) modalAgentName.textContent = `History: ${agentKey}`;
+        if (modalAgentName) modalAgentName.textContent = agent;
+        const modalAgentMeta = document.getElementById('modal-agent-meta');
+        if (modalAgentMeta) modalAgentMeta.textContent = `${workspace} · session ${sessionId}`;
+        const copyStatus = document.getElementById('modal-copy-status');
+        if (copyStatus) copyStatus.textContent = '';
     }
 
     const body = document.getElementById('modal-history-body');
@@ -516,31 +564,44 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     const searchTerm = document.getElementById('modal-search')?.value.toLowerCase() || '';
     const stateFilter = document.getElementById('modal-state-filter')?.value || 'ALL';
 
-    const filteredHistory = card.history.filter(item => {
-        const matchesSearch = getDetailsString(item).toLowerCase().includes(searchTerm);
-        const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting for Input' && WAITING_STATES.has(item.state));
-        return matchesSearch && matchesState;
-    });
+    // Durations come from the whole history, so a filter can't merge rows.
+    const durations = historyDurations(card.history);
+    const rows = card.history
+        .map((item, index) => ({ item, duration: durations[index], open: index === 0 }))
+        .filter(({ item }) => {
+            const matchesSearch = getDetailsString(item).toLowerCase().includes(searchTerm);
+            const matchesState = stateFilter === 'ALL' || item.state === stateFilter || (stateFilter === 'Waiting for Input' && WAITING_STATES.has(item.state));
+            return matchesSearch && matchesState;
+        })
+        .reverse(); // Oldest at the top, newest at the bottom.
+    // The newest entry lasts until now, so on a quiet card it would dwarf
+    // every finished one; bars scale to the finished entries when any are shown.
+    const finished = rows.filter(({ open }) => !open);
+    const longest = Math.max(0, ...(finished.length ? finished : rows).map(({ duration }) => duration));
+    const barWidth = (duration) => `${longest === 0 ? 0 : Math.min(100, Math.max(MIN_BAR_PERCENT, (duration / longest) * 100))}%`;
 
-    // Re-render timeline items in chronological order (oldest top, newest bottom)
-    body.replaceChildren();
-    filteredHistory.reverse().forEach(item => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        historyItem.appendChild(textSpan('history-time', item.time));
-        historyItem.appendChild(textSpan('history-state', item.state));
-        const details = textSpan('history-details', '');
-        appendDetails(details, item);
-        historyItem.appendChild(details);
-        body.appendChild(historyItem);
-    });
+    // The same entries are updated in place, so the staleness sweep keeps a
+    // text selection and the bars animate; anything else is rebuilt.
+    const shown = [...body.children];
+    if (shown.length === rows.length && shown.every((row, index) => row.historyEntry === rows[index].item)) {
+        rows.forEach(({ duration }, index) => {
+            shown[index].querySelector('.history-duration').textContent = formatDuration(duration);
+            shown[index].querySelector('.history-bar-fill').style.width = barWidth(duration);
+        });
+    } else {
+        body.replaceChildren(...rows.map(({ item, duration }) => historyRow(item, duration, barWidth(duration))));
+    }
 
     const isInteracting = body.matches(':hover') || isInteractingWithModal;
 
     if (!isSilent) {
         // Initial open: Show modal and jump to latest event
         const historyModal = document.getElementById('history-modal');
-        if (historyModal) openDialog(historyModal);
+        if (historyModal) {
+            openDialog(historyModal);
+            const content = historyModal.querySelector('.modal-content');
+            if (content) growFrom(content, card.getBoundingClientRect());
+        }
         body.scrollTop = body.scrollHeight;
     } else if (isAtBottom && !isInteracting) {
         // Live update: Only follow tail if user was already at the bottom and isn't hovering

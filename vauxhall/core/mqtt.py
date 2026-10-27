@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""MQTT client setup shared by the dashboard, the hooks, and the relay."""
+"""MQTT client setup shared by the dashboard and the hooks."""
 
 import ssl
 

@@ -20,7 +20,6 @@ export function initIPC(callbacks) {
         pyloidEvent.listen('agent-update', callbacks.onAgentUpdate);
         pyloidEvent.listen('status-update', callbacks.onStatusUpdate);
         if (callbacks.onSettingsChanged) pyloidEvent.listen('settings-changed', callbacks.onSettingsChanged);
-        if (callbacks.onPromptAck) pyloidEvent.listen('prompt-ack', callbacks.onPromptAck);
         if (callbacks.onInstallOutput) pyloidEvent.listen('install-output', callbacks.onInstallOutput);
         if (callbacks.onInstallDone) pyloidEvent.listen('install-done', callbacks.onInstallDone);
     }

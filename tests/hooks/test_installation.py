@@ -474,14 +474,15 @@ def _leftover(tmp_path: Path, marker: str, *, complete: bool) -> Path:
 
 
 def _make_complete(venv_dir: Path) -> None:
-    """Give a fake venv the relay script a finished pip install writes.
+    """Give a fake venv the entry-point script a finished pip install writes.
 
     Args:
         venv_dir: The fake venv.
     """
     scripts = venv_dir / ("Scripts" if os.name == "nt" else "bin")
     scripts.mkdir(exist_ok=True)
-    (scripts / ("vauxhall-relay.exe" if os.name == "nt" else "vauxhall-relay")).touch()
+    name = "vauxhall-hook-install"
+    (scripts / (f"{name}.exe" if os.name == "nt" else name)).touch()
 
 
 def test_setup_venv_restores_a_copy_left_by_a_build_that_was_killed(
@@ -495,7 +496,7 @@ def test_setup_venv_restores_a_copy_left_by_a_build_that_was_killed(
         tmp_path: Pytest temporary directory.
     """
     venv_dir = tmp_path / ".vauxhall-venv"
-    venv_dir.mkdir()  # Half-built: no relay script.
+    venv_dir.mkdir()  # Half-built: no entry-point script.
     _leftover(tmp_path, "good", complete=True)
 
     with (

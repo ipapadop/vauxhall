@@ -21,7 +21,7 @@ function makeCard() {
     const { document, window } = parseHTML('<html><body><div id="agent-grid"></div></body></html>');
     globalThis.document = document;
     globalThis.window = window;
-    return createCard({ ...IDENTITY }, null, () => {});
+    return createCard({ ...IDENTITY }, () => {});
 }
 
 /**

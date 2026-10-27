@@ -6,17 +6,15 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { cardIdentity } from '../../../vauxhall/dashboard/ui/js/state.js';
+import { copyWorkspacePath, createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 let copied = [];
-let result = true;
 
 const ipc = {
-    DashboardIPC: {
-        copy_to_clipboard: async (path) => {
-            copied.push(path);
-            return result;
-        },
+    copy_to_clipboard: async (path) => {
+        copied.push(path);
+        return true;
     },
 };
 
@@ -24,24 +22,25 @@ const ipc = {
  * Builds an empty page and resets the recorded clipboard writes. Called from
  * each test rather than a shared hook, so a hook in another test file cannot
  * replace the document mid-test.
+ * @returns {Document} The page document.
  */
 function setupPage() {
     const { document, window } = parseHTML('<html><body></body></html>');
     globalThis.document = document;
     globalThis.window = window;
     copied = [];
-    result = true;
+    return document;
 }
 
 /**
- * Clicks a card for the given workspace and waits for the copy to settle.
- * @param {string} workspace - The workspace path the card reports.
- * @returns {Promise<HTMLElement>} The clicked card.
+ * Copies the path of a card for the given workspace the way the pane's Copy
+ * path button does: from the identity the card was built with.
+ * @param {string} [workspace] - The workspace path the card reports.
+ * @returns {Promise<HTMLElement>} The card.
  */
-async function clickCardFor(workspace) {
-    const card = createCard({ agent: 'Codex', workspace, session_id: 'session-1' }, ipc, () => {});
-    card.click();
-    await new Promise((resolve) => setImmediate(resolve));
+async function copyPathOf(workspace) {
+    const card = createCard({ agent: 'Codex', workspace, session_id: 'session-1' }, () => {});
+    await copyWorkspacePath(ipc, cardIdentity(card).workspace);
     return card;
 }
 
@@ -52,7 +51,7 @@ async function clickCardFor(workspace) {
  * @returns {string} The badge text.
  */
 function envFor(workspace, env) {
-    const card = createCard({ agent: 'Codex', workspace, session_id: 's', env }, null, () => {});
+    const card = createCard({ agent: 'Codex', workspace, session_id: 's', env }, () => {});
     return card.querySelector('.env-badge').textContent;
 }
 
@@ -79,7 +78,7 @@ const PATHS = {
 for (const [description, workspace] of Object.entries(PATHS)) {
     test(`${description} is copied exactly as received`, async () => {
         setupPage();
-        await clickCardFor(workspace);
+        await copyPathOf(workspace);
 
         assert.deepEqual(copied, [workspace]);
     });
@@ -89,7 +88,7 @@ test('the copied path is the telemetry value, not the displayed one', async () =
     setupPage();
     const workspace = '/home/user/project\nrm -rf /';
 
-    const card = await clickCardFor(workspace);
+    const card = await copyPathOf(workspace);
 
     assert.equal(card.querySelector('.agent-workspace').textContent, workspace);
     assert.equal(copied[0], workspace);
@@ -98,47 +97,18 @@ test('the copied path is the telemetry value, not the displayed one', async () =
 
 test('a missing workspace copies an empty string', async () => {
     setupPage();
-    const card = createCard({ agent: 'Codex', session_id: 's' }, ipc, () => {});
 
-    card.click();
-    await new Promise((resolve) => setImmediate(resolve));
+    await copyPathOf(undefined);
 
     assert.deepEqual(copied, ['']);
 });
 
-test('a successful copy highlights the card', async () => {
-    setupPage();
-    const card = await clickCardFor('/home/user/project');
-
-    assert.equal(card.classList.contains('copied'), true);
-});
-
-test('a refused copy leaves the card unhighlighted', async () => {
-    setupPage();
-    result = false;
-
-    const card = await clickCardFor('/home/user/project');
-
-    assert.equal(card.classList.contains('copied'), false);
-});
-
-test('a card without a clipboard bridge ignores the click', () => {
-    setupPage();
-    const card = createCard({ agent: 'Codex', workspace: '/home/user/p', session_id: 's' }, null, () => {});
-
-    assert.doesNotThrow(() => card.click());
-});
-
-test('the history icon does not trigger a copy', async () => {
+test('clicking a card opens its pane instead of copying', async () => {
     setupPage();
     let opened = 0;
-    const card = createCard(
-        { agent: 'Codex', workspace: '/home/user/project', session_id: 's' },
-        ipc,
-        () => { opened += 1; },
-    );
+    const card = createCard({ agent: 'Codex', workspace: '/home/user/project', session_id: 's' }, () => { opened += 1; });
 
-    card.querySelector('.history-icon').click();
+    card.click();
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(opened, 1);

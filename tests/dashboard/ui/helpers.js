@@ -29,6 +29,9 @@ export const PAGE = `
         <dialog id="history-modal">
             <button type="button" class="close-btn"></button>
             <div id="modal-agent-name"></div>
+            <span id="modal-agent-meta"></span>
+            <button type="button" id="modal-copy-path"></button>
+            <span id="modal-copy-status"></span>
             <input id="modal-search" value="">
             <select id="modal-state-filter"><option value="ALL" selected>All</option></select>
             <div id="modal-history-body"></div>
@@ -37,17 +40,6 @@ export const PAGE = `
             <button type="button" id="card-menu-close"></button>
             <button type="button" id="card-menu-hide">Hide until next event</button>
             <button type="button" id="card-menu-denylist">Add agent to denylist</button>
-        </dialog>
-        <dialog id="prompt-modal">
-            <form id="prompt-form">
-                <button type="button" id="prompt-close"></button>
-                <div id="prompt-target"></div>
-                <p id="prompt-warning"></p>
-                <textarea id="prompt-text"></textarea>
-                <p id="prompt-error"></p>
-                <button type="button" id="prompt-cancel"></button>
-                <button type="submit" id="prompt-send"></button>
-            </form>
         </dialog>
         <button id="install-hooks-btn"></button>
         <dialog id="install-dialog">

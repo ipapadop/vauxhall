@@ -59,7 +59,7 @@ test('restore applies the configured stale threshold immediately, not the defaul
 test('the history button on a restored, never-updated card opens an empty history', async (t) => {
     const { document } = await bootDashboard(t, { get_saved_cards: async () => JSON.stringify([SHELL]) });
 
-    document.querySelector('.history-icon').click();
+    document.querySelector('.agent-workspace').click();
 
     assert.ok(document.getElementById('history-modal').hasAttribute('open'));
     assert.equal(document.querySelectorAll('.history-item').length, 0);

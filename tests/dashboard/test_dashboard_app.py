@@ -17,7 +17,6 @@ import pytest
 sys_modules_patch = patch.dict(
     "sys.modules",
     {
-        "pyperclip": MagicMock(),
         "paho": MagicMock(),
         "paho.mqtt": MagicMock(),
         "paho.mqtt.client": MagicMock(),
@@ -142,6 +141,12 @@ class TestDashboardComponents(unittest.TestCase):
         self.mock_app.show_notification.assert_called_once_with(
             "Codex needs attention", "Prompt: continue?"
         )
+
+    def test_ipc_copy_uses_the_pyloid_clipboard(self) -> None:
+        """The IPC bridge's copy reaches Qt's clipboard through the Pyloid app."""
+        assert self.dashboard.ipc.copy_to_clipboard("/home/user/project") is True
+
+        self.mock_app.set_clipboard_text.assert_called_once_with("/home/user/project")
 
     def test_on_telemetry_missing_fields(self) -> None:
         """Verify that telemetry missing required fields is dropped."""

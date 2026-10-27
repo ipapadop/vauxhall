@@ -49,11 +49,9 @@ Security = "https://github.com/ipapadop/vauxhall/security/advisories"
 [project.scripts]
 vauxhall = "vauxhall.dashboard.app:main"
 vauxhall-hook-install = "vauxhall.hooks.cli:main"
-vauxhall-relay = "vauxhall.hooks.relay:main"
 
 [project.optional-dependencies]
 dashboard = [
-    "pyperclip>=1.8.2; python_version < '3.14'",
     "pyloid>=0.27.2; python_version < '3.14'",
 ]
 hooks = []

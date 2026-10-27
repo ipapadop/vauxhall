@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from vauxhall.core.prompts import ACK_TOPIC_FILTER
 from vauxhall.dashboard.config import dashboard_settings as settings
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
 
@@ -109,7 +108,6 @@ def test_dashboard_subscriber_start_stop(mock_client_class: MagicMock) -> None:
 
     assert mock_client.subscribe.call_args_list == [
         call("vauxhall/agents/+/activity"),
-        call(ACK_TOPIC_FILTER, qos=1),
     ]
 
     closer = SubscriberCloser()
@@ -409,23 +407,13 @@ def test_closed_subscriber_cannot_be_started_again(
 
 
 def test_messages_after_close_are_still_forwarded() -> None:
-    """Telemetry and acknowledgments a closing client receives still describe agents.
-
-    A prompt's acknowledgment can reach the old client before the new one
-    subscribes, and acknowledgments are not replayed.
-    """
-    callback, ack_callback = MagicMock(), MagicMock()
-    subscriber = DashboardSubscriber(callback, MagicMock(), ack_callback=ack_callback)
+    """Telemetry a closing client receives still describes agents."""
+    callback = MagicMock()
+    subscriber = DashboardSubscriber(callback, MagicMock())
     subscriber.close(MagicMock())
 
     telemetry = MagicMock(topic="vauxhall/agents/codex/activity")
     telemetry.payload = json.dumps(valid_event()).encode()
-    ack = MagicMock(topic="vauxhall/agents/codex/sessions/session-1/ack")
-    ack.payload = json.dumps(
-        {"schema_version": 1, "id": "a1", "status": "delivered"}
-    ).encode()
     subscriber._on_message(subscriber.client, None, telemetry)
-    subscriber._on_message(subscriber.client, None, ack)
 
     callback.assert_called_once_with(valid_event())
-    ack_callback.assert_called_once_with({"id": "a1", "status": "delivered"})

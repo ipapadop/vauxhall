@@ -4,8 +4,7 @@ This file is for contributors and coding agents working on Vauxhall: the
 architecture, the dashboard's behavior and implementation, and the rules for
 developing and releasing it. User documentation lives in [README.md](README.md)
 and [docs/](docs/): [integrations](docs/integrations.md) (telemetry schema,
-states, and each agent's hooks), [sending prompts](docs/sending-prompts.md),
-[configuration](docs/configuration.md),
+states, and each agent's hooks), [configuration](docs/configuration.md),
 [privacy](docs/privacy.md), [remote deployment](docs/remote-deployment.md),
 [troubleshooting](docs/troubleshooting.md), and
 [versioning](docs/releasing.md).
@@ -57,9 +56,7 @@ flowchart LR
 Both sides share `vauxhall.core`, so hooks and the dashboard validate the same
 schema and read configuration the same way.
 
-A fourth piece runs the other way: `vauxhall-relay`, a long-lived process on
-each agent machine, receives prompts the dashboard publishes and types them
-into the session's tmux pane (see [Prompt Delivery](#prompt-delivery)).
+The dashboard only monitors: nothing flows from it back to the agents.
 
 ## Information Flow
 
@@ -120,7 +117,7 @@ sequenceDiagram
 7. **The frontend renders it.** The UI keys the card by agent, workspace, and
    session ID, creates it if needed (evicting the least recently seen card at
    `max_active_agents`), then updates its state color, activity log, metric
-   badges, last-seen timer, and open history modal, and re-applies the current
+   badges, last-seen timer, and open activity pane, and re-applies the current
    search and sort.
 
 Information also flows the other way, from the UI to the backend over
@@ -129,132 +126,13 @@ workspace path, and picking a directory, detecting its agents, and installing
 their hooks. Saved settings that change the broker restart the subscriber,
 and the backend pushes the new stale threshold and card limit back to the UI.
 
-## Prompt Delivery
-
-```mermaid
-sequenceDiagram
-    participant U as Dashboard UI
-    participant D as DashboardApp
-    participant B as Mosquitto
-    participant R as vauxhall-relay
-    participant T as tmux pane
-
-    Note over R,T: SessionStart hook recorded session to pane
-    U->>D: send_prompt(agent, session_id, text)
-    D->>B: prompt (QoS 1, not retained)
-    B->>R: sessions/{session}/prompt
-    R->>T: paste-buffer -p, then Enter
-    R->>B: ack (delivered or failed)
-    B->>D: sessions/{session}/ack
-    D->>U: prompt-ack event
-```
-
-See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
-
-- **Protocol**: `vauxhall.core.prompts` builds the per-session topics
-  (`vauxhall/agents/<agent>/sessions/<session>/prompt` and `/ack`; agent
-  lower-cased, session percent-encoded) and encodes, validates, and parses
-  both messages. Prompt text is 1..4,096 characters with no control
-  characters except newline and tab, because a raw escape could end the
-  terminal's bracketed paste early and turn the rest into keystrokes. Both the
-  dashboard and the relay validate it. A message ID is 1..64 characters with
-  no control characters. As in telemetry, `schema_version` must be the
-  integer 1, so a JSON `true` (equal to 1 in Python) is rejected. Messages
-  over 32 KiB are dropped, a limit every valid prompt fits under even at four
-  UTF-8 bytes per character.
-- **Pane record**: `vauxhall.hooks.panes` writes
-  `~/.config/vauxhall/panes/<sha256(agent, session)>.json` (mode 0600 in a
-  0700 directory, tightened if it already exists with a looser mode) holding
-  `pane`, `socket`, `server_pid`, and `process_group`, the foreground process
-  group of the pane's terminal when the session started, which is the
-  agent's, or `null` when it can't be read. tmux has no format for it, so
-  `panes.pane_process_group` asks tmux for `#{pane_pid}` and reads that
-  process's `tpgid` with `ps`. `panes.run_tmux` runs every tmux command, for
-  the hooks and the relay; the hooks wait `panes.TMUX_TIMEOUT_SECONDS` (1
-  second) per command, and the relay `relay.TMUX_TIMEOUT_SECONDS` (5
-  seconds), because a command that times out may still have run, and a
-  paste acknowledged as failed after it was typed would be resent. It is
-  written by `common.track_pane`, called from `publish_telemetry` on
-  `SessionStart`, and deleted on `SessionEnd`; a `SessionStart` outside tmux
-  removes any old record, records older than 30 days are swept, and failures
-  are logged and ignored. It is never published.
-- **Relay**: `vauxhall.hooks.relay` (`vauxhall-relay`) subscribes at QoS 1 to
-  `vauxhall/agents/+/sessions/+/prompt` with the hooks' broker settings. It
-  ignores prompts for sessions without a local pane record, so one relay per
-  machine can share a broker, and remembers the last 256 message IDs to
-  ignore a QoS 1 redelivery. It ignores messages flagged as retained, which
-  the broker sends only when replaying a stored message on subscribe, so a
-  retained prompt is typed only by a relay connected when it is published,
-  and never on a reconnect. A delivery that raises is acknowledged as
-  `failed` (`delivery-failed`), and any other error while handling a message
-  is logged instead of letting paho re-raise it out of the network loop,
-  which would end the relay. Delivery checks that the pane's tmux server PID
-  still matches the record (pane IDs restart from `%0` after tmux restarts)
-  and, when the record has a `process_group`, that the pane's foreground
-  group is still that one: an agent that exited without `SessionEnd` leaves
-  its shell in the foreground, which would run the prompt as a command, and
-  an agent started in the pane since then belongs to another session. Both
-  lead another group, though a restarted agent has the same command name. A
-  group that can't be read now is refused, and so is a record without a
-  `process_group` (from an older hook, which recorded `command` instead, or
-  from a `ps` without `tpgid`), with a warning: nothing then shows that the
-  pane still runs the agent. It leaves any pane
-  mode, such as copy mode, with `copy-mode -q` before pasting and again
-  before Enter: a mode takes `send-keys Enter` for itself and drops the
-  paste's brackets, which would submit a multi-line prompt line by line.
-  `copy-mode -q` does nothing outside a mode and needs tmux 3.1a; when it
-  fails, delivery goes ahead with a debug log. It then runs `load-buffer` from standard
-  input, `paste-buffer -p -d` into the pane, and, after 0.2 seconds,
-  `send-keys Enter`. Text never appears on a command line. It acknowledges
-  `delivered` or `failed` (`pane-unavailable` or `delivery-failed`) without
-  waiting for the broker, since it runs in the network loop's callback. It
-  logs no prompt text.
-- **Dashboard**: `DashboardSubscriber.send_prompt` publishes at QoS 1 with
-  `retain=False` (a retained prompt would be retyped on every relay
-  reconnect) and refuses when the broker isn't connected rather than queueing.
-  It also subscribes to `vauxhall/agents/+/sessions/+/ack` and forwards valid
-  acknowledgments to `DashboardApp.on_ack`, which sends a `prompt-ack` event
-  to a ready frontend. `DashboardIPC.send_prompt` takes a JSON object with
-  `agent`, `session_id`, and `text` and returns `{"ok", "id"}` or
-  `{"ok": false, "error"}`.
-- **Frontend**: A card's ✉️ button (`.prompt-icon`, named by agent, workspace,
-  and session) opens the `prompt-modal` `<dialog>` through `dialog.js`, with a
-  warning when the card is waiting for input, since the text would answer its
-  question or permission request. `js/prompt.js` sends the request and shows
-  the state in the card's `.prompt-status` live region: waiting for the relay,
-  delivered, not delivered with a reason, or, after 10 seconds, no
-  acknowledgment, which a later acknowledgment still replaces. It tracks
-  only each card's latest prompt: sending another forgets the previous one, so
-  an older prompt's timeout or late acknowledgment can't overwrite the newer
-  outcome, and a send also forgets the prompts of cards that have left the
-  page. An acknowledgment that beats the bridge's reply is kept briefly and
-  matched afterwards; one for a message ID the bridge already returned (a
-  replaced prompt's, or a duplicate) is dropped instead, so it can't push
-  out one still to be matched. The dialog closes when its card is evicted,
-  cleared, or denylisted. A send's reply shows an error in the dialog only
-  while the dialog still targets the sending card, and closes the dialog on
-  success only if it was not closed or reopened meanwhile, since a reopened
-  dialog may hold a follow-up draft. Otherwise, success clears the text only
-  if it is still the sent text, and a rejection shows `Prompt not sent: <error>` on the sending
-  card's `.prompt-status` and forgets the card's previous prompt, like a
-  successful send. Send is disabled only while the dialog's own card has a
-  send pending, and opening the dialog for a different card than the one
-  whose draft it holds clears the text.
-- **Security**: Anyone who can publish to the broker can send prompts, and a
-  prompt can make an agent run commands, unless the broker's ACL restricts
-  who may publish to `sessions/+/prompt` (see
-  [remote-deployment.md](docs/remote-deployment.md#networked-brokers)). There
-  is no setting that disables the feature; without a relay nothing acts on
-  prompts.
-
 ## Project Structure
 
 - `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
   the dashboard and hooks.
 - `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
-- `vauxhall/hooks/`: The telemetry client, shared hook helpers, the tmux pane
-  record and the prompt relay, and the Claude Code, Codex, and Gemini CLI
-  hooks and installers. `agents.py` maps agent keys to installers, for the
+- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
+  Code, Codex, and Gemini CLI hooks and installers. `agents.py` maps agent keys to installers, for the
   CLI and the dashboard, and detects a workspace's agents.
 - `docs/`: User documentation and the dashboard screenshot shown in the README.
 - `scripts/`: The agent simulator and a logging color check.
@@ -308,13 +186,39 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   its `Stop` hook at the same time, and `Stop` also publishes the message, so
   the `Thinking` copy can arrive last and would otherwise leave an idle card
   showing `Thinking`.
-- **History**: The 🕒 icon opens a resizable modal with the card's last 20
-  events, filterable by text and state. It updates live and follows new events
-  only when scrolled to the bottom and not hovered.
+- **Activity pane**: Clicking a card, or activating its workspace button,
+  opens the `history-modal` `<dialog>`, which grows out of the card
+  (`motion.growFrom`: a Web Animations `transform` from the card's rectangle,
+  twice `--transition-speed`, skipped under reduced motion). The header shows
+  the agent, workspace, and session, with **Copy path**. The body is a
+  timeline of the card's last 20 events, filterable by text and state, the
+  filter box taking focus. Each history entry records its arrival time `at`;
+  an entry lasts until the next arrives, and the newest until now
+  (`state.historyDurations`, over the whole history so a filter doesn't merge
+  rows). Durations measure arrival at the frontend, since telemetry carries
+  no timestamp, so events delivered together, such as the backlog sent when
+  the window becomes ready, show near-zero durations. Each row's class
+  (`state-<category>` from `ui.stateCategory`, which also sets the card's
+  `error`, `waiting`, or `working` class) colors its left border and an
+  `aria-hidden` bar; the state label keeps the text color for contrast. A
+  bar's width is its duration relative to the longest finished entry shown,
+  at least 2% and at most 100%, because the newest entry, still open, would
+  otherwise dwarf the rest on a quiet card. The duration label and any
+  reported tool `duration` are text. The pane updates live and follows new
+  events only when scrolled to the bottom and not hovered. When the rows
+  shown are the same entries, as on each 10-second staleness sweep, only
+  their durations and bar widths change, so a text selection survives and
+  the bars animate; other changes rebuild the rows. A container query puts
+  each row's details on their own line when the pane is under 560 pixels
+  wide.
 - **Staleness**: A card with no events for `stale_threshold` seconds (120 by
   default) turns gray and shows `STALE`. Staleness is checked every 10 seconds.
-- **Copying**: Clicking a card copies the raw `workspace` value. Telemetry is
-  never inserted into HTML markup or shell commands.
+- **Copying**: The pane's **Copy path** copies the raw `workspace` value
+  (`ui.copyWorkspacePath`, which returns `Copied!`, or `Copy failed` also
+  when the bridge can't copy) and shows the outcome in its `role="status"`
+  region, cleared first so a repeat is announced, and only while the pane
+  still shows the card that was copied. Telemetry is never inserted into HTML markup or
+  shell commands.
 - **Agent menu**: A card's ⋮ button opens a `<dialog>` with two actions.
   **Hide until next event** sets `display: none` on that card (tracked
   through `dataset.hidden`, not removed from `agents` state or the DOM); the
@@ -363,21 +267,20 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   field takes effect.
 - **Accessibility**: Every interactive control is a `<button>` or a labeled
   form control; no `div` or `span` carries a click handler as its only way in.
-  The card's workspace path, its 🕒 history icon, and its ⋮ menu icon are
-  buttons, and the card's own click-to-copy handler sits on top of the
-  workspace button rather than replacing it. The history, agent menu, prompt,
-  install, and settings modals are `<dialog>` elements opened with `showModal()`, so the
+  The card's workspace path and its ⋮ menu icon are buttons, and the card's
+  own click-to-open handler sits on top of the workspace button rather than
+  replacing it. The activity, agent menu, install, and settings modals are `<dialog>` elements opened with `showModal()`, so the
   browser contains focus and Escape closes them (the install dialog
   ignores it while an install runs); closing returns focus to the
   control that opened it, or to the agent grid when that control's card was
   evicted, hidden, or filtered out meanwhile, since a hidden control can't
   take focus. Each card is a `group` named by agent and session, and its
-  history and menu buttons name the agent, workspace, and session, so
+  workspace and menu buttons name the agent, workspace, and session, so
   concurrent sessions stay distinguishable. Search, sort, filter, and
   theme controls carry `aria-label`s, the status line is `role="status"` with
   `aria-live="polite"`, and `:focus-visible` draws an accent outline. Under
-  `prefers-reduced-motion: reduce`, `--transition-speed` drops to `0.01ms` and
-  `sortGrid` re-orders without animating.
+  `prefers-reduced-motion: reduce`, `--transition-speed` drops to `0.01ms`,
+  `sortGrid` re-orders without animating, and the pane opens without growing.
 - **Remembered view**: The first paint uses the theme cached in the
   `vauxhall-theme` localStorage key. On startup the frontend then applies the
   theme, sort order, history state filter, and the attention-first and notify
@@ -394,7 +297,7 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   prompt, message, command, error, token, or history content. A card for a
   currently denylisted agent is left out, like live telemetry. Restored
   cards are sorted by last-seen and capped to `max_active_agents` before any
-  are built, are given an empty history (so the 🕒 button opens showing no
+  are built, are given an empty history (so the pane opens showing no
   events instead of silently doing nothing), and are checked for staleness
   immediately against the real threshold. A matching live event updates a
   restored card in place instead of creating a duplicate. Card state is sent
@@ -440,10 +343,8 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   daemon thread runs each closed client's `loop_stop()` in turn, because
   `loop_stop()` joins a network thread that can be inside a connect attempt
   for up to paho's 5-second connect timeout, and the save runs on the UI
-  thread. A closed subscriber still forwards telemetry and acknowledgments
-  that arrive before it disconnects, since they describe agents, and
-  acknowledgments are not replayed to its replacement; it can't be started
-  again. Its network thread can still be inside a callback, past the
+  thread. A closed subscriber still forwards telemetry that arrives before
+  it disconnects, since it describes agents; it can't be started again. Its network thread can still be inside a callback, past the
   stopping check, so each subscriber's statuses carry a generation, and the
   UI thread drops those from a replaced one. If the frontend is
   ready, it receives a `settings-changed` event with the new stale threshold,
@@ -569,18 +470,23 @@ See [sending-prompts.md](docs/sending-prompts.md) for the user's view.
   `DashboardApp` registers, which calls `Pyloid.show_notification` for an
   OS-level (system tray) notification. Without a registered callback, or if
   it raises, `notify` returns `False` instead of propagating.
+- **Clipboard**: `DashboardIPC.copy_to_clipboard` calls the `on_copy`
+  callback the same way; `DashboardApp` registers `Pyloid.set_clipboard_text`,
+  which uses Qt's `QClipboard`. Qt speaks the Wayland, X11, macOS, and
+  Windows clipboards itself; pyperclip, used before, needed `wl-copy`,
+  `xclip`, or `xsel` on Linux and failed without them.
 
 ## Configuration
 
 The dashboard reads `vauxhall_dashboard.json` from the current directory or,
-if the file is not there, from `~/.config/vauxhall/`. Hooks and the relay read
+if the file is not there, from `~/.config/vauxhall/`. Hooks read
 `vauxhall_hooks.json` only from `~/.config/vauxhall/`: they run in the agent's
 workspace, and a file there, such as one in a cloned repository, could name
 any broker and a `password_file` to send it.
 `HookConfig.SEARCHES_CURRENT_DIRECTORY` is `False`, and `field_sources` reads
 the same flag, so the settings editor agrees with the hooks.
-`warn_about_workspace_file`, called by `run_hook` and the relay's `main` but
-not by `HookConfig.load`, which the dashboard also calls, logs a warning when
+`warn_about_workspace_file`, called by `run_hook` but not by
+`HookConfig.load`, which the dashboard also calls, logs a warning when
 the current directory holds a hooks file other than the per-user one.
 Environment variables override file values, which override defaults. See [configuration.md](docs/configuration.md) for every
 field and environment variable.

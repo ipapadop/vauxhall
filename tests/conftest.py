@@ -15,11 +15,11 @@ import pytest
 def isolated_home(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
-    """Keep every test away from the real home, VAUXHALL_*, and tmux variables.
+    """Keep every test away from the real home and VAUXHALL_* variables.
 
     The dashboard reads and writes per-user files under ``~/.config/vauxhall``.
     ``HOME`` and ``USERPROFILE`` are set too, so hooks run as child processes
-    don't read the real hooks file or write real pane records.
+    don't read the real hooks file.
 
     Args:
         tmp_path_factory: Pytest temporary directory factory.
@@ -35,9 +35,6 @@ def isolated_home(
     for name in list(os.environ):
         if name.startswith("VAUXHALL_"):
             monkeypatch.delenv(name)
-    # A test run inside tmux would otherwise query the real tmux server.
-    monkeypatch.delenv("TMUX", raising=False)
-    monkeypatch.delenv("TMUX_PANE", raising=False)
     return home
 
 

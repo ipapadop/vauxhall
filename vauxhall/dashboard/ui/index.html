@@ -56,10 +56,15 @@
     <dialog id="history-modal" class="modal" aria-labelledby="modal-agent-name">
         <div class="modal-content">
             <div class="modal-header">
-                <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
-                    <h2 id="modal-agent-name">Agent History</h2>
+                <div style="display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0;">
+                    <h2 id="modal-agent-name">Agent Activity</h2>
+                    <div class="modal-agent-meta-row">
+                        <span id="modal-agent-meta" class="modal-agent-meta"></span>
+                        <button type="button" id="modal-copy-path" class="secondary-btn">Copy path</button>
+                        <span id="modal-copy-status" class="modal-copy-status" role="status" aria-live="polite"></span>
+                    </div>
                     <div style="display: flex; gap: 10px;">
-                        <input type="text" id="modal-search" placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;" aria-label="Filter history entries">
+                        <input type="text" id="modal-search" autofocus placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;" aria-label="Filter history entries">
                         <select id="modal-state-filter" class="secondary-btn" aria-label="Filter history by state">
                             <option value="ALL">All States</option>
                             <option value="Acting">Acting</option>
@@ -69,9 +74,9 @@
                         </select>
                     </div>
                 </div>
-                <button type="button" class="close-btn" title="Close history" aria-label="Close history">&times;</button>
+                <button type="button" class="close-btn" title="Close activity" aria-label="Close activity">&times;</button>
             </div>
-            <div id="modal-history-body" class="modal-body" tabindex="0" role="log" aria-label="History entries">
+            <div id="modal-history-body" class="modal-body" tabindex="0" role="log" aria-label="Activity timeline">
                 <!-- Timeline items will be injected here -->
             </div>
         </div>
@@ -88,28 +93,6 @@
                 <button type="button" id="card-menu-denylist" class="secondary-btn">Add agent to denylist</button>
             </div>
         </div>
-    </dialog>
-
-    <dialog id="prompt-modal" class="modal" aria-labelledby="prompt-title">
-        <form id="prompt-form" class="modal-content prompt-content" novalidate>
-            <div class="modal-header">
-                <h2 id="prompt-title">Send Prompt</h2>
-                <button type="button" id="prompt-close" class="close-btn" title="Close" aria-label="Close prompt dialog">&times;</button>
-            </div>
-            <p id="prompt-target" class="settings-note"></p>
-            <p id="prompt-warning" class="prompt-warning" role="status"></p>
-            <label for="prompt-text">Prompt</label>
-            <textarea id="prompt-text" rows="6" maxlength="4096"></textarea>
-            <p class="settings-note">
-                Typed into the session's tmux pane by <code>vauxhall-relay</code> on the agent
-                machine. The session must run in tmux.
-            </p>
-            <p id="prompt-error" class="prompt-error" role="alert"></p>
-            <div class="settings-actions">
-                <button type="button" id="prompt-cancel" class="secondary-btn">Cancel</button>
-                <button type="submit" id="prompt-send" class="secondary-btn primary-btn">Send</button>
-            </div>
-        </form>
     </dialog>
 
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
@@ -150,7 +133,7 @@
             Agents installed together share one <code>.vauxhall-venv</code> in the directory.
             Reinstalling replaces Vauxhall's hooks and keeps the others.
         </p>
-        <p id="install-error" class="prompt-error" role="alert"></p>
+        <p id="install-error" class="form-error" role="alert"></p>
         <pre id="install-log" class="install-log" role="log" aria-live="polite" aria-label="Installer output"></pre>
         <p id="install-outcome" class="settings-message" role="status"></p>
         <div class="settings-actions">

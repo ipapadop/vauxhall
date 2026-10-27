@@ -21,7 +21,6 @@ from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH, MAX_WORKSPACE_LENG
 from vauxhall.hooks import common
 from vauxhall.hooks.claude import telemetry_hook as claude_hook
 from vauxhall.hooks.client import format_message
-from vauxhall.hooks.panes import PaneTarget, load_pane, record_pane
 
 IDENTITY = ["session-123", "call-123"]
 HOOKS = [
@@ -585,81 +584,6 @@ def test_publish_telemetry_keeps_an_event_with_a_blank_cwd() -> None:
     [[payload]] = publisher.batches
     assert payload["workspace"] == str(Path.cwd())
     format_message(payload)
-
-
-def test_publish_telemetry_records_the_pane_at_session_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A session that starts in tmux becomes reachable for dashboard prompts.
-
-    Args:
-        monkeypatch: Pytest monkeypatch fixture.
-    """
-    monkeypatch.setenv("TMUX_PANE", "%5")
-    monkeypatch.delenv("TMUX", raising=False)
-
-    common.publish_telemetry(
-        {"hook_event_name": "SessionStart", "session_id": "one", "source": "startup"},
-        "Codex",
-        {"SessionStart": common.session_start_telemetry},
-        publish=RecordingPublisher(),
-    )
-
-    assert load_pane("codex", "native:one") == PaneTarget("%5", None, None)
-
-
-def test_track_pane_records_the_agent_process_group_at_session_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The relay can later tell the agent from whatever else runs in its pane.
-
-    Args:
-        monkeypatch: Pytest monkeypatch fixture.
-    """
-    monkeypatch.setenv("TMUX_PANE", "%5")
-
-    common.track_pane("SessionStart", "Claude", "native:one", lambda: 500)
-
-    assert load_pane("claude", "native:one") == PaneTarget("%5", None, None, 500)
-
-
-def test_publish_telemetry_forgets_the_pane_at_session_end() -> None:
-    """A session that ended can no longer be sent prompts."""
-    record_pane("codex", "native:one", {"TMUX_PANE": "%5"})
-
-    common.publish_telemetry(
-        {"hook_event_name": "SessionEnd", "session_id": "one"},
-        "Codex",
-        {"SessionEnd": lambda _: ("Idle", {"status": "session ended"})},
-        publish=RecordingPublisher(),
-    )
-
-    assert load_pane("codex", "native:one") is None
-
-
-def test_pane_record_failure_never_disturbs_the_hook(
-    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An unwritable record is ignored and telemetry still goes out.
-
-    Args:
-        isolated_home: The temporary home directory.
-        monkeypatch: Pytest monkeypatch fixture.
-    """
-    monkeypatch.setenv("TMUX_PANE", "%5")
-    # A file where the records directory belongs makes writing fail for real.
-    (isolated_home / ".config" / "vauxhall").mkdir(parents=True)
-    (isolated_home / ".config" / "vauxhall" / "panes").write_text("", encoding="utf-8")
-    publisher = RecordingPublisher()
-
-    common.publish_telemetry(
-        {"hook_event_name": "SessionStart", "session_id": "one"},
-        "Codex",
-        {"SessionStart": common.session_start_telemetry},
-        publish=publisher,
-    )
-
-    assert len(publisher.batches) == 1
 
 
 def _run_main(hook: str, stdin: str) -> str:

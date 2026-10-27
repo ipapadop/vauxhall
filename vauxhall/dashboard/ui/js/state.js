@@ -91,17 +91,30 @@ export function ensureAgentCapacity(maxAgents) {
  * Prepends an event to the card's history, keeping the newest 20 entries.
  * @param {HTMLElement} card - The agent card element.
  * @param {object} data - The telemetry data.
+ * @param {number} [at] - Arrival time in milliseconds since the epoch.
  */
-export function updateAgentHistory(card, data) {
+export function updateAgentHistory(card, data, at = Date.now()) {
     card.history.unshift({
-        time: new Date().toLocaleTimeString(),
+        time: new Date(at).toLocaleTimeString(),
+        at,
         state: data.state,
         details: structuredClone(data.details || {}) // deep copy
     });
-    
+
     if (card.history.length > 20) {
         card.history.pop();
     }
+}
+
+/**
+ * Returns how long each history entry lasted: until the next entry arrived,
+ * or until `now` for the newest.
+ * @param {Array<{at: number}>} history - History entries, newest first.
+ * @param {number} [now] - The current time in milliseconds since the epoch.
+ * @returns {number[]} Milliseconds per entry.
+ */
+export function historyDurations(history, now = Date.now()) {
+    return history.map((entry, index) => Math.max(0, (index === 0 ? now : history[index - 1].at) - entry.at));
 }
 
 /**

@@ -366,7 +366,6 @@ def test_mqtt_change_reconnects(dashboard: DashboardApp) -> None:
         ANY,
         "broker",
         1883,
-        ack_callback=dashboard.on_ack,
     )
     subscriber_type.return_value.start.assert_called_once_with()
     assert dashboard.mqtt is subscriber_type.return_value

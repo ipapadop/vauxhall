@@ -73,8 +73,8 @@ class HookConfig:
 def warn_about_workspace_file() -> None:
     """Log a warning when the current directory holds a hooks file hooks ignore.
 
-    Hook and relay processes call this; the dashboard loads hook settings too
-    and has no use for the warning.
+    Hook processes call this; the dashboard loads hook settings too and has no
+    use for the warning.
     """
     user_file = user_config_path(HOOKS_FILE)
     try:

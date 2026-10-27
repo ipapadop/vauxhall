@@ -26,7 +26,6 @@ from vauxhall.hooks.files import (
     write_atomically,
 )
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
-from vauxhall.hooks.panes import foreground_process_group, forget_pane, record_pane
 
 logger = get_logger(__name__)
 
@@ -581,33 +580,6 @@ def tool_result_telemetry(
     return state, details
 
 
-def track_pane(
-    hook_type: object,
-    agent: str,
-    session_id: str,
-    process_group: Callable[[], int | None] = foreground_process_group,
-) -> None:
-    """Keep the local tmux pane record of a session in step with its lifecycle.
-
-    The record lets ``vauxhall-relay`` deliver dashboard prompts. A failure is
-    logged and ignored, so it can never disturb the agent or the telemetry.
-
-    Args:
-        hook_type: The hook event name.
-        agent: The agent name.
-        session_id: The session identity.
-        process_group: Returns the pane's foreground process group, the
-            agent's own at session start.
-    """
-    try:
-        if hook_type == "SessionStart":
-            record_pane(agent, session_id, process_group=process_group())
-        elif hook_type == "SessionEnd":
-            forget_pane(agent, session_id)
-    except OSError:
-        logger.debug("Could not update the tmux pane record for %s", agent)
-
-
 def event_workspace(
     input_data: dict[str, Any], current_directory: Callable[[], Path] = Path.cwd
 ) -> str | None:
@@ -664,7 +636,6 @@ def publish_telemetry(
         logger.warning("Skipping telemetry: no workspace is available")
         return
 
-    track_pane(hook_type, agent, session_id)
     events: list[Telemetry] = [
         ("Thinking", {"message": message}) for message in messages or []
     ]

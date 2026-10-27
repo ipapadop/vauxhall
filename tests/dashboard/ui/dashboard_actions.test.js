@@ -130,15 +130,16 @@ test('a card arriving later is placed according to the chosen sort order', async
     assert.deepEqual(cardOrder(document), ['Claude', 'Gemini']);
 });
 
-test('the history icon opens the modal for that card', async (t) => {
+test('clicking a card opens its pane', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
     const key = '["Codex","/home/user/project","one"]';
 
-    agents[key].querySelector('.history-icon').click();
+    agents[key].click();
 
     assert.ok(document.getElementById('history-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('modal-agent-name').textContent, `History: ${key}`);
+    assert.equal(document.getElementById('modal-agent-name').textContent, 'Codex');
+    assert.equal(document.getElementById('modal-agent-meta').textContent, '/home/user/project · session one');
     assert.equal(document.querySelectorAll('.history-item').length, 1);
 });
 
@@ -146,7 +147,7 @@ test('the close button hides the modal and stops its live updates', async (t) =>
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
     const key = '["Codex","/home/user/project","one"]';
-    agents[key].querySelector('.history-icon').click();
+    agents[key].querySelector('.agent-workspace').click();
 
     document.querySelector('.close-btn').click();
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'grep' } });
@@ -155,13 +156,14 @@ test('the close button hides the modal and stops its live updates', async (t) =>
     assert.equal(document.querySelectorAll('.history-item').length, 1);
 });
 
-test('closing the modal returns focus to the history button that opened it', async (t) => {
+test('closing the pane returns focus to the card\'s workspace button', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    const history = agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon');
+    const card = agents['["Codex","/home/user/project","one"]'];
+    const workspace = card.querySelector('.agent-workspace');
     let focused = 0;
-    history.focus = () => { focused++; };
-    history.click();
+    workspace.focus = () => { focused++; };
+    card.click();
 
     document.querySelector('.close-btn').click();
 
@@ -171,7 +173,7 @@ test('closing the modal returns focus to the history button that opened it', asy
 test('dismissing the modal with Escape stops its live updates', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
 
     // A dialog dismissed with Escape reports it as the close event.
     document.getElementById('history-modal').dispatchEvent(new window.Event('close'));
@@ -183,7 +185,7 @@ test('dismissing the modal with Escape stops its live updates', async (t) => {
 test('an open modal follows new events for the agent it is showing', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
 
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'grep' } });
 
@@ -197,21 +199,90 @@ test('an open modal ignores events for a different agent', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
     const key = '["Codex","/home/user/project","one"]';
-    agents[key].querySelector('.history-icon').click();
+    agents[key].querySelector('.agent-workspace').click();
 
     listeners['agent-update']({ ...BASE, session_id: 'two', details: { tool: 'grep' } });
 
-    assert.equal(document.getElementById('modal-agent-name').textContent, `History: ${key}`);
+    assert.equal(document.getElementById('modal-agent-meta').textContent, '/home/user/project · session one');
     assert.deepEqual(
         [...document.querySelectorAll('.history-details')].map((item) => item.textContent),
         ['Running: shell'],
     );
 });
 
+test('Copy path copies the workspace of the card the pane shows', async (t) => {
+    const { document, clipboard, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    listeners['agent-update']({ ...BASE, workspace: '/home/user/other', session_id: 'two' });
+    agents['["Codex","/home/user/other","two"]'].click();
+
+    document.getElementById('modal-copy-path').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(clipboard, ['/home/user/other']);
+    assert.equal(document.getElementById('modal-copy-status').textContent, 'Copied!');
+});
+
+test('a copy that finishes after the pane moved to another card leaves its status alone', async (t) => {
+    let finish;
+    const { document, listeners } = await bootDashboard(t, {
+        copy_to_clipboard: () => new Promise((resolve) => { finish = resolve; }),
+    });
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    listeners['agent-update']({ ...BASE, session_id: 'two' });
+    agents['["Codex","/home/user/project","one"]'].click();
+    document.getElementById('modal-copy-path').click();
+
+    document.querySelector('.close-btn').click();
+    agents['["Codex","/home/user/project","two"]'].click();
+    finish(true);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.getElementById('modal-copy-status').textContent, '');
+});
+
+test('a copy the bridge cannot make reports failure', async (t) => {
+    const { document, listeners } = await bootDashboard(t, { copy_to_clipboard: undefined });
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].click();
+
+    document.getElementById('modal-copy-path').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.getElementById('modal-copy-status').textContent, 'Copy failed');
+});
+
+test('Copy path does nothing once the pane has closed', async (t) => {
+    const { document, clipboard, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","/home/user/project","one"]'].click();
+    document.querySelector('.close-btn').click();
+
+    document.getElementById('modal-copy-path').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(clipboard, []);
+});
+
+test('the staleness sweep advances the open pane\'s newest duration', async (t) => {
+    const { document, listeners, intervals } = await bootDashboard(t);
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 1_000_000;
+    listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
+    agents['["Codex","/home/user/project","one"]'].click();
+    assert.equal(document.querySelector('.history-duration').textContent, '<1s');
+
+    Date.now = () => 1_030_000;
+    intervals.at(-1)();
+
+    assert.equal(document.querySelector('.history-duration').textContent, '30s');
+});
+
 test('clicking the backdrop closes the modal', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
     const modal = document.getElementById('history-modal');
 
     window.onclick({ target: modal });
@@ -219,14 +290,14 @@ test('clicking the backdrop closes the modal', async (t) => {
     assert.ok(!modal.hasAttribute('open'));
 });
 
-test('clicking a card copies its workspace path', async (t) => {
+test('clicking a card no longer copies its workspace path', async (t) => {
     const { clipboard, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
 
     agents['["Codex","/home/user/project","one"]'].click();
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.deepEqual(clipboard, ['/home/user/project']);
+    assert.deepEqual(clipboard, []);
 });
 
 test('the menu icon opens the card options dialog', async (t) => {
@@ -439,7 +510,7 @@ test('a settings change removes denylisted cards before applying a lowered limit
 test('denylisting the agent behind an open history modal closes it', async (t) => {
     const { listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.history-icon').click();
+    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
 
@@ -535,323 +606,6 @@ test('clearing the dashboard resets the fleet summary', async (t) => {
 
     const texts = [...document.getElementById('fleet-summary').children].map((badge) => badge.textContent);
     assert.deepEqual(texts, ['0 agents', '0 need attention', '0 stale', '0 tokens']);
-});
-
-const ONE = '["Codex","/home/user/project","one"]';
-const TWO = '["Codex","/home/user/project","two"]';
-
-/**
- * Submits the prompt form the way pressing Send would, and lets the send finish.
- * @param {Document} document - The dashboard document.
- */
-async function submitPrompt(document) {
-    document.getElementById('prompt-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
-    await new Promise((resolve) => setImmediate(resolve));
-}
-
-test('the prompt button opens the dialog for its card', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-target').textContent, 'Codex in /home/user/project');
-});
-
-test('sending a prompt posts the card identity and text, then closes the dialog', async (t) => {
-    const requests = [];
-    const { document, listeners } = await bootDashboard(t, {
-        send_prompt: async (payload) => {
-            requests.push(JSON.parse(payload));
-            return JSON.stringify({ ok: true, id: 'id-1' });
-        },
-    });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'run the tests';
-
-    await submitPrompt(document);
-
-    assert.deepEqual(requests, [{ agent: 'Codex', session_id: 'one', text: 'run the tests' }]);
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-text').value, '');
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt sent, waiting for the relay…');
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-});
-
-test('a relay acknowledgment updates the card that sent the prompt', async (t) => {
-    const { document, listeners } = await bootDashboard(t, {
-        send_prompt: async () => JSON.stringify({ ok: true, id: 'id-ack' }),
-    });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'hello';
-    await submitPrompt(document);
-
-    listeners['prompt-ack']({ id: 'id-ack', status: 'delivered' });
-
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt delivered');
-});
-
-test('a rejected prompt keeps the dialog open with the reason and the text', async (t) => {
-    const { document, listeners } = await bootDashboard(t, {
-        send_prompt: async () => JSON.stringify({ ok: false, error: 'Not connected to the broker' }),
-    });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'keep me';
-
-    await submitPrompt(document);
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
-    assert.equal(document.getElementById('prompt-text').value, 'keep me');
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-});
-
-/**
- * Boots the dashboard with two cards and a send_prompt that waits until the
- * test settles it, then sends 'first' from the first card's dialog.
- * @param {object} t - The test context.
- * @returns {Promise<{document: Document, reply: Function}>} The document and an
- *     async function that settles the pending send with a result.
- */
-async function pendingSend(t) {
-    let resolve;
-    const { document, listeners } = await bootDashboard(t, {
-        send_prompt: () => new Promise((r) => { resolve = r; }),
-    });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'first';
-    await submitPrompt(document);
-    const reply = async (result) => {
-        resolve(JSON.stringify(result));
-        await new Promise((r) => setImmediate(r));
-    };
-    return { document, reply };
-}
-
-/**
- * Closes the prompt dialog and opens it for the second card with a new draft.
- * @param {Document} document - The dashboard document.
- */
-function reopenForTwo(document) {
-    document.getElementById('prompt-cancel').click();
-    agents[TWO].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'second';
-}
-
-test('a send that finishes after the dialog reopened for another card leaves that dialog alone', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    reopenForTwo(document);
-
-    await reply({ ok: true, id: 'id-1' });
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-text').value, 'second');
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt sent, waiting for the relay…');
-});
-
-test('a send rejected after the dialog reopened for another card reports the error on its own card', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    reopenForTwo(document);
-
-    await reply({ ok: false, error: 'Not connected to the broker' });
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-error').textContent, '');
-    assert.equal(document.getElementById('prompt-text').value, 'second');
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt not sent: Not connected to the broker');
-    assert.equal(agents[TWO].querySelector('.prompt-status').textContent, '');
-});
-
-test('send stays available for another card while the first card is still sending', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    assert.equal(document.getElementById('prompt-send').disabled, true);
-
-    reopenForTwo(document);
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-
-    document.getElementById('prompt-cancel').click();
-    agents[ONE].querySelector('.prompt-icon').click();
-    assert.equal(document.getElementById('prompt-send').disabled, true);
-
-    await reply({ ok: true, id: 'id-1' });
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-});
-
-test('a draft is kept for its own card and not carried to another', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'for one';
-    document.getElementById('prompt-cancel').click();
-
-    agents[ONE].querySelector('.prompt-icon').click();
-    assert.equal(document.getElementById('prompt-text').value, 'for one');
-
-    document.getElementById('prompt-cancel').click();
-    agents[TWO].querySelector('.prompt-icon').click();
-    assert.equal(document.getElementById('prompt-text').value, '');
-});
-
-test('a send that finishes after its dialog closed clears the sent text', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    document.getElementById('prompt-cancel').click();
-
-    await reply({ ok: true, id: 'id-1' });
-
-    assert.equal(document.getElementById('prompt-text').value, '');
-});
-
-test('a send rejected after its dialog closed reports the error on its card', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    document.getElementById('prompt-cancel').click();
-
-    await reply({ ok: false, error: 'Not connected to the broker' });
-
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, 'Prompt not sent: Not connected to the broker');
-    assert.equal(document.getElementById('prompt-text').value, 'first');
-});
-
-test('a send rejected after its dialog reopened for the same card shows the error there', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    document.getElementById('prompt-cancel').click();
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    await reply({ ok: false, error: 'Not connected to the broker' });
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-error').textContent, 'Not connected to the broker');
-    assert.equal(agents[ONE].querySelector('.prompt-status').textContent, '');
-});
-
-test('a send that finishes after its dialog reopened for the same card keeps the new draft', async (t) => {
-    const { document, reply } = await pendingSend(t);
-    document.getElementById('prompt-cancel').click();
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-text').value = 'first, then more';
-
-    await reply({ ok: true, id: 'id-1' });
-
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('prompt-text').value, 'first, then more');
-    assert.equal(document.getElementById('prompt-send').disabled, false);
-});
-
-test('cancelling the prompt dialog sends nothing and returns focus to its button', async (t) => {
-    let sent = 0;
-    const { document, listeners } = await bootDashboard(t, {
-        send_prompt: async () => { sent++; return JSON.stringify({ ok: true, id: 'x' }); },
-    });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    const button = agents[ONE].querySelector('.prompt-icon');
-    let focused = 0;
-    button.focus = () => { focused++; };
-    button.click();
-
-    document.getElementById('prompt-cancel').click();
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-    assert.equal(sent, 0);
-    assert.equal(focused, 1);
-});
-
-test('the close button dismisses the prompt dialog', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    document.getElementById('prompt-close').click();
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-});
-
-test('the prompt dialog closes when its card is evicted by a smaller card limit', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 0 });
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-});
-
-test('the prompt dialog closes when its agent is denylisted', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-});
-
-test('a new card arriving at capacity closes the prompt dialog of the evicted card', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 1 });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-});
-
-test('the prompt dialog warns when the agent is waiting for input', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input' });
-
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    assert.match(document.getElementById('prompt-warning').textContent, /waiting for input/);
-});
-
-test('the prompt dialog shows no warning for an agent that is not waiting', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Waiting for Input' });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('prompt-close').click();
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one', state: 'Idle' });
-
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    assert.equal(document.getElementById('prompt-warning').textContent, '');
-});
-
-test('clearing the dashboard closes the prompt dialog of the removed card', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents[ONE].querySelector('.prompt-icon').click();
-
-    document.getElementById('clear-btn').click();
-
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
-});
-
-test('clearing stale cards closes the prompt dialog only when its card was removed', async (t) => {
-    const { document, listeners } = await bootDashboard(t);
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
-    agents['["Codex","/home/user/project","two"]'].dataset.lastSeen = String(Date.now() - 300000);
-    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100 });
-
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('clear-stale-btn').click();
-    assert.ok(document.getElementById('prompt-modal').hasAttribute('open'));
-
-    document.getElementById('prompt-close').click();
-    agents[ONE].dataset.lastSeen = String(Date.now() - 300000);
-    listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100 });
-    agents[ONE].querySelector('.prompt-icon').click();
-    document.getElementById('clear-stale-btn').click();
-    assert.ok(!document.getElementById('prompt-modal').hasAttribute('open'));
 });
 
 const CLAUDE = { ...BASE, agent: 'Claude Code', session_id: 'turn' };

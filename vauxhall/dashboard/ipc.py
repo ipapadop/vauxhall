@@ -10,7 +10,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-import pyperclip
 from pyloid.ipc import Bridge, PyloidIPC
 
 from vauxhall.core.config import ConfigurationError
@@ -127,7 +126,7 @@ class DashboardIPC(PyloidIPC):
         on_ready_callback: Callable[[], Any] | None = None,
         on_save_settings: Callable[..., dict[str, Any]] | None = None,
         on_notify: Callable[[str, str], Any] | None = None,
-        on_send_prompt: Callable[[str, str, str], dict[str, Any]] | None = None,
+        on_copy: Callable[[str], Any] | None = None,
         hook_install: HookInstallBackend | None = None,
     ) -> None:
         """Initialize the IPC bridge.
@@ -138,8 +137,7 @@ class DashboardIPC(PyloidIPC):
                 called with the changes and an ``update_hooks`` keyword.
             on_notify: Optional function that shows a desktop notification,
                 called with a title and a message.
-            on_send_prompt: Optional function that publishes a prompt, called
-                with the agent, session identity, and text.
+            on_copy: Optional function that puts text on the system clipboard.
             hook_install: Optional backend that picks directories and installs
                 hooks into them.
         """
@@ -148,7 +146,7 @@ class DashboardIPC(PyloidIPC):
         self.on_ready_callback = on_ready_callback
         self.on_save_settings = on_save_settings
         self.on_notify = on_notify
-        self.on_send_prompt = on_send_prompt
+        self.on_copy = on_copy
         self.hook_install = hook_install
 
     @Bridge(result=bool)
@@ -339,37 +337,6 @@ class DashboardIPC(PyloidIPC):
         else:
             return True
 
-    @Bridge(str, result=str)
-    def send_prompt(self, payload: str) -> str:
-        """Send a prompt to an agent session's relay.
-
-        Args:
-            payload: JSON object with the card's ``agent`` and ``session_id``
-                and the prompt ``text``.
-
-        Returns:
-            str: JSON with ``ok`` and the acknowledgment ``id``, or ``ok`` false
-                and an ``error``.
-        """
-        request = _json_object(payload) or {}
-        agent = request.get("agent")
-        session_id = request.get("session_id")
-        text = request.get("text")
-        if (
-            self.on_send_prompt is None
-            or not (isinstance(agent, str) and agent)
-            or not (isinstance(session_id, str) and session_id)
-            or not (isinstance(text, str) and text)
-        ):
-            return json.dumps({"ok": False, "error": "Invalid prompt request"})
-
-        try:
-            result = self.on_send_prompt(agent, session_id, text)
-        except Exception:
-            logger.exception("Failed to send prompt")
-            return json.dumps({"ok": False, "error": "The prompt could not be sent"})
-        return json.dumps(result)
-
     @Bridge(str, str, result=bool)
     def notify(self, title: str, message: str) -> bool:
         """Show a desktop notification for a card that started needing attention.
@@ -399,10 +366,12 @@ class DashboardIPC(PyloidIPC):
             text: The text to copy.
 
         Returns:
-            bool: True if successful, False otherwise.
+            bool: True if a copy callback is registered and it succeeds.
         """
+        if self.on_copy is None:
+            return False
         try:
-            pyperclip.copy(text)
+            self.on_copy(text)
             logger.info("Copied to clipboard")
         except Exception:
             logger.exception("Failed to copy to clipboard")

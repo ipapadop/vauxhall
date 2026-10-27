@@ -144,7 +144,7 @@ class DashboardApp:
             on_ready_callback=self._on_frontend_ready,
             on_save_settings=self.save_settings,
             on_notify=self._notify,
-            on_send_prompt=self.send_prompt,
+            on_copy=self._copy,
             hook_install=self,
         )
         self.install_runner = HookInstallRunner(self._post, launch=launch_installer)
@@ -279,39 +279,13 @@ class DashboardApp:
         """
         self.app.show_notification(title, message)
 
-    def send_prompt(self, agent: str, session_id: str, text: str) -> dict[str, Any]:
-        """Publish a prompt for one agent session.
+    def _copy(self, text: str) -> None:
+        """Put text on the system clipboard through Qt, which needs no external tools.
 
         Args:
-            agent: The agent name of the session's card.
-            session_id: The session identity of the card.
-            text: The prompt to send.
-
-        Returns:
-            dict[str, Any]: ``ok`` with the acknowledgment ``id`` on success,
-                otherwise ``ok`` false with an ``error`` to show.
+            text: The text to copy.
         """
-        subscriber = self.mqtt
-        if subscriber is None:
-            return {"ok": False, "error": "Not connected to the broker"}
-        try:
-            return {"ok": True, "id": subscriber.send_prompt(agent, session_id, text)}
-        except (ValueError, ConnectionError) as error:
-            logger.warning("Prompt not sent: %s", error)
-            return {"ok": False, "error": str(error)}
-
-    def on_ack(self, ack: dict[str, str]) -> None:
-        """Forward a relay's acknowledgment of a prompt to the frontend.
-
-        Args:
-            ack: The validated acknowledgment, with ``id``, ``status``, and
-                optionally ``reason``. It is dropped when the frontend isn't
-                ready, since no card can be waiting on it then.
-        """
-        try:
-            self._post("prompt-ack", ack)
-        except Exception:
-            logger.exception("Error in on_ack")
+        self.app.set_clipboard_text(text)
 
     def on_status(self, message: str, generation: int) -> None:
         """Post an MQTT status to the UI thread, which records and forwards it.
@@ -478,7 +452,6 @@ class DashboardApp:
             self._status_callback(),
             settings.mqtt.host,
             settings.mqtt.port,
-            ack_callback=self.on_ack,
         )
         try:
             self.mqtt.start()
@@ -530,9 +503,7 @@ class DashboardApp:
         """Run the application."""
         saved_window = self._create_window()
 
-        self.mqtt = DashboardSubscriber(
-            self.on_telemetry, self._status_callback(), ack_callback=self.on_ack
-        )
+        self.mqtt = DashboardSubscriber(self.on_telemetry, self._status_callback())
         try:
             self.mqtt.start()
 

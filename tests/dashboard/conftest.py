@@ -15,7 +15,6 @@ collect_ignore = (
         "test_dashboard_app.py",
         "test_dashboard_config_logging.py",
         "test_ipc.py",
-        "test_prompt_sending.py",
         "test_settings_editor.py",
         "test_ui_dispatch.py",
         "test_ui_state.py",

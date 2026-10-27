@@ -35,9 +35,14 @@ session as a card in a grid.
   with `[HH:mm:ss]`
   timestamps, token and duration badges for the latest operation, and a LOCAL
   or REMOTE badge.
-- **History**: The 🕒 icon opens a resizable modal with the card's last 20
-  events. It updates live, can be filtered, and pauses auto-scroll while you
-  hover.
+- **Activity pane**: Clicking a card grows it into a resizable pane with a
+  timeline of its last 20 events. Each event has a bar colored by state
+  (blue Thinking, green Acting, amber Waiting, red Error, gray Idle) and as
+  long as the time spent in that state, which for the newest event keeps
+  counting; a duration the tool reported is shown beside it. Durations are
+  measured when events reach the dashboard, so events that arrive together,
+  such as those sent before the window opened, show as instant. The pane
+  updates live, can be filtered, and pauses auto-scroll while you hover.
 - **Search and sort**: Filter cards by agent name or workspace path, and sort by
   name, recent activity, status, or latest token count. An **Attention first**
   checkbox ranks cards in an error or waiting state before the rest, on top
@@ -50,25 +55,22 @@ session as a card in a grid.
   an error or waiting state).
 - **Stale detection**: Cards show a "last seen" timer and turn gray after the
   stale threshold (120 seconds by default). **Clear Stale** removes them.
-- **Copy workspace**: Clicking a card copies its raw workspace path; the
-  workspace path on each card is also a button, so it works from the keyboard.
+- **Copy workspace**: The activity pane's **Copy path** button copies the
+  card's raw workspace path. The workspace path on each card is a button that
+  opens the pane, so it works from the keyboard.
 - **Per-agent menu**: A card's ⋮ button can hide that card until its agent's
   next event, or add the agent to a denylist saved in the dashboard
   configuration; a denylisted agent's telemetry is dropped and no card for it
   is shown, until it's removed from the settings dialog.
-- **Send prompts**: A card's ✉️ button sends a prompt to that session. A
-  relay (`vauxhall-relay`) on the agent machine types it into the session's
-  tmux pane and the card shows whether it was delivered. It works for Claude
-  Code, Codex, and Gemini CLI, but only for sessions running in tmux, and it
-  needs a trusted broker; see [docs/sending-prompts.md](docs/sending-prompts.md).
 - **Install hooks**: **Install Hooks…** picks a local workspace, shows which
   agents it uses and which already have hooks, and installs or reinstalls
   the ones you tick; see [Installing agent hooks](#installing-agent-hooks).
 - **Keyboard and screen reader support**: Every control is a real button or a
-  labeled form control, the history and settings modals are native dialogs that
+  labeled form control, the activity pane and settings dialog are native dialogs that
   close on Escape and return focus to the control that opened them, the
   connection line is a live region, focus is always visible, and card movement
-  stops when the system asks for reduced motion.
+  and the pane's opening animation stop when the system asks for reduced
+  motion.
 - **Settings**: The ⚙️ button opens a settings dialog that saves to
   `~/.config/vauxhall/`, applies most changes without a restart, and can also
   update the hooks configuration.
@@ -209,7 +211,7 @@ with.
 ### Running the dashboard
 
 Run `vauxhall`, or `uv run vauxhall` from a source checkout. Clicking a card
-copies its workspace path; the ⚙️ button opens the settings dialog. See
+opens its activity pane; the ⚙️ button opens the settings dialog. See
 [docs/configuration.md](docs/configuration.md) for every setting.
 
 ### Installing agent hooks
@@ -263,13 +265,6 @@ best effort because the record format can change and writes may lag hook events.
 
 See [docs/integrations.md](docs/integrations.md) for event mappings, manual
 configuration, the telemetry schema, and integrating other agents.
-
-### Sending prompts to agents
-
-Run `vauxhall-relay` from the hooks environment on each agent machine, start
-the agent in tmux, and use the ✉️ button on its card. Read the warning in
-[docs/sending-prompts.md](docs/sending-prompts.md) first: anyone who can
-publish to the broker can type into your agents.
 
 ### Monitoring agents on other machines
 
@@ -338,9 +333,6 @@ content, to disk so the grid survives a restart; see
 [docs/privacy.md](docs/privacy.md#retention).
 
 - Use the unauthenticated `localhost:1883` default for local development only.
-  Because the dashboard can send prompts to agents, anyone who can publish to
-  the broker can also drive them; see
-  [docs/sending-prompts.md](docs/sending-prompts.md).
 - Reach remote agents over SSH, as in
   [docs/remote-deployment.md](docs/remote-deployment.md); never expose the
   broker on a network.
@@ -357,9 +349,6 @@ Report vulnerabilities through the repository's
 - **MQTT is unauthenticated by default.** Remote agents need an SSH tunnel or
   a broker configured for TLS and passwords; see
   [docs/remote-deployment.md](docs/remote-deployment.md).
-- **Prompts need tmux and a trusted broker**: sending prompts works only for
-  sessions running in tmux, and anyone who can publish to the broker can send
-  them unless its ACL restricts who may.
 - **No per-field privacy controls**, and the Gemini CLI hook publishes whole
   tool inputs (issue #3).
 - **Not on PyPI yet**; install from GitHub.
@@ -384,7 +373,6 @@ Report vulnerabilities through the repository's
 | --- | --- |
 | [docs/integrations.md](docs/integrations.md) | Telemetry schema, states, each agent's event mapping and manual setup, and publishing from other agents |
 | [docs/configuration.md](docs/configuration.md) | Configuration files, environment variables, precedence, defaults, and the settings dialog |
-| [docs/sending-prompts.md](docs/sending-prompts.md) | Sending prompts from the dashboard to agents in tmux with `vauxhall-relay` |
 | [docs/privacy.md](docs/privacy.md) | Every field collected, retention, and broker exposure |
 | [docs/remote-deployment.md](docs/remote-deployment.md) | Monitoring agents on other machines over SSH |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Broker, dashboard, hook, and trust problems |

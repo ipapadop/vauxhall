@@ -14,9 +14,7 @@ before sending telemetry anywhere other than your own machine.
 
 Anyone who can connect to the MQTT broker can subscribe to
 `vauxhall/agents/#` and read every message, and can publish fake telemetry.
-They can also publish prompts that `vauxhall-relay` types into your agents'
-tmux panes (see [sending-prompts.md](sending-prompts.md)), and a prompt can make
-an agent run commands. The broker is the access control:
+The broker is the access control:
 
 - The default, `localhost:1883` without authentication, is for **local
   development only**: the broker, dashboard, and agents on one machine, used
@@ -27,8 +25,8 @@ an agent run commands. The broker is the access control:
   requires TLS and passwords, as described in
   [remote-deployment.md](remote-deployment.md).
 - A password stops strangers, but every identity that has one can still read
-  and publish everything its ACL allows. Restrict who can publish prompts to
-  the dashboard's identity, as the example there does.
+  and publish everything its ACL allows. Restrict reading telemetry to the
+  dashboard's identity, as the example there does.
 - On a shared machine, other local accounts can connect to a loopback broker
   too.
 
@@ -101,18 +99,6 @@ prompt and command capture. Today you can:
   that agent to the broker, and any other subscriber still receives it. To
   stop sending it at all, use one of the options above instead.
 
-## Prompts sent from the dashboard
-
-The dashboard's ✉️ button publishes the text you type, exactly as typed, to
-`vauxhall/agents/<agent>/sessions/<session_id>/prompt`, and relays answer on
-`.../ack` with a message ID and a status, never text. Like telemetry, prompts
-are readable by anyone who can subscribe to the broker. They are published at
-QoS 1 without the retain flag, so the broker doesn't keep them. The dashboard
-doesn't store them, and `vauxhall-relay` logs only agent names, pane IDs, the
-pane's recorded command name, and outcomes. Once typed into a pane, the agent
-handles the text like any other prompt you enter. See
-[sending-prompts.md](sending-prompts.md).
-
 ## Retention
 
 - **Dashboard**: Telemetry content is held in memory only, for at most
@@ -135,7 +121,8 @@ handles the text like any other prompt you enter. See
   connects with a clean session, so the broker doesn't keep telemetry for
   later subscribers. Check your broker's own logging and persistence
   settings; Mosquitto doesn't log payloads by default.
-- **Clipboard**: Clicking a card copies its workspace path.
+- **Clipboard**: The activity pane's **Copy path** button copies the card's
+  workspace path.
 - **Desktop notifications**: The **Notify me** checkbox is off by default. When
   checked, a card that starts needing attention triggers an OS notification
   (through `Pyloid.show_notification`) containing the agent name and the
@@ -144,13 +131,6 @@ handles the text like any other prompt you enter. See
   history it keeps) is retained.
 
 ### On disk
-
-The hooks also record, for each session started inside tmux, its tmux pane
-ID, tmux server socket path, server process ID, and the process group
-running in the pane's foreground (normally the agent's) in
-`~/.config/vauxhall/panes/`, readable only by you. These are used only by
-`vauxhall-relay` on the same machine and are never published. They are deleted
-when the session ends, and any left behind are removed after 30 days.
 
 The hooks keep short-lived files in owner-only directories in the system
 temporary directory, named `vauxhall-<agent>-<uid>`,
@@ -165,6 +145,10 @@ owner-only, and entries other accounts put in it are removed:
   deleted when it is published, or after 24 hours if the message never
   finishes.
 - For Codex, the byte offset already read from each session record.
+
+Earlier development builds also wrote a record of each tmux session's pane
+to `~/.config/vauxhall/panes/`. Current versions neither write nor read it,
+so you can delete that directory.
 
 ## Reporting a privacy problem
 

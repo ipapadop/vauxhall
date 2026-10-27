@@ -354,7 +354,7 @@ def setup_venv(venv_dir: Path) -> Path:
     can't be built, so the registered hooks keep a working interpreter; a
     half-built one, which lacks Vauxhall, is removed either way. The new one is
     built in place rather than moved there, because entry-point scripts such as
-    ``vauxhall-relay`` record its absolute path.
+    ``vauxhall-hook-install`` record its absolute path.
 
     Args:
         venv_dir: Destination for the virtual environment.
@@ -408,7 +408,7 @@ def _recover_interrupted_install(venv_dir: Path) -> None:
     A copy set aside by ``setup_venv`` is put back when the venv is missing
     or incomplete (killed during the build), and removed otherwise (killed
     after it). pip writes the entry-point scripts last, so a venv without
-    ``vauxhall-relay`` is incomplete.
+    ``vauxhall-hook-install`` is incomplete.
 
     Args:
         venv_dir: The hooks environment.
@@ -419,8 +419,12 @@ def _recover_interrupted_install(venv_dir: Path) -> None:
     )
     if not leftovers:
         return
-    relay = "Scripts/vauxhall-relay.exe" if os.name == "nt" else "bin/vauxhall-relay"
-    if not (venv_dir / relay).exists():
+    script = (
+        "Scripts/vauxhall-hook-install.exe"
+        if os.name == "nt"
+        else "bin/vauxhall-hook-install"
+    )
+    if not (venv_dir / script).exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
         _restore_venv(leftovers.pop(), venv_dir)
     for leftover in leftovers:

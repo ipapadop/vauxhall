@@ -41,7 +41,6 @@ test('agent identity and environment are rendered as inert text', () => {
             session_id: ATTACK,
             env: `local${ATTACK}`,
         },
-        null,
         () => {},
     );
 
@@ -57,7 +56,6 @@ test('activity details and metrics are rendered without creating markup', () => 
     setupPage();
     const card = createCard(
         { agent: 'Agent', workspace: '/workspace', env: 'local' },
-        null,
         () => {},
     );
 
@@ -79,7 +77,7 @@ test('activity details and metrics are rendered without creating markup', () => 
 
 test('assistant messages appear as inert text in the activity log', () => {
     setupPage();
-    const card = createCard({ agent: 'Codex', workspace: '/workspace', session_id: 'session' }, null, () => {});
+    const card = createCard({ agent: 'Codex', workspace: '/workspace', session_id: 'session' }, () => {});
 
     updateCard(card, { state: 'Thinking', details: { message: ATTACK } });
 
@@ -92,7 +90,6 @@ test('history details are rendered without creating markup', () => {
     setupPage();
     const card = createCard(
         { agent: 'Agent', workspace: '/workspace', env: 'local' },
-        null,
         () => {},
     );
     card.history = [

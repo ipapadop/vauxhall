@@ -49,7 +49,7 @@ def test_hooks_ignore_a_workspace_config_file(
     """The workspace is not trusted to pick the broker the hooks report to.
 
     Loading doesn't warn: the dashboard loads hook settings too, and only hook
-    and relay processes call ``warn_about_workspace_file``.
+    processes call ``warn_about_workspace_file``.
 
     Args:
         isolated_cwd: Empty working directory standing in for the workspace.

@@ -9,10 +9,9 @@
  */
 
 import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
-import { createCard, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
+import { createCard, copyWorkspacePath, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
-import { handleAck, sendPrompt, showRejected } from './js/prompt.js';
 import { initInstall } from './js/install.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
@@ -82,7 +81,7 @@ async function init() {
         return target;
     };
 
-    // The history modal follows its card's live updates.
+    // The card's activity pane (the history modal) follows its live updates.
     const historyTarget = dialogTarget(modal);
     const closeModal = () => closeHistoryModal();
     const refreshModal = () => {
@@ -122,84 +121,15 @@ async function init() {
         }
     });
 
-    const promptModal = document.getElementById('prompt-modal');
-    const promptForm = document.getElementById('prompt-form');
-    const promptText = document.getElementById('prompt-text');
-    const promptError = document.getElementById('prompt-error');
-    const promptSend = document.getElementById('prompt-send');
-    const promptTarget = dialogTarget(promptModal);
-    // Cards with a send in flight, so Send is disabled only for those, the
-    // card whose draft the text box holds, and a count of openings, so a reply
-    // can tell the dialog it was sent from apart from a later one.
-    const pendingSends = new Set();
-    let draftKey = null;
-    let promptOpenings = 0;
-    const updatePromptSend = () => { promptSend.disabled = pendingSends.has(promptTarget.key); };
-    const closePrompt = () => { if (promptModal) closeDialog(promptModal); };
-    document.getElementById('prompt-close')?.addEventListener('click', closePrompt);
-    document.getElementById('prompt-cancel')?.addEventListener('click', closePrompt);
-    promptForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const key = promptTarget.key;
-        const card = agents[key];
-        if (!card || !window.ipc?.DashboardIPC || pendingSends.has(key)) return;
-        const text = promptText.value;
-        const opening = promptOpenings;
-        promptError.textContent = '';
-        pendingSends.add(key);
-        updatePromptSend();
-        try {
-            const result = await sendPrompt(window.ipc.DashboardIPC, card, text);
-            // The dialog may have closed, or reopened for another card, while
-            // the send was pending; the reply then belongs on the card. Reopened
-            // for this card, it may hold a new draft, so success leaves it open.
-            const current = promptTarget.key === key;
-            const unchanged = current && promptOpenings === opening;
-            if (result.ok) {
-                if (unchanged || promptText.value === text) promptText.value = '';
-                if (unchanged) closePrompt();
-            } else if (current) {
-                promptError.textContent = result.error;
-            } else {
-                showRejected(card, result.error);
-            }
-        } finally {
-            pendingSends.delete(key);
-            updatePromptSend();
-        }
-    });
-    const openPrompt = (key, opener) => {
-        const card = agents[key];
-        if (!card) return;
-        promptTarget.key = key;
-        promptTarget.opener = opener;
-        promptOpenings += 1;
-        promptError.textContent = '';
-        // A draft typed for another card must not be sent to this one.
-        if (key !== draftKey) promptText.value = '';
-        draftKey = key;
-        updatePromptSend();
-        // Text typed while the agent shows a question or permission dialog
-        // answers that dialog, so say so before the user sends anything.
-        document.getElementById('prompt-warning').textContent = card.classList.contains('waiting')
-            ? 'This agent is waiting for input. What you send will answer its current question or permission request.'
-            : '';
-        const { agent, workspace } = cardIdentity(card);
-        document.getElementById('prompt-target').textContent = `${agent} in ${workspace}`;
-        openDialog(promptModal);
-        promptText.focus?.();
-    };
-
     // Closes the dialogs acting on any of the given cards, which are leaving
     // the grid.
     const closeDialogsFor = (keys) => {
         if (keys.includes(historyTarget.key)) closeModal();
         if (keys.includes(menuTarget.key)) closeMenu();
-        if (keys.includes(promptTarget.key)) closePrompt();
     };
 
-    // Builds a card whose history, options, and prompt buttons act on its key.
-    const newCard = (key, data) => createCard(data, window.ipc, (opener) => {
+    // Builds a card whose click and options button act on its key.
+    const newCard = (key, data) => createCard(data, (opener) => {
         historyTarget.key = key;
         historyTarget.opener = opener;
         openHistoryModal(key, agents);
@@ -207,7 +137,7 @@ async function init() {
         menuTarget.key = key;
         menuTarget.opener = opener;
         openDialog(cardMenuModal);
-    }, (opener) => openPrompt(key, opener));
+    });
 
     // Persists card identity and last known state (never prompt, message,
     // command, error, token, or history content) so the grid can be redrawn
@@ -231,7 +161,6 @@ async function init() {
     document.getElementById('clear-btn')?.addEventListener('click', () => {
         grid.innerHTML = '';
         clearAgents();
-        closePrompt();
         restoreCancelled = true;
         refreshSummary();
         scheduleCardSave();
@@ -262,6 +191,17 @@ async function init() {
         changePreference('notify', e.target.checked);
     });
     document.querySelector('.close-btn')?.addEventListener('click', closeModal);
+    document.getElementById('modal-copy-path')?.addEventListener('click', async () => {
+        const key = historyTarget.key;
+        const card = agents[key];
+        const status = document.getElementById('modal-copy-status');
+        if (!card || !status) return;
+        // Cleared first, so a repeated outcome is announced again.
+        status.textContent = '';
+        const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, cardIdentity(card).workspace);
+        // The pane may have closed, or moved to another card, meanwhile.
+        if (historyTarget.key === key) status.textContent = outcome;
+    });
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
     historyFilter?.addEventListener('change', (e) => {
         refreshModal();
@@ -272,7 +212,6 @@ async function init() {
     window.onclick = (event) => {
         if (event.target === modal) closeModal();
         if (event.target === cardMenuModal) closeMenu();
-        if (event.target === promptModal) closePrompt();
     };
 
     // Initialize IPC with Python backend
@@ -401,7 +340,6 @@ async function init() {
                 refreshSummary();
                 scheduleCardSave();
             },
-            onPromptAck: handleAck,
             onInstallOutput: install?.onOutput,
             onInstallDone: install?.onDone,
             onReady: () => {
@@ -413,10 +351,12 @@ async function init() {
             }
         });
 
-        // Start staleness check every 10 seconds
+        // Start staleness check every 10 seconds; the open pane's newest
+        // entry counts up with it.
         setInterval(() => {
             checkStaleness(agents, staleThresholdMs);
             refreshSummary();
+            refreshModal();
         }, 10000);
     } catch (err) {
         console.error("Initialization error:", err);

@@ -88,22 +88,6 @@ header {
     transform: translateY(0);
 }
 
-.agent-card.copied {
-    border-color: var(--working-color) !important;
-}
-
-.agent-card.copied::after {
-    content: "Copied!";
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background: var(--working-color);
-    color: white;
-    font-size: 0.7em;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
 @media (max-width: 800px) {
     #agent-grid {
         grid-template-columns: 1fr;
@@ -150,7 +134,7 @@ header {
     text-overflow: ellipsis;
 }
 
-/* A button so the path can be copied from the keyboard; the path is the label. */
+/* A button so the card's pane opens from the keyboard; the path is the label. */
 .agent-workspace {
     font-size: 0.8em;
     color: var(--text-muted);
@@ -356,8 +340,6 @@ header {
     font-size: 0.75em;
 }
 
-.prompt-icon,
-.history-icon,
 .menu-icon {
     cursor: pointer;
     font-size: 1.1em;
@@ -371,20 +353,8 @@ header {
     padding: 0;
 }
 
-.prompt-icon:hover,
-.history-icon:hover,
 .menu-icon:hover {
     opacity: 1;
-}
-
-.footer-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.prompt-status:empty {
-    display: none;
 }
 
 /* Modal Styles */
@@ -459,31 +429,110 @@ header {
     overflow-y: auto;
     font-family: monospace;
     flex: 1;
+    container-type: inline-size;
 }
 
-.history-item {
-    padding: 10px;
-    border-bottom: 1px solid var(--badge-bg);
+.modal-agent-meta-row {
     display: flex;
-    gap: 15px;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.modal-agent-meta {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.modal-copy-status {
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* Each row: time, state, details, and timing, over a bar as long as the
+   time spent in the state. The state class sets the border and bar color. */
+.history-item {
+    --state-color: var(--text-dim);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--badge-bg);
+    border-left: 4px solid var(--state-color);
+    display: grid;
+    grid-template-columns: 90px 150px minmax(0, 1fr) auto;
+    column-gap: 15px;
+    row-gap: 6px;
+}
+
+.history-item.state-acting { --state-color: var(--working-color); }
+.history-item.state-thinking { --state-color: var(--accent-color); }
+.history-item.state-waiting { --state-color: var(--waiting-color); }
+.history-item.state-error { --state-color: var(--error-color); }
+
+.history-timing {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.history-duration {
+    font-weight: bold;
+}
+
+.history-tool-duration {
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+.history-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--badge-bg);
+    overflow: hidden;
+}
+
+.history-bar-fill {
+    height: 100%;
+    background: var(--state-color);
+    border-radius: 3px;
+    transition: width var(--transition-speed);
 }
 
 .history-time {
     color: var(--text-dim);
     font-size: 0.9em;
-    width: 90px;
-    flex-shrink: 0;
 }
 
+/* The border and bar carry the state color; text keeps the readable one. */
 .history-state {
+    color: var(--text-color);
     font-weight: bold;
-    width: 150px;
-    flex-shrink: 0;
 }
 
 .history-details {
     color: var(--text-color);
     word-break: break-all;
+}
+
+/* A narrow pane gives the details their own line, so they keep room to read. */
+@container (max-width: 560px) {
+    .history-item {
+        grid-template-columns: max-content minmax(0, 1fr) max-content;
+    }
+
+    .history-details {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .history-timing {
+        grid-column: 3;
+        grid-row: 1;
+    }
 }
 
 .metric-badges {
@@ -546,35 +595,12 @@ header {
     gap: 10px;
 }
 
-.prompt-content {
-    width: min(520px, 90vw);
-    height: auto;
-    min-width: 0;
-    min-height: 0;
-    resize: none;
-    gap: 8px;
-}
-
-.prompt-content textarea {
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    font-family: inherit;
-    background: var(--badge-bg);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 8px;
-}
-
-.prompt-error,
-.prompt-warning {
+.form-error {
     color: var(--error-color);
     margin: 0;
 }
 
-.prompt-error:empty,
-.prompt-warning:empty {
+.form-error:empty {
     display: none;
 }
 

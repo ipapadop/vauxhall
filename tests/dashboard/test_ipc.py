@@ -6,7 +6,7 @@
 import json
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -44,43 +44,42 @@ def test_ipc_get_max_active_agents() -> None:
     assert ipc.get_max_active_agents() == settings.dashboard.max_active_agents
 
 
-@patch("vauxhall.dashboard.ipc.pyperclip.copy")
-def test_ipc_copy_to_clipboard(mock_copy: MagicMock) -> None:
-    """Verify that copy_to_clipboard calls pyperclip.
+def test_ipc_copy_to_clipboard_calls_the_registered_callback() -> None:
+    """A registered callback is called with the text to copy."""
+    callback = MagicMock()
+    ipc = DashboardIPC(on_copy=callback)
 
-    Args:
-        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
-    """
-    ipc = DashboardIPC()
     assert ipc.copy_to_clipboard("test text") is True
-    mock_copy.assert_called_once_with("test text")
+    callback.assert_called_once_with("test text")
 
 
-@patch("vauxhall.dashboard.ipc.pyperclip.copy")
 def test_ipc_copy_to_clipboard_does_not_log_the_text(
-    mock_copy: MagicMock, caplog: pytest.LogCaptureFixture
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The copied workspace path never appears in the log.
 
     Args:
-        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
         caplog: Captures log records.
     """
     caplog.set_level(logging.DEBUG, logger="vauxhall.dashboard.ipc")
-    assert DashboardIPC().copy_to_clipboard("/home/alice/secret-project") is True
-    mock_copy.assert_called_once_with("/home/alice/secret-project")
+    callback = MagicMock(side_effect=[None, Exception("no clipboard")])
+    ipc = DashboardIPC(on_copy=callback)
+
+    assert ipc.copy_to_clipboard("/home/alice/secret-project") is True
+    assert ipc.copy_to_clipboard("/home/alice/secret-project") is False
     assert "secret-project" not in caplog.text
 
 
-@patch("vauxhall.dashboard.ipc.pyperclip.copy")
-def test_ipc_copy_to_clipboard_error(mock_copy: MagicMock) -> None:
-    """Verify that copy_to_clipboard handles errors gracefully.
+def test_ipc_copy_to_clipboard_without_a_callback_returns_false() -> None:
+    """Without a registered callback, copying reports failure."""
+    assert DashboardIPC().copy_to_clipboard("test text") is False
 
-    Args:
-        mock_copy: Mock replacing ``vauxhall.dashboard.ipc.pyperclip.copy``.
-    """
-    mock_copy.side_effect = Exception("clipboard error")
-    ipc = DashboardIPC()
+
+def test_ipc_copy_to_clipboard_handles_callback_errors() -> None:
+    """A callback that raises is reported as a failure, not propagated."""
+    callback = MagicMock(side_effect=Exception("clipboard error"))
+    ipc = DashboardIPC(on_copy=callback)
+
     assert ipc.copy_to_clipboard("test text") is False
 
 

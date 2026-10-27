@@ -6,8 +6,10 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { updateAgentHistory } from '../../../vauxhall/dashboard/ui/js/state.js';
-import { closeHistoryModal, createCard, openHistoryModal } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { historyDurations, updateAgentHistory } from '../../../vauxhall/dashboard/ui/js/state.js';
+import {
+    closeHistoryModal, copyWorkspacePath, createCard, formatDuration, openHistoryModal,
+} from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 import { selectOption } from './helpers.js';
 
@@ -23,8 +25,10 @@ const CONTENT_HEIGHT = 1000;
 function setupPage() {
     const { document, window } = parseHTML(`
         <html><body>
-            <dialog id="history-modal"></dialog>
+            <dialog id="history-modal"><div class="modal-content"></div></dialog>
             <div id="modal-agent-name"></div>
+            <div id="modal-agent-meta"></div>
+            <span id="modal-copy-status">Copied!</span>
             <input id="modal-search" value="">
             <select id="modal-state-filter">
                 <option value="ALL" selected>All</option>
@@ -55,7 +59,6 @@ function setupPage() {
 function cardWithHistory(events) {
     const card = createCard(
         { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' },
-        null,
         () => {},
     );
     events.forEach((event) => updateAgentHistory(card, event));
@@ -123,7 +126,9 @@ test('opening the modal shows it and renders the history oldest first', () => {
     openHistoryModal(KEY, { [KEY]: card });
 
     assert.ok(document.getElementById('history-modal').hasAttribute('open'));
-    assert.equal(document.getElementById('modal-agent-name').textContent, `History: ${KEY}`);
+    assert.equal(document.getElementById('modal-agent-name').textContent, 'Codex');
+    assert.equal(document.getElementById('modal-agent-meta').textContent, '/home/user/project · session session-1');
+    assert.equal(document.getElementById('modal-copy-status').textContent, '');
     assert.deepEqual(rendered(document), [
         { state: 'Thinking', details: 'Prompt: first' },
         { state: 'Acting', details: 'Running: shell' },
@@ -291,4 +296,214 @@ test('the modal ignores a key with no card and a card with no history', () => {
 
     assert.equal(body.children.length, 0);
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
+});
+
+/**
+ * Builds a card whose history entries arrived at the given times, oldest first.
+ * @param {Array<[number, object]>} timed - Pairs of arrival time in ms and event.
+ * @returns {HTMLElement} The card.
+ */
+function cardWithTimedHistory(timed) {
+    const card = cardWithHistory([]);
+    timed.forEach(([at, event]) => updateAgentHistory(card, event, at));
+    return card;
+}
+
+/**
+ * Returns the rendered duration labels, top to bottom.
+ * @param {Document} document - The modal document.
+ * @returns {string[]} Each row's time-in-state text.
+ */
+function renderedDurations(document) {
+    return [...document.querySelectorAll('.history-item')].map((item) => item.querySelector('.history-duration').textContent);
+}
+
+test('history records when each event arrived', () => {
+    setupPage();
+
+    const card = cardWithTimedHistory([[1000, { state: 'Acting', details: {} }]]);
+
+    assert.equal(card.history[0].at, 1000);
+});
+
+test('each entry lasts until the next arrives, and the newest until now', () => {
+    const history = [{ at: 9000 }, { at: 4000 }, { at: 1000 }];
+
+    assert.deepEqual(historyDurations(history, 10000), [1000, 5000, 3000]);
+});
+
+test('a clock that went backwards reports zero rather than a negative duration', () => {
+    assert.deepEqual(historyDurations([{ at: 5000 }], 4000), [0]);
+});
+
+test('durations read as seconds, minutes, and hours', () => {
+    assert.equal(formatDuration(400), '<1s');
+    assert.equal(formatDuration(14_900), '14s');
+    assert.equal(formatDuration(125_000), '2m 05s');
+    assert.equal(formatDuration(3_780_000), '1h 03m');
+});
+
+test('each row shows its time in state, the newest counting to now', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 20_000;
+    const card = cardWithTimedHistory([
+        [1000, { state: 'Thinking', details: { prompt: 'go' } }],
+        [15_000, { state: 'Acting', details: { tool: 'shell' } }],
+    ]);
+
+    openHistoryModal(KEY, { [KEY]: card });
+
+    assert.deepEqual(renderedDurations(document), ['14s', '5s']);
+});
+
+test('each row carries a state color and a bar scaled to the longest shown', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 10_100;
+    const card = cardWithTimedHistory([
+        [0, { state: 'Thinking', details: {} }],
+        [8000, { state: 'Waiting for Input', details: {} }],
+        [9000, { state: 'Error', details: {} }],
+        [10_000, { state: 'Idle', details: {} }],
+    ]);
+
+    openHistoryModal(KEY, { [KEY]: card });
+
+    const rows = [...document.querySelectorAll('.history-item')];
+    assert.deepEqual(rows.map((row) => row.className), [
+        'history-item state-thinking',
+        'history-item state-waiting',
+        'history-item state-error',
+        'history-item state-idle',
+    ]);
+    const widths = rows.map((row) => row.querySelector('.history-bar-fill').style.width);
+    assert.deepEqual(widths, ['100%', '12.5%', '12.5%', '2%']);
+    assert.equal(rows[0].querySelector('.history-bar').getAttribute('aria-hidden'), 'true');
+});
+
+test('a long-running newest entry does not shrink the finished bars', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 3_604_000;
+    const card = cardWithTimedHistory([
+        [0, { state: 'Acting', details: { tool: 'shell' } }],
+        [2000, { state: 'Thinking', details: {} }],
+        [4000, { state: 'Idle', details: {} }],
+    ]);
+
+    openHistoryModal(KEY, { [KEY]: card });
+
+    const widths = [...document.querySelectorAll('.history-bar-fill')].map((fill) => fill.style.width);
+    assert.deepEqual(widths, ['100%', '100%', '100%']);
+    assert.deepEqual(renderedDurations(document), ['2s', '2s', '1h 00m']);
+});
+
+test('a refresh of the same entries updates rows in place', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 5000;
+    const card = cardWithTimedHistory([
+        [0, { state: 'Acting', details: { tool: 'shell' } }],
+        [4000, { state: 'Idle', details: {} }],
+    ]);
+    openHistoryModal(KEY, { [KEY]: card });
+    const before = [...document.querySelectorAll('.history-item')];
+
+    Date.now = () => 7000;
+    openHistoryModal(KEY, { [KEY]: card }, true);
+
+    const after = [...document.querySelectorAll('.history-item')];
+    assert.ok(after.every((row, index) => row === before[index]));
+    assert.deepEqual(renderedDurations(document), ['4s', '3s']);
+    assert.equal(after[1].querySelector('.history-bar-fill').style.width, '75%');
+});
+
+test('a new entry rebuilds the rows', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 5000;
+    const card = cardWithTimedHistory([[0, { state: 'Acting', details: { tool: 'shell' } }]]);
+    openHistoryModal(KEY, { [KEY]: card });
+    const [first] = document.querySelectorAll('.history-item');
+
+    updateAgentHistory(card, { state: 'Idle', details: {} }, 6000);
+    openHistoryModal(KEY, { [KEY]: card }, true);
+
+    const rows = [...document.querySelectorAll('.history-item')];
+    assert.equal(rows.length, 2);
+    assert.notEqual(rows[0], first);
+});
+
+test('an acting row and a reported tool duration get their own labels', () => {
+    const document = setupPage();
+    const card = cardWithTimedHistory([
+        [Date.now(), { state: 'Acting', details: { tool: 'shell', duration: 3.2 } }],
+    ]);
+
+    openHistoryModal(KEY, { [KEY]: card });
+
+    const row = document.querySelector('.history-item');
+    assert.equal(row.className, 'history-item state-acting');
+    assert.equal(row.querySelector('.history-tool-duration').textContent, 'tool 3.2s');
+});
+
+test('filtering keeps each row\'s duration from the full history', (t) => {
+    const document = setupPage();
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => 10_000;
+    const card = cardWithTimedHistory([
+        [0, { state: 'Error', details: { error: 'boom' } }],
+        [4000, { state: 'Acting', details: { tool: 'shell' } }],
+    ]);
+    selectOption(document.getElementById('modal-state-filter'), 'Error');
+
+    openHistoryModal(KEY, { [KEY]: card });
+
+    assert.deepEqual(renderedDurations(document), ['4s']);
+});
+
+test('opening the pane grows it out of the card', () => {
+    const document = setupPage();
+    window.matchMedia = () => ({ matches: false });
+    window.getComputedStyle = () => ({ getPropertyValue: () => '' });
+    const card = cardWithHistory([]);
+    card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 50 });
+    const content = document.querySelector('.modal-content');
+    content.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200 });
+    const animated = [];
+    content.animate = (keyframes) => animated.push(keyframes[0].transform);
+
+    openHistoryModal(KEY, { [KEY]: card });
+    openHistoryModal(KEY, { [KEY]: card }, true);
+
+    assert.deepEqual(animated, ['translate(0px, 0px) scale(0.25, 0.25)']);
+});
+
+test('copying the path reports success', async () => {
+    const copied = [];
+
+    const outcome = await copyWorkspacePath({ copy_to_clipboard: async (path) => { copied.push(path); return true; } }, '/w');
+
+    assert.deepEqual(copied, ['/w']);
+    assert.equal(outcome, 'Copied!');
+});
+
+test('a refused, failed, or impossible copy reports failure', async (t) => {
+    const realError = console.error;
+    t.after(() => { console.error = realError; });
+    const logged = [];
+    console.error = (...args) => logged.push(args);
+
+    assert.equal(await copyWorkspacePath({ copy_to_clipboard: async () => false }, '/w'), 'Copy failed');
+    assert.equal(await copyWorkspacePath({ copy_to_clipboard: async () => { throw new Error('no clipboard'); } }, '/w'), 'Copy failed');
+    assert.equal(await copyWorkspacePath(undefined, '/w'), 'Copy failed');
+    assert.equal(await copyWorkspacePath({}, '/w'), 'Copy failed');
+    assert.equal(logged.length, 1);
 });

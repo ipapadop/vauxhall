@@ -83,7 +83,7 @@ test('configured capacity retains existing cards and closes an evicted card moda
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.equal(firstCard.history.length, 2);
 
-    const opener = firstCard.querySelector('.history-icon');
+    const opener = firstCard.querySelector('.agent-workspace');
     opener.click();
     assert.ok(document.getElementById('history-modal').hasAttribute('open'));
     const focused = [];

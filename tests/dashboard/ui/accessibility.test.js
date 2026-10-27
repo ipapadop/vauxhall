@@ -26,62 +26,38 @@ function setupPage() {
 }
 
 /**
- * Builds a card that records every workspace path copied through it.
- * @returns {{card: HTMLElement, clipboard: string[], opened: HTMLElement[]}} The card and what it reported.
+ * Builds a card that records the controls reported by its pane and menu callbacks.
+ * @returns {{card: HTMLElement, opened: HTMLElement[], menuOpened: HTMLElement[]}}
+ *   The card and what it reported.
  */
-function cardWithClipboard() {
-    const clipboard = [];
+function cardWithCallbacks() {
     const opened = [];
     const menuOpened = [];
-    const promptOpened = [];
-    const ipc = { DashboardIPC: { copy_to_clipboard: async (path) => { clipboard.push(path); return true; } } };
-    const card = createCard({ ...IDENTITY }, ipc, (opener) => opened.push(opener), (opener) => menuOpened.push(opener), (opener) => promptOpened.push(opener));
-    return { card, clipboard, opened, menuOpened, promptOpened };
+    const card = createCard({ ...IDENTITY }, (opener) => opened.push(opener), (opener) => menuOpened.push(opener));
+    return { card, opened, menuOpened };
 }
 
-test('the workspace, history, and menu controls are buttons with accessible names', () => {
+test('the workspace and menu controls are buttons with accessible names', () => {
     setupPage();
-    const { card } = cardWithClipboard();
+    const { card } = cardWithCallbacks();
 
     const workspace = card.querySelector('.agent-workspace');
-    const history = card.querySelector('.history-icon');
     const menu = card.querySelector('.menu-icon');
 
     assert.equal(workspace.tagName, 'BUTTON');
     assert.equal(workspace.getAttribute('type'), 'button');
     assert.equal(workspace.textContent, IDENTITY.workspace);
-    assert.equal(history.tagName, 'BUTTON');
-    assert.equal(history.getAttribute('type'), 'button');
-    assert.equal(history.getAttribute('aria-label'), 'View history for Codex in /home/user/project, session session-1');
+    assert.equal(workspace.getAttribute('aria-label'), 'Open activity for Codex in /home/user/project, session session-1');
+    // The dashboard only monitors: nothing on a card sends to the agent.
+    assert.equal(card.querySelector('.prompt-icon'), null);
     assert.equal(menu.tagName, 'BUTTON');
     assert.equal(menu.getAttribute('type'), 'button');
     assert.equal(menu.getAttribute('aria-label'), 'Options for Codex in /home/user/project, session session-1');
 });
 
-test('the prompt button is a named button that reports itself as the control to focus again', () => {
-    setupPage();
-    const { card, promptOpened } = cardWithClipboard();
-    const prompt = card.querySelector('.prompt-icon');
-
-    assert.equal(prompt.tagName, 'BUTTON');
-    assert.equal(prompt.getAttribute('type'), 'button');
-    assert.equal(prompt.getAttribute('aria-label'), 'Send a prompt to Codex in /home/user/project, session session-1');
-    prompt.click();
-    assert.deepEqual(promptOpened, [prompt]);
-});
-
-test('the prompt delivery state is a polite live region', () => {
-    setupPage();
-    const { card } = cardWithClipboard();
-    const status = card.querySelector('.prompt-status');
-
-    assert.equal(status.getAttribute('role'), 'status');
-    assert.equal(status.getAttribute('aria-live'), 'polite');
-});
-
 test('activating the menu button reports it as the control to focus again', () => {
     setupPage();
-    const { card, menuOpened } = cardWithClipboard();
+    const { card, menuOpened } = cardWithCallbacks();
     const menu = card.querySelector('.menu-icon');
 
     menu.click();
@@ -92,35 +68,63 @@ test('activating the menu button reports it as the control to focus again', () =
 test('each card names its session, so concurrent sessions stay distinguishable', () => {
     setupPage();
     const same = { agent: 'Codex', workspace: '/home/user/project' };
-    const first = createCard({ ...same, session_id: 'one' }, null, () => {});
-    const second = createCard({ ...same, session_id: 'two' }, null, () => {});
+    const first = createCard({ ...same, session_id: 'one' }, () => {});
+    const second = createCard({ ...same, session_id: 'two' }, () => {});
 
     assert.equal(first.getAttribute('role'), 'group');
     assert.equal(first.getAttribute('aria-label'), 'Codex session one');
     assert.notEqual(
-        first.querySelector('.history-icon').getAttribute('aria-label'),
-        second.querySelector('.history-icon').getAttribute('aria-label'),
+        first.querySelector('.agent-workspace').getAttribute('aria-label'),
+        second.querySelector('.agent-workspace').getAttribute('aria-label'),
     );
 });
 
-test('activating the workspace button copies the path exactly once', async () => {
+test('activating the workspace button opens the pane once, reporting it as the control to focus again', () => {
     setupPage();
-    const { card, clipboard } = cardWithClipboard();
+    const { card, opened } = cardWithCallbacks();
+    const workspace = card.querySelector('.agent-workspace');
 
-    card.querySelector('.agent-workspace').click();
-    await Promise.resolve();
+    workspace.click();
 
-    assert.deepEqual(clipboard, [IDENTITY.workspace]);
+    assert.deepEqual(opened, [workspace]);
 });
 
-test('activating the history button reports it as the control to focus again', () => {
+test('clicking the card opens the pane with the workspace button to focus again', () => {
     setupPage();
-    const { card, opened } = cardWithClipboard();
-    const history = card.querySelector('.history-icon');
+    const { card, opened } = cardWithCallbacks();
 
-    history.click();
+    card.click();
 
-    assert.deepEqual(opened, [history]);
+    assert.deepEqual(opened, [card.querySelector('.agent-workspace')]);
+});
+
+test('the menu button does not open the pane', () => {
+    setupPage();
+    const { card, opened } = cardWithCallbacks();
+
+    card.querySelector('.menu-icon').click();
+
+    assert.deepEqual(opened, []);
+});
+
+test('the pane has a named Copy path button, a polite status, and focuses its filter', () => {
+    const html = readFileSync(new URL('../../../vauxhall/dashboard/ui/index.html', import.meta.url), 'utf8');
+    const { document } = parseHTML(html);
+
+    const pane = document.getElementById('history-modal');
+    const copy = pane.querySelector('#modal-copy-path');
+    const status = pane.querySelector('#modal-copy-status');
+    assert.equal(pane.tagName, 'DIALOG');
+    assert.equal(copy.tagName, 'BUTTON');
+    assert.equal(copy.getAttribute('type'), 'button');
+    assert.equal(copy.textContent, 'Copy path');
+    assert.equal(status.getAttribute('role'), 'status');
+    assert.equal(status.getAttribute('aria-live'), 'polite');
+    // The filter, not Copy path, takes focus on open, as before the pane had a copy button.
+    assert.ok(pane.querySelector('#modal-search').hasAttribute('autofocus'));
+    // The dashboard only monitors: the pane has nowhere to type to the agent.
+    assert.equal(pane.querySelector('textarea'), null);
+    assert.equal(document.getElementById('prompt-modal'), null);
 });
 
 /**
@@ -129,7 +133,7 @@ test('activating the history button reports it as the control to focus again', (
  */
 function addUnsortedCards(grid) {
     for (const agent of ['Gemini', 'Claude']) {
-        const card = createCard({ agent, workspace: `/home/user/${agent}`, session_id: agent }, null, () => {});
+        const card = createCard({ agent, workspace: `/home/user/${agent}`, session_id: agent }, () => {});
         updateCard(card, { state: 'Idle', details: { status: 'Idle' } });
         grid.appendChild(card);
     }

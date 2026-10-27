@@ -15,7 +15,7 @@ the dashboard and the agents. Everything below is optional.
 | Dashboard | `vauxhall_dashboard.json` | `mqtt`, `logging`, `dashboard` |
 | Hooks | `vauxhall_hooks.json` | `mqtt`, `logging` |
 
-The hooks, and `vauxhall-relay`, read only
+The hooks read only
 `~/.config/vauxhall/vauxhall_hooks.json` (on Windows,
 `%USERPROFILE%\.config\vauxhall\`). They run in the agent's workspace, and a
 `vauxhall_hooks.json` there, for example one in a cloned repository, could

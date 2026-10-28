@@ -405,6 +405,30 @@ def test_package_version_matches_installed_distribution() -> None:
     assert vauxhall.__version__ == importlib.metadata.version("vauxhall")
 
 
+def test_package_import_defers_distribution_metadata() -> None:
+    """Hooks import the package on every event; metadata waits for the version."""
+    probe = (
+        "import sys, vauxhall\n"
+        "print('importlib.metadata' in sys.modules)\n"
+        "vauxhall.__version__\n"
+        "print('importlib.metadata' in sys.modules)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-P", "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.split() == ["False", "True"]
+
+
+def test_package_rejects_unknown_attributes() -> None:
+    """Only ``__version__`` is computed; other names still raise."""
+    with pytest.raises(AttributeError, match="no attribute 'missing'"):
+        _ = vauxhall.missing  # pyright: ignore[reportAttributeAccessIssue]
+
+
 @pytest.mark.parametrize(
     ("agent", "config_path", "hook_module"),
     [

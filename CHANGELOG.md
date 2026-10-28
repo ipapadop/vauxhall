@@ -41,6 +41,10 @@ The first release, planned as 0.1.0. It is alpha software; see
   for a Mosquitto setup with an ACL.
 - Hooks for Claude Code, Codex, and Gemini CLI, installed with
   `vauxhall-hook-install claude codex gemini` into an isolated `.vauxhall-venv`.
+- Claude Code cards report tool calls denied by auto mode, show an MCP
+  server's request for input at once and clear it when answered, and show
+  when a usage-limit pause resumes, needs **Enter**, or ends. Reinstall the
+  Claude Code hooks to register the new events.
 - An **Install Hooks…** dashboard button that picks a local workspace,
   detects which agents it uses and which already have Vauxhall hooks, and
   installs or reinstalls the chosen agents' hooks with a live installer log.

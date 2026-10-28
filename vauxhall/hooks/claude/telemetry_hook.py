@@ -25,6 +25,19 @@ _WAITING_NOTIFICATIONS = {
     "idle_prompt": "Waiting for your input",
     "elicitation_dialog": "Input requested",
     "elicitation_url_dialog": "Input requested",
+    "quota_auto_resume_stale": "Usage limit reset; press Enter to continue",
+}
+# Notification types that change the state without awaiting the user. Their
+# messages are not published. agent_needs_input and agent_completed describe
+# other sessions, so they are ignored like SubagentStop.
+_STATUS_NOTIFICATIONS = {
+    "quota_auto_resume_fired": ("Thinking", "Resumed after usage limit"),
+    "quota_auto_resume_disabled": ("Idle", "Stopped waiting for usage limit"),
+}
+_ELICITATION_STATUSES = {
+    "accept": "Input accepted",
+    "decline": "Input declined",
+    "cancel": "Input cancelled",
 }
 _STOP_FAILURE_ERRORS = frozenset(
     {
@@ -53,9 +66,8 @@ def _tool_duration(input_data: dict[str, Any]) -> float | None:
     Returns:
         The duration in seconds, or ``None`` when unknown.
     """
-    identity = common.tool_use_identity(input_data)
     # Claimed even when Claude Code reports a duration, to remove the start record.
-    measured = common.claim_tool_duration("claude", identity) if identity else None
+    measured = common.claim_tool_use_duration("claude", input_data)
     duration_ms = input_data.get("duration_ms")
     if isinstance(duration_ms, int | float) and not isinstance(duration_ms, bool):
         return round(duration_ms / 1000, 1)
@@ -99,25 +111,78 @@ def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
     return common.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
 
 
+def _handle_permission_denied(input_data: dict[str, Any]) -> common.Telemetry:
+    """Translate PermissionDenied, sent when auto mode refuses a tool call.
+
+    The model receives the denial and continues, so the state is thinking. The
+    tool is named in the status alone: the activity log shows an ``error`` as
+    an error and a ``tool`` as running. The denial reason is not published.
+
+    Args:
+        input_data: The hook event naming the denied tool.
+
+    Returns:
+        The thinking state and a status naming the denied tool.
+    """
+    # Remove the start record; the tool never ran, so report no duration.
+    common.claim_tool_use_duration("claude", input_data)
+    tool = common.tool_details(input_data, {}).get("tool")
+    status = f"Denied by auto mode: {tool}" if tool else "Denied by auto mode"
+    return "Thinking", {"status": status}
+
+
+def _waiting_telemetry(
+    input_data: dict[str, Any], default_prompt: str
+) -> common.Telemetry:
+    """Build a waiting state that shows the event's message when it has one.
+
+    Args:
+        input_data: The hook event, read for its message.
+        default_prompt: The prompt shown when the event has no message.
+
+    Returns:
+        The waiting state and the prompt to show.
+    """
+    prompt = common.message_text(input_data.get("message")) or default_prompt
+    return "Waiting for Input", {"prompt": prompt}
+
+
 def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
-    """Map waiting notifications to a waiting state; ignore others.
+    """Map waiting and usage-limit notifications to a state; ignore others.
 
     Args:
         input_data: The hook event naming the notification type.
 
     Returns:
-        The waiting state and the prompt to show, or ``None`` for a notification
-        that does not await the user.
+        The waiting state and the prompt to show, a usage-limit state and
+        status, or ``None`` for any other notification.
     """
     notification_type = input_data.get("notification_type")
     if not isinstance(notification_type, str):
         return None
+    status = _STATUS_NOTIFICATIONS.get(notification_type)
+    if status is not None:
+        state, text = status
+        return state, {"status": text}
     default_prompt = _WAITING_NOTIFICATIONS.get(notification_type)
     if default_prompt is None:
         return None
-    message = input_data.get("message")
-    prompt = message if isinstance(message, str) and message else default_prompt
-    return "Waiting for Input", {"prompt": prompt}
+    return _waiting_telemetry(input_data, default_prompt)
+
+
+def _handle_elicitation_result(input_data: dict[str, Any]) -> common.Telemetry:
+    """Translate the user's answer to an MCP elicitation; the tool call resumes.
+
+    Args:
+        input_data: The hook event naming the user's action.
+
+    Returns:
+        The acting state and the action taken. The submitted content is not
+        published.
+    """
+    action = input_data.get("action")
+    status = _ELICITATION_STATUSES.get(action) if isinstance(action, str) else None
+    return "Acting", {"status": status or "Input sent"}
 
 
 def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
@@ -171,9 +236,13 @@ HANDLERS: dict[str, common.EventHandler] = {
         command_fields=_COMMAND_FIELDS,
     ),
     "PermissionRequest": common.permission_request_telemetry,
+    "PermissionDenied": _handle_permission_denied,
     "PostToolUse": _handle_post_tool,
     "PostToolUseFailure": _handle_post_tool_failure,
     "Notification": _handle_notification,
+    # Fires when the server asks, before the elicitation_dialog notification.
+    "Elicitation": partial(_waiting_telemetry, default_prompt="Input requested"),
+    "ElicitationResult": _handle_elicitation_result,
     "MessageDisplay": _handle_message_display,
     "SubagentStart": common.subagent_start_telemetry,
     "PreCompact": common.pre_compact_telemetry,

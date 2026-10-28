@@ -272,6 +272,89 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
         ),
         (
             {
+                "hook_event_name": "Notification",
+                "notification_type": "quota_auto_resume_fired",
+                "message": "secret",
+            },
+            {"state": "Thinking", "status": "Resumed after usage limit"},
+        ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "quota_auto_resume_stale",
+            },
+            {
+                "state": "Waiting for Input",
+                "prompt": "Usage limit reset; press Enter to continue",
+            },
+        ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "quota_auto_resume_disabled",
+                "message": "secret",
+            },
+            {"state": "Idle", "status": "Stopped waiting for usage limit"},
+        ),
+        (
+            {
+                "hook_event_name": "PermissionDenied",
+                "tool_name": "Bash",
+                "tool_input": {"command": "secret", "description": "secret"},
+                "tool_use_id": "toolu_1",
+                "reason": "[secret]",
+            },
+            {"state": "Thinking", "status": "Denied by auto mode: Bash"},
+        ),
+        (
+            {"hook_event_name": "PermissionDenied", "tool_name": ["Edit"]},
+            {"state": "Thinking", "status": "Denied by auto mode"},
+        ),
+        (
+            {
+                "hook_event_name": "Elicitation",
+                "mcp_server_name": "issue-tracker",
+                "message": "Choose a project",
+                "mode": "url",
+                "url": "https://secret.example.com",
+                "requested_schema": {"properties": {"secret": {}}},
+            },
+            {"state": "Waiting for Input", "prompt": "Choose a project"},
+        ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "permission_prompt",
+                "message": "   ",
+            },
+            {"state": "Waiting for Input", "prompt": "Permission required..."},
+        ),
+        (
+            {"hook_event_name": "Elicitation", "message": ["not text"]},
+            {"state": "Waiting for Input", "prompt": "Input requested"},
+        ),
+        (
+            {
+                "hook_event_name": "ElicitationResult",
+                "action": "accept",
+                "content": {"username": "secret"},
+            },
+            {"state": "Acting", "status": "Input accepted"},
+        ),
+        (
+            {"hook_event_name": "ElicitationResult", "action": "decline"},
+            {"state": "Acting", "status": "Input declined"},
+        ),
+        (
+            {"hook_event_name": "ElicitationResult", "action": "cancel"},
+            {"state": "Acting", "status": "Input cancelled"},
+        ),
+        (
+            {"hook_event_name": "ElicitationResult", "action": "secret"},
+            {"state": "Acting", "status": "Input sent"},
+        ),
+        (
+            {
                 "hook_event_name": "SubagentStart",
                 "agent_id": "agent-abc123",
                 "agent_type": "Explore",
@@ -379,6 +462,10 @@ def test_claude_events_publish_dashboard_states(
             "notification_type": "elicitation_complete",
         },
         {"hook_event_name": "Notification", "notification_type": "auth_success"},
+        {"hook_event_name": "Notification", "notification_type": "agent_needs_input"},
+        {"hook_event_name": "Notification", "notification_type": "agent_completed"},
+        {"hook_event_name": "TeammateIdle", "teammate_name": "researcher"},
+        {"hook_event_name": "PostToolBatch", "tool_calls": []},
         {"hook_event_name": "Notification", "notification_type": ["idle_prompt"]},
         {"hook_event_name": "SubagentStop"},
         {"hook_event_name": "SessionStart", "source": "compact"},
@@ -494,4 +581,38 @@ def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
         published = _run(before, after)
 
     assert published.call_args.kwargs["duration"] == 4.2
+    assert not list(tmp_path.rglob("*.time"))
+
+
+def test_claude_denied_tool_removes_start_without_duration(tmp_path: Path) -> None:
+    """PermissionDenied must claim the start record but not report a duration.
+
+    The tool never ran, so the time since PreToolUse is the classifier's.
+
+    Args:
+        tmp_path: Pytest temporary directory.
+    """
+    before = {
+        **BASE,
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "rm -rf build"},
+        "tool_use_id": "toolu_denied",
+    }
+    denied = {**before, "hook_event_name": "PermissionDenied", "reason": "[Rule]"}
+
+    with (
+        patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{COMMON}.time.time", side_effect=[1000.0, 1002.5]),
+    ):
+        published = _run(before, denied)
+
+    assert published.call_count == 2
+    assert published.call_args.kwargs == {
+        "agent": "Claude Code",
+        "workspace": "/workspace",
+        "session_id": "native:session-123",
+        "state": "Thinking",
+        "status": "Denied by auto mode: Bash",
+    }
     assert not list(tmp_path.rglob("*.time"))

@@ -148,9 +148,12 @@ bytes per character, unless the payload holds a lone surrogate.
 | `UserPromptSubmit` | `Thinking` (with `prompt`) |
 | `PreToolUse` | `Acting`; `Waiting for Input` for `AskUserQuestion` |
 | `PermissionRequest` | `Waiting for Input` |
+| `PermissionDenied` | `Thinking` (`Denied by auto mode: <tool>`) |
 | `PostToolUse` | `Thinking` (`completed`); `Idle` (`cancelled`) when interrupted |
 | `PostToolUseFailure` | `Error` (`failed`); `Idle` (`cancelled`) for `is_interrupt` |
-| `Notification` | `Waiting for Input` for `permission_prompt`, `idle_prompt`, `elicitation_dialog`, and `elicitation_url_dialog`; others are ignored |
+| `Elicitation` | `Waiting for Input` (with the MCP server's message) |
+| `ElicitationResult` | `Acting` (`Input accepted`, `declined`, or `cancelled`) |
+| `Notification` | `Waiting for Input` for `permission_prompt`, `idle_prompt`, `elicitation_dialog`, `elicitation_url_dialog`, and `quota_auto_resume_stale`; `Thinking` (`Resumed after usage limit`) for `quota_auto_resume_fired`; `Idle` (`Stopped waiting for usage limit`) for `quota_auto_resume_disabled`; others are ignored |
 | `MessageDisplay` | `Thinking` with the completed assistant message |
 | `SubagentStart` | `Acting` (`tool` is `Agent`, `cmd` is the agent type) |
 | `PreCompact` | `Thinking` (`Compacting context`, with the trigger) |
@@ -168,11 +171,29 @@ reports compaction. `SessionEnd` reports `session cleared`, `session switched`,
 `prompt_input_exit` reasons, and `session ended` otherwise. `StopFailure`
 reports the documented error types and `unknown` for anything else.
 
+`PermissionDenied` fires only in auto mode. The model receives the denial and
+continues, so the state is `Thinking`, not `Error`, and no duration is
+reported because the tool never ran. The tool is named in the status rather
+than in `tool` or `error`, so the activity log doesn't show the denial as a
+running tool or an error. `Elicitation` fires as soon as an MCP
+server asks for input; the `elicitation_dialog` notification follows only
+after about six seconds without typing. `ElicitationResult` does not fire when
+another hook answered the elicitation; the card then waits until the MCP
+tool's `PostToolUse`. Vauxhall's hook prints `{}`, which leaves every
+elicitation to the user. Claude Code waits for the hook before showing the
+dialog, as it does for `PermissionRequest`, so each request can appear up to
+about a second later while the hook waits for the broker.
+
 Some signals are intentionally absent:
 
 - `SubagentStop` is not registered. For a foreground subagent, `PostToolUse`
   for the `Agent` tool already reports completion; for a background subagent,
   it would mark an idle session as working.
+- `TeammateIdle` and the `agent_needs_input` and `agent_completed`
+  notifications describe other sessions, so they are ignored for the same
+  reason.
+- `PostToolBatch` is not registered: `PostToolUse` already reports each call
+  in the batch.
 - `PreCompact` and `PostCompact` from inside a subagent (with `agent_id`) are
   ignored so they don't change the main session's state.
 - Claude Code has no interrupt event, and `Stop` does not fire when the user
@@ -188,6 +209,12 @@ Some signals are intentionally absent:
   when present.
 - `tool_response` and `error` contents are never published. For `StopFailure`,
   only the error type is published, not `error_details` or the error message.
+  For `PermissionDenied`, the denial `reason` is not published.
+- `Elicitation` publishes the MCP server's `message` as the prompt, but not
+  its `url` or `requested_schema`. `ElicitationResult` publishes only the
+  action, never the submitted `content`. The usage-limit notifications publish
+  fixed statuses, except `quota_auto_resume_stale`, which publishes its
+  message as the prompt like other waiting notifications.
 - Each `MessageDisplay` batch is kept in its own private temporary file, so
   hooks running at once don't lose each other's text. The batches are
   assembled and published when the message ends, including messages shown

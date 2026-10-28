@@ -145,10 +145,10 @@ def truncate_text(value: str) -> str:
 
 
 def message_text(value: object) -> str | None:
-    """Return nonempty assistant text within the telemetry detail limit.
+    """Return nonblank text, such as a message, within the telemetry detail limit.
 
     Args:
-        value: The candidate assistant text.
+        value: The candidate text.
 
     Returns:
         The text, truncated with an ellipsis when it exceeds the limit, or
@@ -526,6 +526,21 @@ def claim_tool_duration(agent: str, identity: object) -> float | None:
             claimed.unlink(missing_ok=True)
         return round(time.time() - started_at, 1)
     return None
+
+
+def claim_tool_use_duration(agent: str, input_data: dict[str, Any]) -> float | None:
+    """Claim the start recorded for the event's tool call and return its age.
+
+    Args:
+        agent: The agent whose timing directory is used.
+        input_data: The hook event identifying the tool call by tool-use ID.
+
+    Returns:
+        The call's duration in seconds, or ``None`` when the event has no
+        tool-use ID or no start can be claimed.
+    """
+    identity = tool_use_identity(input_data)
+    return claim_tool_duration(agent, identity) if identity else None
 
 
 def pre_tool_telemetry(

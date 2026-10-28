@@ -66,9 +66,8 @@ def _tool_duration(input_data: dict[str, Any]) -> float | None:
     Returns:
         The duration in seconds, or ``None`` when unknown.
     """
-    identity = common.tool_use_identity(input_data)
     # Claimed even when Claude Code reports a duration, to remove the start record.
-    measured = common.claim_tool_duration("claude", identity) if identity else None
+    measured = common.claim_tool_use_duration("claude", input_data)
     duration_ms = input_data.get("duration_ms")
     if isinstance(duration_ms, int | float) and not isinstance(duration_ms, bool):
         return round(duration_ms / 1000, 1)
@@ -116,20 +115,20 @@ def _handle_permission_denied(input_data: dict[str, Any]) -> common.Telemetry:
     """Translate PermissionDenied, sent when auto mode refuses a tool call.
 
     The model receives the denial and continues, so the state is thinking. The
-    denial reason is not published.
+    tool is named in the status alone: the activity log shows an ``error`` as
+    an error and a ``tool`` as running. The denial reason is not published.
 
     Args:
         input_data: The hook event naming the denied tool.
 
     Returns:
-        The thinking state, with the tool details and the denial.
+        The thinking state and a status naming the denied tool.
     """
-    identity = common.tool_use_identity(input_data)
-    if identity:
-        # Remove the start record; the tool never ran, so report no duration.
-        common.claim_tool_duration("claude", identity)
-    outcome = ("Thinking", "denied", "Denied by auto mode")
-    return common.tool_result_telemetry(input_data, outcome, None)
+    # Remove the start record; the tool never ran, so report no duration.
+    common.claim_tool_use_duration("claude", input_data)
+    tool = common.tool_details(input_data, {}).get("tool")
+    status = f"Denied by auto mode: {tool}" if tool else "Denied by auto mode"
+    return "Thinking", {"status": status}
 
 
 def _waiting_telemetry(
@@ -144,8 +143,7 @@ def _waiting_telemetry(
     Returns:
         The waiting state and the prompt to show.
     """
-    message = input_data.get("message")
-    prompt = message if isinstance(message, str) and message else default_prompt
+    prompt = common.message_text(input_data.get("message")) or default_prompt
     return "Waiting for Input", {"prompt": prompt}
 
 

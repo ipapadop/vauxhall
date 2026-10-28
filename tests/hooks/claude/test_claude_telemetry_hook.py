@@ -304,21 +304,11 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
                 "tool_use_id": "toolu_1",
                 "reason": "[secret]",
             },
-            {
-                "state": "Thinking",
-                "tool": "Bash",
-                "status": "denied",
-                "error": "Denied by auto mode",
-            },
+            {"state": "Thinking", "status": "Denied by auto mode: Bash"},
         ),
         (
-            {"hook_event_name": "PermissionDenied", "tool_name": "Edit"},
-            {
-                "state": "Thinking",
-                "tool": "Edit",
-                "status": "denied",
-                "error": "Denied by auto mode",
-            },
+            {"hook_event_name": "PermissionDenied", "tool_name": ["Edit"]},
+            {"state": "Thinking", "status": "Denied by auto mode"},
         ),
         (
             {
@@ -330,6 +320,14 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
                 "requested_schema": {"properties": {"secret": {}}},
             },
             {"state": "Waiting for Input", "prompt": "Choose a project"},
+        ),
+        (
+            {
+                "hook_event_name": "Notification",
+                "notification_type": "permission_prompt",
+                "message": "   ",
+            },
+            {"state": "Waiting for Input", "prompt": "Permission required..."},
         ),
         (
             {"hook_event_name": "Elicitation", "message": ["not text"]},
@@ -609,5 +607,12 @@ def test_claude_denied_tool_removes_start_without_duration(tmp_path: Path) -> No
     ):
         published = _run(before, denied)
 
-    assert "duration" not in published.call_args.kwargs
+    assert published.call_count == 2
+    assert published.call_args.kwargs == {
+        "agent": "Claude Code",
+        "workspace": "/workspace",
+        "session_id": "native:session-123",
+        "state": "Thinking",
+        "status": "Denied by auto mode: Bash",
+    }
     assert not list(tmp_path.rglob("*.time"))

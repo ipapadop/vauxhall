@@ -148,7 +148,7 @@ bytes per character, unless the payload holds a lone surrogate.
 | `UserPromptSubmit` | `Thinking` (with `prompt`) |
 | `PreToolUse` | `Acting`; `Waiting for Input` for `AskUserQuestion` |
 | `PermissionRequest` | `Waiting for Input` |
-| `PermissionDenied` | `Thinking` (`denied`, `Denied by auto mode`) |
+| `PermissionDenied` | `Thinking` (`Denied by auto mode: <tool>`) |
 | `PostToolUse` | `Thinking` (`completed`); `Idle` (`cancelled`) when interrupted |
 | `PostToolUseFailure` | `Error` (`failed`); `Idle` (`cancelled`) for `is_interrupt` |
 | `Elicitation` | `Waiting for Input` (with the MCP server's message) |
@@ -173,12 +173,16 @@ reports the documented error types and `unknown` for anything else.
 
 `PermissionDenied` fires only in auto mode. The model receives the denial and
 continues, so the state is `Thinking`, not `Error`, and no duration is
-reported because the tool never ran. `Elicitation` fires as soon as an MCP
+reported because the tool never ran. The tool is named in the status rather
+than in `tool` or `error`, so the activity log doesn't show the denial as a
+running tool or an error. `Elicitation` fires as soon as an MCP
 server asks for input; the `elicitation_dialog` notification follows only
 after about six seconds without typing. `ElicitationResult` does not fire when
 another hook answered the elicitation; the card then waits until the MCP
 tool's `PostToolUse`. Vauxhall's hook prints `{}`, which leaves every
-elicitation to the user.
+elicitation to the user. Claude Code waits for the hook before showing the
+dialog, as it does for `PermissionRequest`, so each request can appear up to
+about a second later while the hook waits for the broker.
 
 Some signals are intentionally absent:
 

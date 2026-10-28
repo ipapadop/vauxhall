@@ -45,8 +45,7 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     Returns:
         The state for the response, with the tool details and duration.
     """
-    identity = common.tool_use_identity(input_data)
-    duration = common.claim_tool_duration("codex", identity) if identity else None
+    duration = common.claim_tool_use_duration("codex", input_data)
     return common.tool_result_telemetry(
         input_data, _classify_tool_response(input_data.get("tool_response")), duration
     )

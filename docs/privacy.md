@@ -58,8 +58,8 @@ SHA-256 hash of the full path.
 | `tool` | Tool name | Tool name | Tool name |
 | `cmd` | **Command text** of `Bash` and `PowerShell` calls; the subagent type | **Command text** of `Bash` calls; the subagent type | **Command text** of `run_shell_command`; the **file path** for `read_file`, `write_file`, and `replace` |
 | `args` | Not sent | Not sent | **The complete tool input as JSON**, see below |
-| `status` | Fixed values such as `completed`, `failed`, `Ready`, `Session started` | Same | Same |
-| `error` | Fixed text: `Tool reported an error`, `Denied by auto mode`, or `API error: <error type>` | Fixed text, or `Bash failed (exit code <n>)` | Fixed text: `Tool reported an error` |
+| `status` | Fixed values such as `completed`, `failed`, `Ready`, `Session started`; the tool name in `Denied by auto mode: <tool>` | Same | Same |
+| `error` | Fixed text: `Tool reported an error` or `API error: <error type>` | Fixed text, or `Bash failed (exit code <n>)` | Fixed text: `Tool reported an error` |
 | `duration` | Tool duration in seconds | Tool duration in seconds | Tool duration in seconds |
 | `tokens` | Not sent | Not sent | Token count reported by the model |
 

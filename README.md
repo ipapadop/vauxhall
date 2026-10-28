@@ -376,6 +376,7 @@ Report vulnerabilities through the repository's
 | [docs/privacy.md](docs/privacy.md) | Every field collected, retention, and broker exposure |
 | [docs/remote-deployment.md](docs/remote-deployment.md) | Monitoring agents on other machines over SSH |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Broker, dashboard, hook, and trust problems |
+| [docs/comparison.md](docs/comparison.md) | How Vauxhall compares with similar agent dashboards |
 | [docs/releasing.md](docs/releasing.md) | Versioning and compatibility policy |
 | [CHANGELOG.md](CHANGELOG.md) | Changes in each release |
 | [AGENTS.md](AGENTS.md) | Architecture, project structure, the dashboard's behavior contract and internals, and the rules for developing and releasing Vauxhall |

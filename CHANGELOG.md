@@ -50,8 +50,8 @@ The first release, planned as 0.1.0. It is alpha software; see
   startup.
 - Keyboard and screen reader support for every dashboard control.
 - Documentation for a first run, configuration, privacy and the data each
-  integration publishes, remote monitoring over SSH, troubleshooting, and
-  uninstalling.
+  integration publishes, remote monitoring over SSH, troubleshooting,
+  uninstalling, and a comparison with similar tools.
 - A complete source distribution that can run every Python and frontend test.
 - A tag-triggered release workflow that tests, builds, checks, and attaches
   the wheel and source distribution to a GitHub release.

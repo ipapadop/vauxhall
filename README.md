@@ -299,9 +299,7 @@ In each workspace where you installed hooks:
    `.gemini/settings.json`. Delete every handler whose `command` ends with
    `-m vauxhall.hooks.<agent>.telemetry_hook`, then any matcher group or event
    left empty. On Windows, the installer's commands start with
-   `powershell.exe -NoProfile -NonInteractive -EncodedCommand`. In
-   `.gemini/settings.json`, also delete handlers named `vauxhall-...` that run
-   `hooks/gemini/telemetry_hook.py`, left by earlier versions. If the `.bak`
+   `powershell.exe -NoProfile -NonInteractive -EncodedCommand`. If the `.bak`
    next to it holds only `{}`, the installer created the file, and you can
    delete the file instead. Codex's installer also added a top-level
    `"description"`, which you can delete.

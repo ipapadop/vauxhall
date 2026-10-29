@@ -199,8 +199,6 @@ need to edit it.
   first one.
 - **Theme on first paint**: the theme is also kept in the page's local storage,
   so the dashboard starts with the right theme before the state file is read.
-  A theme saved there by earlier versions is copied to the state file the first
-  time the dashboard starts.
 
 Unknown keys and invalid values are ignored. An unreadable or corrupt file is
 logged and treated as empty.

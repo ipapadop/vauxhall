@@ -287,8 +287,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   theme, sort order, history state filter, and the attention-first and notify
   checkboxes from `DashboardIPC.get_ui_state()` without delaying IPC setup,
   skipping any preference the user already changed, and re-sorts existing
-  cards. If no theme is saved, the cached theme (from earlier versions) is
-  saved. Changes are batched and sent to `DashboardIPC.save_ui_state()` 500 ms
+  cards. Changes are batched and sent to `DashboardIPC.save_ui_state()` 500 ms
   after the last one, or immediately on `pagehide`; a `false` result is
   logged. Theme changes also update the localStorage cache.
 - **Remembered cards**: After `max_active_agents` and the real

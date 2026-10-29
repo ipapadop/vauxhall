@@ -110,18 +110,6 @@ def test_detect_agents_finds_installed_hooks(tmp_path: Path, agent: str) -> None
     assert entry["error"] is None
 
 
-def test_detect_agents_finds_gemini_legacy_hooks(tmp_path: Path) -> None:
-    """Gemini handlers from checkout-based installers count as installed."""
-    handler = {
-        "type": "command",
-        "name": "vauxhall-idle",
-        "command": "python /x/hooks/gemini/telemetry_hook.py",
-    }
-    _write_settings(tmp_path, "gemini", _with_handler(handler))
-
-    assert _by_agent(tmp_path)["gemini"]["installed"] is True
-
-
 def test_detect_agents_ignores_foreign_handlers(tmp_path: Path) -> None:
     """Another tool's handler is not Vauxhall's."""
     _write_settings(

@@ -378,20 +378,21 @@ def session_end_telemetry(
 ) -> Telemetry:
     """Translate SessionEnd using an agent's reason statuses, never raw reasons.
 
+    A documented reason is also published as ``end_reason``, which the
+    dashboard reads instead of the display status: it removes the card of a
+    session ended by ``clear``, since the agent continues under a new session.
+
     Args:
         input_data: The hook event naming why the session ended.
         statuses: Status to publish, keyed by the agent's documented reasons.
 
     Returns:
-        The idle state and a status for the reason.
+        The idle state, a status for the reason, and the reason if documented.
     """
     reason = input_data.get("reason")
-    status = (
-        statuses.get(reason, "session ended")
-        if isinstance(reason, str)
-        else "session ended"
-    )
-    return "Idle", {"status": status}
+    if isinstance(reason, str) and reason in statuses:
+        return "Idle", {"status": statuses[reason], "end_reason": reason}
+    return "Idle", {"status": "session ended"}
 
 
 def subagent_start_telemetry(input_data: dict[str, Any]) -> Telemetry:

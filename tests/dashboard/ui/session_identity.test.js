@@ -8,14 +8,92 @@ import { agentKey, agents, cardIdentity } from '../../../vauxhall/dashboard/ui/j
 
 import { bootDashboard } from './helpers.js';
 
-test('agent identity includes session and cannot collide on delimiters', () => {
+test('agent identity is agent and session, ignores workspace, and cannot collide on delimiters', () => {
     const first = agentKey({ agent: 'A:B', workspace: 'C', session_id: 'D' });
-    const second = agentKey({ agent: 'A', workspace: 'B:C', session_id: 'D' });
+    const second = agentKey({ agent: 'A', session_id: 'B:D' });
     const otherSession = agentKey({ agent: 'A:B', workspace: 'C', session_id: 'E' });
+    const otherWorkspace = agentKey({ agent: 'A:B', workspace: 'C/sub', session_id: 'D' });
 
     assert.notEqual(first, second);
     assert.notEqual(first, otherSession);
-    assert.equal(first, '["A:B","C","D"]');
+    assert.equal(first, otherWorkspace);
+    assert.equal(first, '["A:B","D"]');
+});
+
+test('a session that changes directory keeps one card showing the latest workspace', async (t) => {
+    const { document, listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Codex', session_id: 'native:one', details: {} };
+
+    listeners['agent-update']({ ...base, workspace: '/home/user/project', state: 'Thinking' });
+    listeners['agent-update']({ ...base, workspace: 'C:\\remote-ish', env: 'remote', state: 'Acting' });
+
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+    const card = agents['["Codex","native:one"]'];
+    assert.equal(card.history.length, 2);
+    assert.deepEqual(cardIdentity(card), { agent: 'Codex', workspace: 'C:\\remote-ish', session_id: 'native:one' });
+    const badge = card.querySelector('.env-badge');
+    assert.equal(badge.textContent, 'remote');
+    assert.deepEqual([...badge.classList].filter((name) => name.startsWith('env-') && name !== 'env-badge'), ['env-remote']);
+    assert.equal(
+        card.querySelector('.agent-workspace').getAttribute('aria-label'),
+        'Open activity for Codex in C:\\remote-ish, session native:one',
+    );
+    assert.equal(
+        card.querySelector('.menu-icon').getAttribute('aria-label'),
+        'Options for Codex in C:\\remote-ish, session native:one',
+    );
+});
+
+test('a cleared session removes its card and saves the remaining cards', async (t) => {
+    const saves = [];
+    const { document, listeners } = await bootDashboard(t, {
+        ping: async () => false,
+        save_cards: async (json) => {
+            saves.push(JSON.parse(json));
+            return true;
+        },
+    });
+    const base = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project' };
+    listeners['agent-update']({ ...base, session_id: 'old', state: 'Thinking', details: {} });
+    listeners['agent-update']({ ...base, session_id: 'new', state: 'Thinking', details: {} });
+
+    const card = agents['["Claude Code","old"]'];
+    const opener = card.querySelector('.agent-workspace');
+    opener.click();
+    const focused = [];
+    document.getElementById('agent-grid').focus = () => focused.push('grid');
+
+    listeners['agent-update']({
+        ...base, session_id: 'old', state: 'Idle', details: { status: 'session cleared', end_reason: 'clear' },
+    });
+
+    assert.equal(agents['["Claude Code","old"]'], undefined);
+    assert.ok(!card.isConnected);
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
+    assert.deepEqual(focused, ['grid']);
+    assert.match(document.getElementById('fleet-summary').textContent, /\b1\b/);
+
+    // An end for a session without a card doesn't create one.
+    listeners['agent-update']({
+        ...base, session_id: 'unseen', state: 'Idle', details: { end_reason: 'clear' },
+    });
+    assert.equal(document.getElementById('agent-grid').children.length, 1);
+
+    // The 500 ms debounce isn't waited for: pagehide flushes the save.
+    document.defaultView.dispatchEvent(new document.defaultView.Event('pagehide'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(saves.at(-1).map((entry) => entry.session_id), ['new']);
+});
+
+test('another session end keeps its card', async (t) => {
+    const { listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project', session_id: 'one' };
+    listeners['agent-update']({ ...base, state: 'Thinking', details: {} });
+
+    listeners['agent-update']({ ...base, state: 'Idle', details: { status: 'logged out', end_reason: 'logout' } });
+
+    assert.equal(agents['["Claude Code","one"]'].dataset.state, 'Idle');
 });
 
 test('a card reports the identity it was built from', async (t) => {
@@ -39,8 +117,8 @@ test('same agent and workspace sessions create separate cards', async (t) => {
     };
     onAgentUpdate({ ...base, session_id: 'native:one' });
     onAgentUpdate({ ...base, session_id: 'native:two' });
-    const firstCard = agents['["Codex","/workspace","native:one"]'];
-    const secondCard = agents['["Codex","/workspace","native:two"]'];
+    const firstCard = agents['["Codex","native:one"]'];
+    const secondCard = agents['["Codex","native:two"]'];
 
     onAgentUpdate({
         ...base,
@@ -76,7 +154,7 @@ test('configured capacity retains existing cards and closes an evicted card moda
         details: {},
     };
     onAgentUpdate({ ...base, session_id: 'native:one' });
-    const firstKey = '["Codex","/workspace","native:one"]';
+    const firstKey = '["Codex","native:one"]';
     const firstCard = agents[firstKey];
     onAgentUpdate({ ...base, session_id: 'native:one', state: 'Acting' });
 

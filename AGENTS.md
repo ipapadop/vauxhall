@@ -115,11 +115,11 @@ sequenceDiagram
    window. Until the frontend signals readiness, events are queued, keeping the
    newest `pending_update_limit` of them; the queue is drained in order when the
    frontend becomes ready.
-7. **The frontend renders it.** The UI keys the card by agent, workspace, and
-   session ID, creates it if needed (evicting the least recently seen card at
-   `max_active_agents`), then updates its state color, activity log, metric
-   badges, last-seen timer, and open activity pane, and re-applies the current
-   search and sort.
+7. **The frontend renders it.** The UI keys the card by agent and session ID,
+   creates it if needed (evicting the least recently seen card at
+   `max_active_agents`), then updates its workspace, state color, activity
+   log, metric badges, last-seen timer, and open activity pane, and re-applies
+   the current search and sort.
 
 Information also flows the other way, from the UI to the backend over
 `DashboardIPC`: reading settings and view state, saving them, copying a
@@ -150,10 +150,21 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   sort, and the two checkboxes, with **Clear Stale** and the red-outlined
   **Clear Dashboard** pushed to its end. Both rows wrap on narrow windows.
   `accessibility.test.js` pins the grouping and order.
-- **Cards**: A card is identified by `agent`, `workspace`, and `session_id`, so
-  separate sessions get separate cards. The dashboard keeps up to
+- **Cards**: A card is identified by `agent` and `session_id` (`state.agentKey`),
+  so separate sessions get separate cards. `workspace` is the agent's current
+  directory, which can change during a session, so it is not part of the
+  identity: each event sets the card's workspace, environment badge, and the
+  accessible names that include the workspace (`ui.setWorkspace`), and an
+  open activity pane's header follows. The dashboard keeps up to
   `max_active_agents` cards (100 by default); a new identity at capacity evicts
   the least recently seen card.
+- **Cleared sessions**: An `Idle` event whose `details.end_reason` is `clear`
+  (`state.isClearedSession`) removes its card instead of updating it, closes
+  any dialog acting on it, and saves the cards; with no card, it creates none.
+  Claude Code and Gemini CLI continue a cleared session under a new session
+  ID, so the old card would only linger until stale. The hooks publish
+  `end_reason` because the `status` text is for display. A later event for
+  the cleared session would create its card again.
 - **Environment badge**: Shows `env`. Without it, workspaces starting with
   `/home` or a Windows drive letter (such as `C:\`) are labeled LOCAL, and all
   others REMOTE.
@@ -389,7 +400,8 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   keeps only `agent`, `workspace`, `session_id`, `state` (one of
   `vauxhall.core.telemetry.SUPPORTED_STATES`), `env`, and `last_seen`; an
   invalid entry is dropped rather than rejecting the whole file, entries are
-  deduplicated by identity keeping the newest `last_seen`, and the list is
+  deduplicated by agent and session ID keeping the newest `last_seen` (and so
+  its workspace), and the list is
   capped to a defensive maximum. `save_cards` replaces the file atomically
   with the frontend's full current snapshot; there is no merge, so no lock is
   needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`

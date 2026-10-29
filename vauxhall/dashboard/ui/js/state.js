@@ -8,17 +8,19 @@
  * @description Manages the global state of the dashboard, including agent tracking and history.
  */
 
-export const agents = {}; // JSON [agent, workspace, session_id] -> DOM element
+export const agents = {}; // JSON [agent, session_id] -> DOM element
 
 /**
  * Builds the key that identifies one agent card.
- * @param {object} data - Telemetry data naming the agent, workspace, and session.
+ *
+ * The workspace is left out: it is the agent's current directory, which can
+ * change during a session, and the card follows it.
+ * @param {object} data - Telemetry data naming the agent and session.
  * @returns {string} The card key.
  */
 export function agentKey(data) {
     return JSON.stringify([
         String(data.agent ?? ''),
-        String(data.workspace ?? ''),
         String(data.session_id ?? ''),
     ]);
 }
@@ -115,6 +117,15 @@ export function updateAgentHistory(card, data, at = Date.now()) {
  */
 export function historyDurations(history, now = Date.now()) {
     return history.map((entry, index) => Math.max(0, (index === 0 ? now : history[index - 1].at) - entry.at));
+}
+
+/**
+ * Returns whether an event ends a session the user cleared, as with `/clear`.
+ * @param {object} data - The telemetry data.
+ * @returns {boolean} Whether the event reports a session ended by clearing.
+ */
+export function isClearedSession(data) {
+    return data.state === 'Idle' && data.details?.end_reason === 'clear';
 }
 
 /**

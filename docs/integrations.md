@@ -77,7 +77,10 @@ Publish JSON to `vauxhall/agents/<agent_name>/activity`:
 ```
 
 Operation values such as `tool`, `cmd`, `prompt`, `message`, `status`, `error`,
-`tokens`, and `duration` go in `details`. The optional `env` field is top-level.
+`tokens`, `duration`, and `end_reason` go in `details`. The dashboard keys a
+card by `agent` and `session_id`; `workspace` is the session's current
+directory, and the card shows the latest one. An `Idle` event with
+`end_reason` `clear` removes its session's card. The optional `env` field is top-level.
 
 ## Telemetry Schema
 
@@ -168,7 +171,8 @@ Events follow the documented
 or `Session forked`; its `compact` source is ignored because `PostCompact`
 reports compaction. `SessionEnd` reports `session cleared`, `session switched`,
 `logged out`, or `input closed` for the `clear`, `resume`, `logout`, and
-`prompt_input_exit` reasons, and `session ended` otherwise. `StopFailure`
+`prompt_input_exit` reasons, with the reason as `end_reason`, and
+`session ended`, without `end_reason`, otherwise. `StopFailure`
 reports the documented error types and `unknown` for anything else.
 
 `PermissionDenied` fires only in auto mode. The model receives the denial and
@@ -460,8 +464,9 @@ fields:
 
 Gemini CLI has no tool-interrupt field. `SessionEnd` reports `session exited`,
 `session cleared`, `logged out`, or `input closed` for the `exit`, `clear`,
-`logout`, and `prompt_input_exit` reasons, and `session ended` otherwise. Raw
-reason values are not published.
+`logout`, and `prompt_input_exit` reasons, with the reason as `end_reason`,
+and `session ended`, without `end_reason`, otherwise. Undocumented reason
+values are not published.
 
 ### Published Data
 

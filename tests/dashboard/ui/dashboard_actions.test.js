@@ -62,13 +62,13 @@ test('clear stale removes only the cards that went stale', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'gone' });
     listeners['agent-update']({ ...BASE, session_id: 'here' });
-    const staleKey = '["Codex","/home/user/project","gone"]';
+    const staleKey = '["Codex","gone"]';
     agents[staleKey].dataset.lastSeen = String(Date.now() - 300000);
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100 });
     document.getElementById('clear-stale-btn').click();
 
-    assert.deepEqual(Object.keys(agents), ['["Codex","/home/user/project","here"]']);
+    assert.deepEqual(Object.keys(agents), ['["Codex","here"]']);
     assert.equal(document.getElementById('agent-grid').children.length, 1);
 });
 
@@ -91,8 +91,8 @@ test('typing in the search box hides the cards that do not match', async (t) => 
     search.value = 'Claude';
     search.dispatchEvent(new window.Event('input'));
 
-    assert.equal(agents['["Claude","/home/user/project","two"]'].style.display, 'flex');
-    assert.equal(agents['["Codex","/home/user/project","one"]'].style.display, 'none');
+    assert.equal(agents['["Claude","two"]'].style.display, 'flex');
+    assert.equal(agents['["Codex","one"]'].style.display, 'none');
 });
 
 test('an active search is re-applied to a card that arrives later', async (t) => {
@@ -103,7 +103,7 @@ test('an active search is re-applied to a card that arrives later', async (t) =>
 
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
 
-    assert.equal(agents['["Codex","/home/user/project","one"]'].style.display, 'none');
+    assert.equal(agents['["Codex","one"]'].style.display, 'none');
 });
 
 test('choosing a sort order rearranges the grid', async (t) => {
@@ -133,7 +133,7 @@ test('a card arriving later is placed according to the chosen sort order', async
 test('clicking a card opens its pane', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    const key = '["Codex","/home/user/project","one"]';
+    const key = '["Codex","one"]';
 
     agents[key].click();
 
@@ -146,7 +146,7 @@ test('clicking a card opens its pane', async (t) => {
 test('the close button hides the modal and stops its live updates', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    const key = '["Codex","/home/user/project","one"]';
+    const key = '["Codex","one"]';
     agents[key].querySelector('.agent-workspace').click();
 
     document.querySelector('.close-btn').click();
@@ -159,7 +159,7 @@ test('the close button hides the modal and stops its live updates', async (t) =>
 test('closing the pane returns focus to the card\'s workspace button', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    const card = agents['["Codex","/home/user/project","one"]'];
+    const card = agents['["Codex","one"]'];
     const workspace = card.querySelector('.agent-workspace');
     let focused = 0;
     workspace.focus = () => { focused++; };
@@ -173,7 +173,7 @@ test('closing the pane returns focus to the card\'s workspace button', async (t)
 test('dismissing the modal with Escape stops its live updates', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
+    agents['["Codex","one"]'].querySelector('.agent-workspace').click();
 
     // A dialog dismissed with Escape reports it as the close event.
     document.getElementById('history-modal').dispatchEvent(new window.Event('close'));
@@ -185,7 +185,7 @@ test('dismissing the modal with Escape stops its live updates', async (t) => {
 test('an open modal follows new events for the agent it is showing', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
+    agents['["Codex","one"]'].querySelector('.agent-workspace').click();
 
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'grep' } });
 
@@ -198,7 +198,7 @@ test('an open modal follows new events for the agent it is showing', async (t) =
 test('an open modal ignores events for a different agent', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    const key = '["Codex","/home/user/project","one"]';
+    const key = '["Codex","one"]';
     agents[key].querySelector('.agent-workspace').click();
 
     listeners['agent-update']({ ...BASE, session_id: 'two', details: { tool: 'grep' } });
@@ -214,7 +214,7 @@ test('Copy path copies the workspace of the card the pane shows', async (t) => {
     const { document, clipboard, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
     listeners['agent-update']({ ...BASE, workspace: '/home/user/other', session_id: 'two' });
-    agents['["Codex","/home/user/other","two"]'].click();
+    agents['["Codex","two"]'].click();
 
     document.getElementById('modal-copy-path').click();
     await new Promise((resolve) => setImmediate(resolve));
@@ -230,11 +230,11 @@ test('a copy that finishes after the pane moved to another card leaves its statu
     });
     listeners['agent-update']({ ...BASE, session_id: 'one' });
     listeners['agent-update']({ ...BASE, session_id: 'two' });
-    agents['["Codex","/home/user/project","one"]'].click();
+    agents['["Codex","one"]'].click();
     document.getElementById('modal-copy-path').click();
 
     document.querySelector('.close-btn').click();
-    agents['["Codex","/home/user/project","two"]'].click();
+    agents['["Codex","two"]'].click();
     finish(true);
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -244,7 +244,7 @@ test('a copy that finishes after the pane moved to another card leaves its statu
 test('a copy the bridge cannot make reports failure', async (t) => {
     const { document, listeners } = await bootDashboard(t, { copy_to_clipboard: undefined });
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].click();
+    agents['["Codex","one"]'].click();
 
     document.getElementById('modal-copy-path').click();
     await new Promise((resolve) => setImmediate(resolve));
@@ -255,7 +255,7 @@ test('a copy the bridge cannot make reports failure', async (t) => {
 test('Copy path does nothing once the pane has closed', async (t) => {
     const { document, clipboard, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].click();
+    agents['["Codex","one"]'].click();
     document.querySelector('.close-btn').click();
 
     document.getElementById('modal-copy-path').click();
@@ -270,7 +270,7 @@ test('the staleness sweep advances the open pane\'s newest duration', async (t) 
     t.after(() => { Date.now = realNow; });
     Date.now = () => 1_000_000;
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].click();
+    agents['["Codex","one"]'].click();
     assert.equal(document.querySelector('.history-duration').textContent, '<1s');
 
     Date.now = () => 1_030_000;
@@ -282,7 +282,7 @@ test('the staleness sweep advances the open pane\'s newest duration', async (t) 
 test('clicking the backdrop closes the modal', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one', details: { tool: 'shell' } });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
+    agents['["Codex","one"]'].querySelector('.agent-workspace').click();
     const modal = document.getElementById('history-modal');
 
     window.onclick({ target: modal });
@@ -294,7 +294,7 @@ test('clicking a card no longer copies its workspace path', async (t) => {
     const { clipboard, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
 
-    agents['["Codex","/home/user/project","one"]'].click();
+    agents['["Codex","one"]'].click();
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.deepEqual(clipboard, []);
@@ -304,7 +304,7 @@ test('the menu icon opens the card options dialog', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
 
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
 
     assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
 });
@@ -312,7 +312,7 @@ test('the menu icon opens the card options dialog', async (t) => {
 test('hiding a card removes it from view until its agent reports again', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    const card = agents['["Codex","/home/user/project","one"]'];
+    const card = agents['["Codex","one"]'];
     card.querySelector('.menu-icon').click();
 
     document.getElementById('card-menu-hide').click();
@@ -329,7 +329,7 @@ test('hiding a card removes it from view until its agent reports again', async (
 test('hiding a card from its menu hands focus to the grid, not the hidden menu button', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    const menuButton = agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon');
+    const menuButton = agents['["Codex","one"]'].querySelector('.menu-icon');
     const grid = document.getElementById('agent-grid');
     const focused = [];
     menuButton.focus = () => focused.push('menu');
@@ -344,7 +344,7 @@ test('hiding a card from its menu hands focus to the grid, not the hidden menu b
 test('the close button hides the card menu and returns focus to its opener', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    const menuButton = agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon');
+    const menuButton = agents['["Codex","one"]'].querySelector('.menu-icon');
     let focused = 0;
     menuButton.focus = () => { focused++; };
     menuButton.click();
@@ -358,7 +358,7 @@ test('the close button hides the card menu and returns focus to its opener', asy
 test('clicking the card menu backdrop closes it', async (t) => {
     const { listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     const menu = document.getElementById('card-menu-modal');
 
     window.onclick({ target: menu });
@@ -376,7 +376,7 @@ test('adding an agent to the denylist reads the current list and appends to it',
         },
     });
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
 
     document.getElementById('card-menu-denylist').click();
     await new Promise((resolve) => setImmediate(resolve));
@@ -398,7 +398,7 @@ test('a failed denylist save is reported instead of swallowed silently', async (
     t.after(() => { console.error = originalError; });
 
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     document.getElementById('card-menu-denylist').click();
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -417,7 +417,7 @@ test('a malformed config error is reported instead of saving an incomplete denyl
     t.after(() => { console.error = originalError; });
 
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     document.getElementById('card-menu-denylist').click();
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -437,7 +437,7 @@ test('a read-only denylist is not saved to from the card menu', async (t) => {
     t.after(() => { console.error = originalError; });
 
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     document.getElementById('card-menu-denylist').click();
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -452,7 +452,7 @@ test('adding an already-denylisted agent does not save again', async (t) => {
         save_settings: async () => { calls++; return JSON.stringify({ ok: true }); },
     });
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
 
     document.getElementById('card-menu-denylist').click();
     await new Promise((resolve) => setImmediate(resolve));
@@ -463,7 +463,7 @@ test('adding an already-denylisted agent does not save again', async (t) => {
 test('the card menu closes when its card is evicted to make room for a new one', async (t) => {
     const { listeners } = await bootDashboard(t, { get_max_active_agents: async () => 1 });
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
 
     listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'two' });
@@ -474,7 +474,7 @@ test('the card menu closes when its card is evicted to make room for a new one',
 test('the card menu closes when its card is evicted by a lowered capacity', async (t) => {
     const { listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.menu-icon').click();
+    agents['["Codex","one"]'].querySelector('.menu-icon').click();
     assert.ok(document.getElementById('card-menu-modal').hasAttribute('open'));
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 0 });
@@ -489,7 +489,7 @@ test('a settings change carrying a denylist removes matching cards', async (t) =
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
 
-    assert.deepEqual(Object.keys(agents), ['["Claude","/home/user/project","two"]']);
+    assert.deepEqual(Object.keys(agents), ['["Claude","two"]']);
     assert.equal(document.getElementById('agent-grid').children.length, 1);
 });
 
@@ -498,19 +498,19 @@ test('a settings change removes denylisted cards before applying a lowered limit
     listeners['agent-update']({ ...BASE, agent: 'Claude', session_id: 'one' });
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'two' });
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'three' });
-    agents['["Claude","/home/user/project","one"]'].dataset.lastSeen = '1000';
-    agents['["Codex","/home/user/project","two"]'].dataset.lastSeen = '2000';
-    agents['["Codex","/home/user/project","three"]'].dataset.lastSeen = '3000';
+    agents['["Claude","one"]'].dataset.lastSeen = '1000';
+    agents['["Codex","two"]'].dataset.lastSeen = '2000';
+    agents['["Codex","three"]'].dataset.lastSeen = '3000';
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 2, agent_denylist: ['Codex'] });
 
-    assert.deepEqual(Object.keys(agents), ['["Claude","/home/user/project","one"]']);
+    assert.deepEqual(Object.keys(agents), ['["Claude","one"]']);
 });
 
 test('denylisting the agent behind an open history modal closes it', async (t) => {
     const { listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, agent: 'Codex', session_id: 'one' });
-    agents['["Codex","/home/user/project","one"]'].querySelector('.agent-workspace').click();
+    agents['["Codex","one"]'].querySelector('.agent-workspace').click();
 
     listeners['settings-changed']({ stale_threshold: 120, max_active_agents: 100, agent_denylist: ['Codex'] });
 
@@ -609,7 +609,7 @@ test('clearing the dashboard resets the fleet summary', async (t) => {
 });
 
 const CLAUDE = { ...BASE, agent: 'Claude Code', session_id: 'turn' };
-const CLAUDE_KEY = '["Claude Code","/home/user/project","turn"]';
+const CLAUDE_KEY = '["Claude Code","turn"]';
 
 test('a final message arriving after the turn ended leaves the card idle', async (t) => {
     const { listeners } = await bootDashboard(t);

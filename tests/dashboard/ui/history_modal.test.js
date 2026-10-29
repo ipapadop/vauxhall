@@ -8,12 +8,12 @@ import { parseHTML } from 'linkedom';
 
 import { historyDurations, updateAgentHistory } from '../../../vauxhall/dashboard/ui/js/state.js';
 import {
-    closeHistoryModal, copyWorkspacePath, createCard, formatDuration, openHistoryModal,
+    closeHistoryModal, copyWorkspacePath, createCard, formatDuration, openHistoryModal, updateCard,
 } from '../../../vauxhall/dashboard/ui/js/ui.js';
 
 import { selectOption } from './helpers.js';
 
-const KEY = '["Codex","/home/user/project","session-1"]';
+const KEY = '["Codex","session-1"]';
 const VIEWPORT_HEIGHT = 200;
 const CONTENT_HEIGHT = 1000;
 
@@ -248,18 +248,22 @@ test('the search box and the state filter apply together', () => {
     assert.deepEqual(rendered(document), [{ state: 'Acting', details: 'Running: shell' }]);
 });
 
-test('a live update re-renders without retitling or reopening the modal', () => {
+test('a live update re-renders and follows the workspace without reopening the modal', () => {
     const document = setupPage();
     const card = cardWithHistory([{ state: 'Acting', details: { tool: 'shell' } }]);
     const agents = { [KEY]: card };
     openHistoryModal(KEY, agents);
-    document.getElementById('modal-agent-name').textContent = 'untouched';
+    const name = document.getElementById('modal-agent-name');
+    const nameText = name.firstChild;
     document.getElementById('history-modal').removeAttribute('open');
 
+    updateCard(card, { workspace: '/home/user/project/models', state: 'Error', details: { error: 'boom' } });
     updateAgentHistory(card, { state: 'Error', details: { error: 'boom' } });
     openHistoryModal(KEY, agents, true);
 
-    assert.equal(document.getElementById('modal-agent-name').textContent, 'untouched');
+    // Unchanged header text keeps its node, so a selection in it survives.
+    assert.equal(name.firstChild, nameText);
+    assert.equal(document.getElementById('modal-agent-meta').textContent, '/home/user/project/models · session session-1');
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
     assert.deepEqual(rendered(document).map((item) => item.state), ['Acting', 'Error']);
 });

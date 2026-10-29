@@ -146,6 +146,15 @@ def test_clean_deduplicates_by_identity_keeping_newest() -> None:
     assert clean_cards([newer, older]) == [newer]
 
 
+def test_clean_merges_one_session_across_workspaces() -> None:
+    """A session seen in two workspaces keeps the newer entry and its workspace."""
+    older = {**CARD, "workspace": "/home/user/project", "last_seen": 100}
+    newer = {**CARD, "workspace": "/home/user/project/models", "last_seen": 200}
+    other_agent = {**older, "agent": "Gemini"}
+
+    assert clean_cards([older, newer, other_agent]) == [newer, other_agent]
+
+
 def test_clean_caps_card_count() -> None:
     """More than the defensive maximum of cards is truncated."""
     cards = [

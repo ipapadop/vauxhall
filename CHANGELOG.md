@@ -67,6 +67,11 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 ### Fixed
 
+- A session that changes directory keeps one card, which shows its latest
+  workspace, instead of getting a new card for each directory. A Claude Code
+  or Gemini CLI session ended by `/clear` removes its card, since the agent
+  continues under a new session; its `SessionEnd` telemetry now carries the
+  documented reason as `end_reason`.
 - Copying a workspace path works on Linux without `wl-clipboard`, `xclip`,
   or `xsel` installed. The dashboard now uses Qt's clipboard and no longer
   depends on pyperclip.

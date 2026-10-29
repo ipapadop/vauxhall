@@ -115,10 +115,7 @@ function textSpan(className, value) {
  */
 export function createCard(data, openPaneCallback, openMenuCallback) {
     const agent = String(data.agent ?? '');
-    const workspace = String(data.workspace ?? '');
     const sessionId = String(data.session_id ?? '');
-    const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
-    const env = configuredEnv || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
 
     const card = document.createElement('div');
     card.className = 'agent-card';
@@ -148,11 +145,7 @@ export function createCard(data, openPaneCallback, openMenuCallback) {
         </div>
     `;
 
-    const envBadge = card.querySelector('.env-badge');
-    envBadge.classList.add(`env-${env}`);
-    envBadge.textContent = env;
     card.querySelector('.agent-name').textContent = agent;
-    card.querySelector('.agent-workspace').textContent = workspace;
     const sessionElement = card.querySelector('.agent-session');
     sessionElement.textContent = `Session: ${sessionId}`;
     sessionElement.title = sessionId;
@@ -163,7 +156,6 @@ export function createCard(data, openPaneCallback, openMenuCallback) {
     card.setAttribute('role', 'group');
     card.setAttribute('aria-label', `${agent} session ${sessionId}`);
     const menuButton = card.querySelector('.menu-icon');
-    menuButton.setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
     menuButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openMenuCallback?.(menuButton);
@@ -172,10 +164,32 @@ export function createCard(data, openPaneCallback, openMenuCallback) {
     // The workspace button is the keyboard route to the whole-card click; its
     // click bubbles here, and focus returns to it when the pane closes.
     const workspaceButton = card.querySelector('.agent-workspace');
-    workspaceButton.setAttribute('aria-label', `Open activity for ${agent} in ${workspace}, session ${sessionId}`);
     card.addEventListener('click', () => openPaneCallback(workspaceButton));
+    setWorkspace(card, data);
 
     return card;
+}
+
+/**
+ * Shows a card's workspace and the environment and control names derived
+ * from it. A session's workspace is its current directory, so it can change.
+ * @param {HTMLElement} card - The agent card element.
+ * @param {object} data - Telemetry data naming the workspace and, optionally, env.
+ */
+function setWorkspace(card, data) {
+    const workspace = String(data.workspace ?? '');
+    const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
+    const env = configuredEnv || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
+    const envBadge = card.querySelector('.env-badge');
+    envBadge.classList.remove('env-local', 'env-remote');
+    envBadge.classList.add(`env-${env}`);
+    envBadge.textContent = env;
+
+    const { agent, session_id: sessionId } = cardIdentity(card);
+    const workspaceButton = card.querySelector('.agent-workspace');
+    workspaceButton.textContent = workspace;
+    workspaceButton.setAttribute('aria-label', `Open activity for ${agent} in ${workspace}, session ${sessionId}`);
+    card.querySelector('.menu-icon').setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
 }
 
 /**
@@ -256,6 +270,7 @@ function appendDetails(container, data) {
  *   wasn't, and the event's log message.
  */
 export function updateCard(card, data) {
+    if (typeof data.workspace === 'string') setWorkspace(card, data);
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');
@@ -536,12 +551,16 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     const card = agents[agentKey];
     if (!card || !card.history) return;
 
+    // The header follows silent updates too, because the workspace can change;
+    // unchanged text is left alone so a selection in it survives.
+    const { agent, workspace, session_id: sessionId } = cardIdentity(card);
+    const setText = (id, text) => {
+        const element = document.getElementById(id);
+        if (element && element.textContent !== text) element.textContent = text;
+    };
+    setText('modal-agent-name', agent);
+    setText('modal-agent-meta', `${workspace} · session ${sessionId}`);
     if (!isSilent) {
-        const { agent, workspace, session_id: sessionId } = cardIdentity(card);
-        const modalAgentName = document.getElementById('modal-agent-name');
-        if (modalAgentName) modalAgentName.textContent = agent;
-        const modalAgentMeta = document.getElementById('modal-agent-meta');
-        if (modalAgentMeta) modalAgentMeta.textContent = `${workspace} · session ${sessionId}`;
         const copyStatus = document.getElementById('modal-copy-status');
         if (copyStatus) copyStatus.textContent = '';
     }

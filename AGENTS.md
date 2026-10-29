@@ -6,7 +6,8 @@ developing and releasing it. User documentation lives in [README.md](README.md)
 and [docs/](docs/): [integrations](docs/integrations.md) (telemetry schema,
 states, and each agent's hooks), [configuration](docs/configuration.md),
 [privacy](docs/privacy.md), [remote deployment](docs/remote-deployment.md),
-[troubleshooting](docs/troubleshooting.md), and
+[troubleshooting](docs/troubleshooting.md),
+[comparison with similar tools](docs/comparison.md), and
 [versioning](docs/releasing.md).
 
 ## Architecture

@@ -8,7 +8,7 @@
  * @description Loads and saves view preferences (theme, sort order, history filter) through the Python bridge.
  */
 
-// Earlier versions stored the theme only here; it now caches the theme for the first paint.
+// Caches the theme for the first paint, before the state file is read.
 const THEME_CACHE_KEY = 'vauxhall-theme';
 const SAVE_DELAY_MS = 500;
 
@@ -128,29 +128,22 @@ export function createPreferenceSaver(ipc) {
 }
 
 /**
- * Applies saved preferences the user hasn't already changed, and copies a
- * theme cached by earlier versions into the state file.
+ * Applies saved preferences the user hasn't already changed.
  * @param {object} ipc - The DashboardIPC bridge.
  * @param {object} view - Current state, callbacks, and elements to update.
- * @param {string | null} view.cached - The theme cached in localStorage.
  * @param {Set<string>} view.changed - Preferences the user changed before loading finished.
  * @param {(theme: string) => void} view.applyTheme - Applies a theme.
  * @param {(sort: string, attentionFirst: boolean) => void} view.applySort - Re-sorts the cards after a sort order or the attention-first toggle is restored.
- * @param {(changes: object) => void} view.save - Saves preference changes.
  * @param {HTMLSelectElement | null} view.sortSelect - The card sort select.
  * @param {HTMLSelectElement | null} view.historyFilter - The history state filter select.
  * @param {HTMLInputElement | null} [view.attentionFirstToggle] - The "Attention first" checkbox.
  * @param {HTMLInputElement | null} [view.notifyToggle] - The "Notify me" checkbox.
  */
-export async function restorePreferences(ipc, { cached, changed, applyTheme, applySort, save, sortSelect, historyFilter, attentionFirstToggle, notifyToggle }) {
+export async function restorePreferences(ipc, { changed, applyTheme, applySort, sortSelect, historyFilter, attentionFirstToggle, notifyToggle }) {
     const preferences = await loadPreferences(ipc);
     const restore = (key) => Object.hasOwn(preferences, key) && !changed.has(key);
 
-    if (restore('theme') && isTheme(preferences.theme)) {
-        applyTheme(preferences.theme);
-    } else if (!isTheme(preferences.theme) && isTheme(cached) && !changed.has('theme')) {
-        save({ theme: cached });
-    }
+    if (restore('theme') && isTheme(preferences.theme)) applyTheme(preferences.theme);
 
     const attentionFirstRestored = restore('attention_first') && Boolean(attentionFirstToggle);
     if (attentionFirstRestored) attentionFirstToggle.checked = Boolean(preferences.attention_first);

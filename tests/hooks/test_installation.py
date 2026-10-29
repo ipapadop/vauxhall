@@ -145,17 +145,10 @@ def test_hook_command_encodes_windows_metacharacters() -> None:
         pytest.param(
             _encode(f"& 'C:/Vauxhall/python.exe' -P -m {MODULE}"), id="windows"
         ),
-        pytest.param(f"/venv/bin/python -m {MODULE}", id="posix-without-P"),
-        pytest.param(
-            _encode(f"& 'C:/Vauxhall/python.exe' -m {MODULE}"), id="windows-without-P"
-        ),
     ],
 )
 def test_is_hook_handler_matches_generated_commands(command: str) -> None:
     """Generated invocations of the hook module must be recognized.
-
-    Commands written before ``-P`` are still this installer's, so a reinstall
-    replaces them instead of adding a second handler.
 
     Args:
         command: The case's command.
@@ -170,6 +163,7 @@ def test_is_hook_handler_matches_generated_commands(command: str) -> None:
     [
         pytest.param(f"python -c \"print('{MODULE}')\"", id="mentions-module"),
         pytest.param(f"echo -m {MODULE}", id="not-python"),
+        pytest.param(f"/venv/bin/python -m {MODULE}", id="without-P"),
         pytest.param(f"/venv/bin/python -m {MODULE}.other", id="other-module"),
         pytest.param(f"/venv/bin/python -X -m {MODULE}", id="other-option"),
         pytest.param(f"/venv/bin/python -P -P -m {MODULE}", id="repeated-option"),
@@ -797,41 +791,6 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
         assert commands == [[venv_python, "-P", "-m", installer.HOOK_MODULE]]
     assert not list(settings_file.parent.glob("*.tmp"))
     assert json.loads(settings_file.with_suffix(".json.bak").read_text()) == original
-
-
-@INSTALLERS
-def test_reinstall_replaces_commands_written_before_isolation(
-    installer: ModuleType, tmp_path: Path
-) -> None:
-    """Handlers from before ``-P`` are replaced, not kept beside the new ones.
-
-    Args:
-        installer: The installer module under test.
-        tmp_path: Pytest temporary directory.
-    """
-    settings_file = _settings_file(installer, tmp_path)
-    settings_file.parent.mkdir()
-    old = shlex.join([VENV_PYTHON, "-m", installer.HOOK_MODULE])
-    settings_file.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    event: [
-                        {"matcher": "*", "hooks": [{"type": "command", "command": old}]}
-                    ]
-                    for event in installer.HANDLERS
-                }
-            }
-        )
-    )
-
-    _install(installer, tmp_path)
-
-    settings = json.loads(settings_file.read_text())
-    for event in installer.HANDLERS:
-        assert [handler["command"] for handler in _handlers(settings, event)] == [
-            shlex.join([VENV_PYTHON, "-P", "-m", installer.HOOK_MODULE])
-        ]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="runs the POSIX command form")

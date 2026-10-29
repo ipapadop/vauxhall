@@ -224,13 +224,11 @@ async function init() {
         preferences = createPreferenceSaver(window.ipc?.DashboardIPC);
         window.addEventListener?.('pagehide', preferences.flush);
         restorePreferences(window.ipc?.DashboardIPC, {
-            cached: initialTheme,
             changed: changedPreferences,
             applyTheme,
             applySort: (sort, attentionFirst) => {
                 if (grid.children.length) sortGrid(sort, grid, attentionFirst);
             },
-            save: preferences.save,
             sortSelect,
             historyFilter,
             attentionFirstToggle,

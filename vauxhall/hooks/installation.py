@@ -38,8 +38,6 @@ class HookInstaller:
             workspace.
         handlers: Handler fields, other than type and command, for each event.
         next_step: Message printed after a successful installation.
-        is_owned: Predicate for previously installed handlers to replace;
-            defaults to generated commands that run ``module``.
         option_keys: Keys under ``hooks`` that hold options rather than events.
         defaults: Top-level settings to add when absent.
     """
@@ -49,7 +47,6 @@ class HookInstaller:
     settings_path: Path
     handlers: Mapping[str, Mapping[str, Any]]
     next_step: str
-    is_owned: Callable[[object], bool] | None = None
     option_keys: frozenset[str] = frozenset()
     defaults: Mapping[str, Any] | None = None
 
@@ -62,8 +59,6 @@ class HookInstaller:
         Returns:
             Whether a previous run of this installer wrote the handler.
         """
-        if self.is_owned is not None:
-            return self.is_owned(handler)
         return is_hook_handler(handler, self.module)
 
 
@@ -103,8 +98,8 @@ def _is_hook_invocation(command: str, module: str) -> bool:
         module: The hook module the command is expected to run.
 
     Returns:
-        Whether the command is a Python interpreter running that module, with
-        or without the ``-P`` that commands written by older versions lack.
+        Whether the command is a Python interpreter running that module with
+        ``-P``.
     """
     try:
         arguments = shlex.split(command)
@@ -112,13 +107,11 @@ def _is_hook_invocation(command: str, module: str) -> bool:
         return False
     if arguments[:1] == ["&"]:
         arguments = arguments[1:]
-    if arguments[1:2] == ["-P"]:
-        arguments = [arguments[0], *arguments[2:]]
-    if len(arguments) != 3:
+    if len(arguments) != 4:
         return False
     executable_name = arguments[0].replace("\\", "/").rsplit("/", maxsplit=1)[-1]
     is_python = executable_name.casefold() in {"python", "python.exe"}
-    return is_python and arguments[1:] == ["-m", module]
+    return is_python and arguments[1:] == ["-P", "-m", module]
 
 
 def validate_hook_settings(

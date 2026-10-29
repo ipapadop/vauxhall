@@ -55,15 +55,13 @@ function selects() {
  * Returns restorePreferences options that record what they apply and save.
  */
 function view(overrides = {}) {
-    const calls = { themes: [], sorts: [], attentionFirsts: [], saved: [] };
+    const calls = { themes: [], sorts: [], attentionFirsts: [] };
     return {
         calls,
         options: {
-            cached: null,
             changed: new Set(),
             applyTheme: theme => calls.themes.push(theme),
             applySort: (sort, attentionFirst) => { calls.sorts.push(sort); calls.attentionFirsts.push(attentionFirst); },
-            save: changes => calls.saved.push(changes),
             ...selects(),
             ...overrides,
         },
@@ -174,7 +172,6 @@ test('restores theme, sort, and history filter', async () => {
     assert.deepEqual(calls.sorts, ['recent']);
     assert.equal(options.sortSelect.value, 'recent');
     assert.equal(options.historyFilter.value, 'Error');
-    assert.deepEqual(calls.saved, []);
 });
 
 test('preferences changed before loading finished are not overwritten', async () => {
@@ -203,14 +200,6 @@ test('ignores saved values the page does not offer', async () => {
     assert.deepEqual(calls.sorts, []);
     assert.equal(options.sortSelect.value, 'name');
     assert.equal(options.historyFilter.value, 'ALL');
-});
-
-test('copies a theme cached by earlier versions into the state file', async () => {
-    const { calls, options } = view({ cached: 'light' });
-
-    await restorePreferences({ get_ui_state: async () => '{}' }, options);
-
-    assert.deepEqual(calls.saved, [{ theme: 'light' }]);
 });
 
 test('restores the attention-first and notify checkboxes', async () => {
@@ -261,17 +250,6 @@ test('missing attention-first and notify toggles are tolerated', async () => {
     const { options } = view();
 
     await restorePreferences({ get_ui_state: async () => '{"attention_first":true,"notify":true}' }, options);
-});
-
-test('a saved or already changed theme is not replaced by the cached theme', async () => {
-    const saved = view({ cached: 'light' });
-    await restorePreferences({ get_ui_state: async () => '{"theme":"dark"}' }, saved.options);
-    assert.deepEqual(saved.calls.themes, ['dark']);
-    assert.deepEqual(saved.calls.saved, []);
-
-    const changed = view({ cached: 'light', changed: new Set(['theme']) });
-    await restorePreferences({ get_ui_state: async () => '{}' }, changed.options);
-    assert.deepEqual(changed.calls.saved, []);
 });
 
 function dashboardPage(t, ipc, storage = {}) {

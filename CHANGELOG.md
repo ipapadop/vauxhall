@@ -189,8 +189,9 @@ The first release, planned as 0.1.0. It is alpha software; see
   Agents run hooks in their workspace, and without `-P` Python searched it
   first, so a repository containing its own `vauxhall` package ran that
   code on every hook event. The installer's `venv` and `pip` steps use `-P`
-  too. Reinstall the hooks to update existing settings, for example with
-  **Install Hooks…** → Reinstall in the dashboard.
+  too. A reinstall doesn't recognize handlers written without `-P`, so remove
+  them first, as described in
+  https://github.com/ipapadop/vauxhall#uninstalling, then reinstall the hooks.
 - Logs show control characters in messages, tracebacks, and stacks as
   `\xNN`. A terminal escape sequence in an MQTT topic, which the dashboard
   logs when it drops a message, could otherwise rewrite the terminal showing

@@ -40,7 +40,6 @@ from vauxhall.dashboard.settings_editor import (
     changed_fields,
     error_field,
     hook_changes_for,
-    hook_config_type,
 )
 from vauxhall.dashboard.ui_state import (
     INSTALL_DIRECTORY_KEY,
@@ -50,6 +49,7 @@ from vauxhall.dashboard.ui_state import (
     window_geometry,
 )
 from vauxhall.hooks.agents import detect_agents
+from vauxhall.hooks.config import HookConfig
 
 logger = get_logger(__name__)
 
@@ -372,7 +372,7 @@ class DashboardApp:
                 file = "hooks"
                 hook_changes = hook_changes_for(changes, settings.mqtt)
                 if hook_changes:
-                    check_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                    check_user_config(HOOKS_FILE, HookConfig, hook_changes)
                 file = "dashboard"
             if changes:
                 save_user_config(DASHBOARD_FILE, DashboardConfig, changes)
@@ -390,7 +390,7 @@ class DashboardApp:
         hooks_error = None
         if hook_changes:
             try:
-                save_user_config(HOOKS_FILE, hook_config_type(), hook_changes)
+                save_user_config(HOOKS_FILE, HookConfig, hook_changes)
             except (ConfigurationError, OSError) as error:
                 logger.warning("Hooks configuration not saved: %s", error)
                 hooks_error = str(error)

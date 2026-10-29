@@ -395,8 +395,7 @@ The installer:
   Base64-encoded PowerShell on Windows, so path metacharacters are not
   interpreted. `-P` keeps the workspace off `sys.path`: the agent runs hooks
   there, and without it a repository's own `vauxhall` package would run in
-  place of the installed hooks. Handlers written without `-P` are still
-  recognized, so a reinstall replaces them.
+  place of the installed hooks.
 - Gives each handler a 3-second timeout; the MQTT connection attempt is limited
   to 1 second. Handlers are synchronous so tool start and completion events stay
   in order.
@@ -518,8 +517,7 @@ The installer:
   puts back the environment that install set aside, when its own was left
   incomplete, and removes the copy otherwise.
 - Removes only handlers that Vauxhall generated: commands with the installed
-  hook module invocation, or the named handlers from earlier installers that
-  ran `hooks/gemini/telemetry_hook.py` from a checkout. User hooks, including
+  hook module invocation. User hooks, including
   ones whose names start with `vauxhall-`, and the `enabled`, `disabled`, and
   `notifications` hook options are kept.
 - Registers `vauxhall-thinking` (`BeforeAgent`), `vauxhall-idle`

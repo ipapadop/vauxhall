@@ -4,7 +4,6 @@
 """Tests for the Gemini-specific behavior of the Vauxhall hook installer."""
 
 import json
-import shlex
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +11,7 @@ from vauxhall.hooks import installation
 from vauxhall.hooks.gemini import install as installer
 
 # Installation makes the interpreter path absolute, so a stubbed one is already
-# absolute in the host's own flavour and the expected command stays exact.
+# absolute in the host's own flavour.
 VENV_PYTHON = str(Path("/venv/bin/python").absolute())
 
 
@@ -39,12 +38,7 @@ def test_purge_removes_only_generated_vauxhall_handlers() -> None:
     generated = {
         "name": "vauxhall-acting",
         "type": "command",
-        "command": "/venv/bin/python -m vauxhall.hooks.gemini.telemetry_hook",
-    }
-    legacy = {
-        "name": "vauxhall-acting",
-        "type": "command",
-        "command": "/venv/bin/python /src/vauxhall/hooks/gemini/telemetry_hook.py",
+        "command": "/venv/bin/python -P -m vauxhall.hooks.gemini.telemetry_hook",
     }
     user_prefixed = {
         "name": "vauxhall-custom",
@@ -63,7 +57,6 @@ def test_purge_removes_only_generated_vauxhall_handlers() -> None:
                     "matcher": "*",
                     "hooks": [
                         generated,
-                        legacy,
                         user_prefixed,
                         user_named_like_vauxhall,
                     ],
@@ -74,7 +67,7 @@ def test_purge_removes_only_generated_vauxhall_handlers() -> None:
     }
 
     installation.purge_hook_handlers(
-        settings, installer._is_vauxhall_handler, installer._HOOK_OPTION_KEYS
+        settings, installer.INSTALLER.owns, installer._HOOK_OPTION_KEYS
     )
 
     assert settings == {
@@ -100,47 +93,3 @@ def test_reinstall_keeps_hook_options(tmp_path: Path) -> None:
     settings = _install(tmp_path)
 
     assert {key: settings["hooks"][key] for key in options} == options
-
-
-def test_reinstall_replaces_legacy_source_checkout_handlers(tmp_path: Path) -> None:
-    """Handlers that ran the hook from a source checkout must be replaced.
-
-    Args:
-        tmp_path: Pytest temporary directory.
-    """
-    settings_file = tmp_path / installer.SETTINGS_PATH
-    settings_file.parent.mkdir()
-    legacy_handler = {
-        "name": "vauxhall-acting",
-        "type": "command",
-        "command": "/old/venv/bin/python /src/vauxhall/hooks/gemini/telemetry_hook.py",
-        "description": "Vauxhall telemetry for Gemini tool execution",
-    }
-    settings_file.write_text(
-        json.dumps(
-            {"hooks": {"BeforeTool": [{"matcher": "*", "hooks": [legacy_handler]}]}}
-        )
-    )
-
-    settings = _install(tmp_path)
-
-    assert settings["hooks"]["BeforeTool"] == [
-        {
-            "matcher": "*",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": shlex.join(
-                        [
-                            VENV_PYTHON,
-                            "-P",
-                            "-m",
-                            "vauxhall.hooks.gemini.telemetry_hook",
-                        ]
-                    ),
-                    "name": "vauxhall-acting",
-                    "description": "Vauxhall telemetry for Gemini tool execution",
-                }
-            ],
-        }
-    ]

@@ -14,6 +14,7 @@ from vauxhall.core.config_store import (
     user_config_path,
 )
 from vauxhall.dashboard.config import DashboardConfig
+from vauxhall.hooks.config import HookConfig
 
 DASHBOARD_FILE = "vauxhall_dashboard.json"
 
@@ -55,21 +56,7 @@ def apply_mode(key: str) -> str:
     return APPLY_MODES.get(key, "restart")
 
 
-def hook_config_type() -> type[Any]:
-    """Import the hook configuration type on first use.
-
-    Importing ``vauxhall.hooks.config`` no longer loads the hooks file (its
-    ``hook_settings`` loads on first access), so this only defers the import.
-
-    Returns:
-        The ``HookConfig`` dataclass.
-    """
-    from vauxhall.hooks.config import HookConfig  # noqa: PLC0415
-
-    return HookConfig
-
-
-def _load_hook_config() -> Any:  # noqa: ANN401
+def _load_hook_config() -> HookConfig:
     """Load the hooks file as hooks read it, without the dashboard's environment.
 
     Returns:
@@ -78,8 +65,7 @@ def _load_hook_config() -> Any:  # noqa: ANN401
     Raises:
         ConfigurationError: If the hooks file is malformed or invalid.
     """
-    config_type = hook_config_type()
-    return config_type.load(environment=saver_environment(config_type))
+    return HookConfig.load(environment=saver_environment(HookConfig))
 
 
 def _field_type(default: object) -> str:

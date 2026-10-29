@@ -28,7 +28,8 @@ status views and are left out.
   stats.
   [Claude-Code-Agent-Monitor](https://github.com/hoangsonww/Claude-Code-Agent-Monitor)
   (hoangsonww): Express and SQLite, a Kanban board, web push, macOS and
-  Windows apps; it can launch and resume agents.
+  Windows apps; it mirrors other machines' transcripts over SSH and can
+  launch and resume agents.
 - **Hook, MQTT, home automation.**
   [Claude Fleet](https://github.com/leftover-salmon/home-assistant-claude-fleet):
   a shell hook publishes with `mosquitto_pub`; Home Assistant sensors and a
@@ -60,8 +61,10 @@ status views and are left out.
 ## Feature comparison
 
 Only Vauxhall and the OpenTelemetry observatory cover Claude Code, Codex, and
-Gemini CLI together. Only Vauxhall and Claude Fleet are built to collect from
-many machines. Rows are ordered by closeness to Vauxhall's design.
+Gemini CLI together. Three tools collect from many machines: Vauxhall and
+Claude Fleet receive live hook events over MQTT, and Claude-Code-Agent-Monitor
+copies transcripts over SSH or accepts pushes over authenticated HTTP. Rows
+are ordered by closeness to Vauxhall's design.
 
 | Tool | Agents | Collection and transport | UI | OS | Many machines | Acts on agents | Alerts |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -70,7 +73,7 @@ many machines. Rows are ordered by closeness to Vauxhall's design.
 | ai-coding-agent-observatory | Claude Code, Codex, Gemini CLI | Native OpenTelemetry, collector | Web (Next.js) | Docker | Optional AWS mirror | No | Not documented |
 | claude-code-hooks-multi-agent-observability | Claude Code | Hooks, HTTP, WebSocket | Web (Vue) | Bun, localhost | Not documented | No | Text-to-speech |
 | agents-observe | Claude Code (Codex planned) | Hooks, HTTP, WebSocket | Web (React) | Node or Docker | Not documented | No | Browser bell |
-| Claude-Code-Agent-Monitor | Claude Code, Codex, Cursor | Hooks and transcripts, HTTP, WebSocket or SSE | Web, macOS and Windows apps, VS Code | macOS, Windows, containers | Remote data sources, token authentication | Launch, resume, follow-up | Web push, webhooks |
+| Claude-Code-Agent-Monitor | Claude Code, Codex, Cursor | Hooks and transcripts, HTTP, WebSocket or SSE | Web, macOS and Windows apps, VS Code | macOS, Windows, containers | Yes: SSH transcript sync every 15 seconds, or token-authenticated HTTP push | Launch, resume, follow-up | Web push, webhooks |
 | eyes-on-claude-code | Claude Code | Hooks, JSONL file | Tray and dashboard (Tauri) | macOS (Linux, Windows untested) | No | Types into tmux panes | Sounds |
 | claude-code-monitor | Claude Code | Hooks, state files | TUI and mobile web | macOS | No; phone over LAN or Tailscale | Focuses and types into terminals | Not documented |
 | claude-view | Claude Code | Transcripts and hooks | Web, mobile app | macOS | No | Chat into live sessions | Not documented |
@@ -83,9 +86,10 @@ Every peer that states a license uses MIT, as Vauxhall does.
 ## Where Vauxhall differs
 
 - **Collection from many machines.** Hooks publish to a broker, so agents on
-  laptops, servers, and containers appear on one dashboard. The web peers
-  bind to localhost and document no remote hook path; only Claude Fleet is
-  also built for this.
+  laptops, servers, and containers appear on one dashboard as events happen.
+  Claude Fleet does the same over MQTT. Claude-Code-Agent-Monitor polls other
+  machines' transcripts over SSH every 15 seconds, or accepts authenticated
+  HTTP pushes. The other peers document one machine only.
 - **Three agents through their hooks.** Hooks report live states such as
   `Waiting for Input`, which drive the attention-first sort and
   notifications. The OpenTelemetry observatory also covers all three agents,
@@ -95,11 +99,13 @@ Every peer that states a license uses MIT, as Vauxhall does.
   claude-view can type into or launch sessions, so their UI is a way into the
   agents.
 - **Bounded telemetry that stays off disk.** Both sides validate one shared
-  schema; strings over 4,096 characters are cut and Gemini's `args` is left
-  out. Prompts and commands are published, as with most peers, but the
+  schema; strings over 4,096 characters are cut, and Gemini's `args`, the
+  complete tool input, is left out when it is longer. Prompts, commands, and
+  smaller Gemini tool inputs are published, as with most peers, but the
   dashboard keeps them in memory only: saved cards hold no prompt, message,
-  command, or history. The web peers store full event payloads in SQLite,
-  and Claude Fleet records the last prompt in Home Assistant's database and
+  command, or history. disler's dashboard, agents-observe, and
+  Claude-Code-Agent-Monitor store full event payloads in SQLite, and Claude
+  Fleet records the last prompt in Home Assistant's database and
   sends the transcript's tail to an LLM for a summary. See
   [privacy.md](privacy.md).
 - **Hooks that can't block the agent or be redirected.** A hook waits at
@@ -119,7 +125,7 @@ the least from it.
 
 | Gap | Peers that have it | Assessment |
 | --- | --- | --- |
-| Alerts on a phone | Claude Fleet, Claude-Code-Agent-Monitor (web push), claude-code-monitor | Fits: any MQTT client, such as Home Assistant or ntfy, can subscribe to `vauxhall/agents/+/activity` today; worth documenting. |
+| Alerts on a phone | Claude Fleet, Claude-Code-Agent-Monitor (web push) | Fits: Home Assistant can subscribe to `vauxhall/agents/+/activity` today; ntfy needs a small MQTT subscriber that forwards to its HTTP publish endpoint. Worth documenting. |
 | Subagent and agent-team view | disler, agents-observe, claude-view, Claude-Code-Agent-Monitor | Worth evaluating: group subagent events under the parent card if Claude Code's subagent hooks name the parent session. |
 | Cumulative tokens and cost per session, plan limits | agents-observe, claude-view, Claude Fleet | Possible: a running token total per session; cost needs a price table that goes stale. |
 | Setup without a broker | claude-code-dashboard, lazyagent, c9watch | Possible: a one-command local broker in the first-run instructions. |

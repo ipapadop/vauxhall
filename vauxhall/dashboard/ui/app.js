@@ -127,6 +127,11 @@ async function init() {
         if (keys.includes(historyTarget.key)) closeModal();
         if (keys.includes(menuTarget.key)) closeMenu();
     };
+    const removeCard = (key) => {
+        agents[key]?.remove();
+        removeAgent(key);
+        closeDialogsFor([key]);
+    };
 
     // Builds a card whose click and options button act on its key.
     const newCard = (key, data) => createCard(data, (opener) => {
@@ -168,11 +173,7 @@ async function init() {
 
     document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
         for (const [key, card] of Object.entries(agents)) {
-            if (card.classList.contains('stale')) {
-                card.remove();
-                removeAgent(key);
-                closeDialogsFor([key]);
-            }
+            if (card.classList.contains('stale')) removeCard(key);
         }
         refreshSummary();
         scheduleCardSave();
@@ -295,9 +296,7 @@ async function init() {
                 // card would only linger until it went stale.
                 if (isClearedSession(data)) {
                     if (!card) return;
-                    card.remove();
-                    removeAgent(key);
-                    closeDialogsFor([key]);
+                    removeCard(key);
                     refreshSummary();
                     scheduleCardSave();
                     return;
@@ -339,10 +338,7 @@ async function init() {
                 // Denylisted cards go first, so they don't count toward the limit.
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {
-                    if (!denylist.has(cardIdentity(card).agent)) continue;
-                    card.remove();
-                    removeAgent(key);
-                    closeDialogsFor([key]);
+                    if (denylist.has(cardIdentity(card).agent)) removeCard(key);
                 }
                 closeDialogsFor(evictAgents(maxActiveAgents));
 

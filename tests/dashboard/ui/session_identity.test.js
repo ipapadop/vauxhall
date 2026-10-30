@@ -28,7 +28,7 @@ test('a session that changes directory keeps one card showing the latest workspa
     listeners['agent-update']({ ...base, workspace: 'C:\\remote-ish', env: 'remote', state: 'Acting' });
 
     assert.equal(document.getElementById('agent-grid').children.length, 1);
-    const card = agents['["Codex","native:one"]'];
+    const card = agents[agentKey(base)];
     assert.equal(card.history.length, 2);
     assert.deepEqual(cardIdentity(card), { agent: 'Codex', workspace: 'C:\\remote-ish', session_id: 'native:one' });
     const badge = card.querySelector('.env-badge');
@@ -57,7 +57,8 @@ test('a cleared session removes its card and saves the remaining cards', async (
     listeners['agent-update']({ ...base, session_id: 'old', state: 'Thinking', details: {} });
     listeners['agent-update']({ ...base, session_id: 'new', state: 'Thinking', details: {} });
 
-    const card = agents['["Claude Code","old"]'];
+    const oldKey = agentKey({ ...base, session_id: 'old' });
+    const card = agents[oldKey];
     const opener = card.querySelector('.agent-workspace');
     opener.click();
     const focused = [];
@@ -67,7 +68,7 @@ test('a cleared session removes its card and saves the remaining cards', async (
         ...base, session_id: 'old', state: 'Idle', details: { status: 'session cleared', end_reason: 'clear' },
     });
 
-    assert.equal(agents['["Claude Code","old"]'], undefined);
+    assert.equal(agents[oldKey], undefined);
     assert.ok(!card.isConnected);
     assert.equal(document.getElementById('agent-grid').children.length, 1);
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
@@ -93,7 +94,7 @@ test('another session end keeps its card', async (t) => {
 
     listeners['agent-update']({ ...base, state: 'Idle', details: { status: 'logged out', end_reason: 'logout' } });
 
-    assert.equal(agents['["Claude Code","one"]'].dataset.state, 'Idle');
+    assert.equal(agents[agentKey(base)].dataset.state, 'Idle');
 });
 
 test('a card reports the identity it was built from', async (t) => {

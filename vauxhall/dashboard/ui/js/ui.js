@@ -181,12 +181,14 @@ function setWorkspace(card, data) {
     const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
     const env = configuredEnv || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
     const envBadge = card.querySelector('.env-badge');
+    const workspaceButton = card.querySelector('.agent-workspace');
+    // Rewriting unchanged text would drop a selection in it on every event.
+    if (workspaceButton.textContent === workspace && envBadge.textContent === env) return;
     envBadge.classList.remove('env-local', 'env-remote');
     envBadge.classList.add(`env-${env}`);
     envBadge.textContent = env;
 
     const { agent, session_id: sessionId } = cardIdentity(card);
-    const workspaceButton = card.querySelector('.agent-workspace');
     workspaceButton.textContent = workspace;
     workspaceButton.setAttribute('aria-label', `Open activity for ${agent} in ${workspace}, session ${sessionId}`);
     card.querySelector('.menu-icon').setAttribute('aria-label', `Options for ${agent} in ${workspace}, session ${sessionId}`);
@@ -270,6 +272,7 @@ function appendDetails(container, data) {
  *   wasn't, and the event's log message.
  */
 export function updateCard(card, data) {
+    // An update that names no workspace keeps the card's current one.
     if (typeof data.workspace === 'string') setWorkspace(card, data);
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');

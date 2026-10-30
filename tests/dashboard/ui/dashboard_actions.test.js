@@ -241,6 +241,38 @@ test('a copy that finishes after the pane moved to another card leaves its statu
     assert.equal(document.getElementById('modal-copy-status').textContent, '');
 });
 
+test('a copy outcome is cleared when the session moves to another workspace', async (t) => {
+    const { document, listeners } = await bootDashboard(t);
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","one"]'].click();
+    document.getElementById('modal-copy-path').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const status = document.getElementById('modal-copy-status');
+    assert.equal(status.textContent, 'Copied!');
+
+    listeners['agent-update']({ ...BASE, session_id: 'one', state: 'Acting' });
+    assert.equal(status.textContent, 'Copied!');
+
+    listeners['agent-update']({ ...BASE, session_id: 'one', workspace: '/home/user/project/models' });
+    assert.equal(status.textContent, '');
+});
+
+test('a copy that finishes after the session moved to another workspace leaves its status alone', async (t) => {
+    let finish;
+    const { document, listeners } = await bootDashboard(t, {
+        copy_to_clipboard: () => new Promise((resolve) => { finish = resolve; }),
+    });
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","one"]'].click();
+    document.getElementById('modal-copy-path').click();
+
+    listeners['agent-update']({ ...BASE, session_id: 'one', workspace: '/home/user/project/models' });
+    finish(true);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.getElementById('modal-copy-status').textContent, '');
+});
+
 test('a copy the bridge cannot make reports failure', async (t) => {
     const { document, listeners } = await bootDashboard(t, { copy_to_clipboard: undefined });
     listeners['agent-update']({ ...BASE, session_id: 'one' });

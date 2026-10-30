@@ -199,9 +199,11 @@ async function init() {
         if (!card || !status) return;
         // Cleared first, so a repeated outcome is announced again.
         status.textContent = '';
-        const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, cardIdentity(card).workspace);
-        // The pane may have closed, or moved to another card, meanwhile.
-        if (historyTarget.key === key) status.textContent = outcome;
+        const { workspace } = cardIdentity(card);
+        const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, workspace);
+        // The pane may have closed, moved to another card, or shown the
+        // session's next workspace meanwhile.
+        if (historyTarget.key === key && cardIdentity(card).workspace === workspace) status.textContent = outcome;
     });
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
     historyFilter?.addEventListener('change', (e) => {

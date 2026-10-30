@@ -106,7 +106,7 @@ to you and ignores this setting. See
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `VAUXHALL_SESSION_ID` | Hooks | Session ID to use when the agent's hook event has neither a session ID nor a transcript path. Without any of the three, the hook skips the event. |
+| `VAUXHALL_SESSION_ID` | Hooks | Session ID to use when the agent's hook event has neither a session ID nor a transcript path. Without any of the three, the hook skips the event. Set it per session, not once in a shell profile: sessions of one agent that share it share one card, even in different workspaces. |
 
 `dashboard.port` is the port of the dashboard's own UI server, which listens
 only on `127.0.0.1`. It is unrelated to the MQTT port.
@@ -204,8 +204,8 @@ Unknown keys and invalid values are ignored. An unreadable or corrupt file is
 logged and treated as empty.
 
 Separately, `~/.config/vauxhall/dashboard_cards.json` keeps each card's
-identity (agent, workspace, session ID, last known state, env, and last-seen
-time) so the grid is redrawn on the next start; a restored card shows no
+identity (agent and session ID) with its latest workspace, last known state,
+env, and last-seen time, so the grid is redrawn on the next start; a restored card shows no
 activity log until its agent reports again. Saved half a second after a card
 is added, updated, or removed, or right away when the dashboard closes.
 **Clear** and **Clear Stale** remove the matching cards from this file too.
@@ -219,7 +219,7 @@ written here; see [privacy.md](privacy.md#retention).
 | `~/.config/vauxhall/vauxhall_dashboard.json` | Settings dialog | Changed dashboard settings |
 | `~/.config/vauxhall/vauxhall_hooks.json` | Settings dialog, when **Also update hooks configuration** is checked | Changed hook MQTT settings |
 | `~/.config/vauxhall/dashboard_state.json` | Dashboard | Theme, sort order, history filter, attention first, notify, window geometry |
-| `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities: agent, workspace, session ID, last known state, env, last-seen time |
+| `~/.config/vauxhall/dashboard_cards.json` | Dashboard | Card identities (agent, session ID), with latest workspace, last known state, env, last-seen time |
 | `~/.config/vauxhall/dashboard.lock` | Dashboard, while it runs | Its process ID, host name, and program name, so a second dashboard is refused |
 | `<workspace>/.vauxhall-venv/` | `vauxhall-hook-install` | The isolated environment the hooks run from |
 | `.claude/settings.local.json`, `.codex/hooks.json`, `.gemini/settings.json` | `vauxhall-hook-install` | Hook registrations, with a `.bak` copy of the file (`{}` if there was none); an existing `.bak` is never replaced |

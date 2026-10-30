@@ -220,7 +220,9 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   events only when scrolled to the bottom and not hovered. When the rows
   shown are the same entries, as on each 10-second staleness sweep, only
   their durations and bar widths change, so a text selection survives and
-  the bars animate; other changes rebuild the rows. A container query puts
+  the bars animate; other changes rebuild the rows. The header follows a
+  workspace change, which also clears a **Copy path** outcome, since it
+  described the previous path. A container query puts
   each row's details on their own line when the pane is under 560 pixels
   wide.
 - **Staleness**: A card with no events for `stale_threshold` seconds (120 by
@@ -229,7 +231,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   (`ui.copyWorkspacePath`, which returns `Copied!`, or `Copy failed` also
   when the bridge can't copy) and shows the outcome in its `role="status"`
   region, cleared first so a repeat is announced, and only while the pane
-  still shows the card that was copied. Telemetry is never inserted into HTML markup or
+  still shows the card and workspace that were copied. Telemetry is never inserted into HTML markup or
   shell commands.
 - **Agent menu**: A card's ⋮ button opens a `<dialog>` with two actions.
   **Hide until next event** sets `display: none` on that card (tracked

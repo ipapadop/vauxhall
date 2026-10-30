@@ -9,7 +9,10 @@ import { parseHTML } from 'linkedom';
 
 import { closeDialog, openDialog } from '../../../vauxhall/dashboard/ui/js/dialog.js';
 import { initInstall } from '../../../vauxhall/dashboard/ui/js/install.js';
+import { agentKey, agents } from '../../../vauxhall/dashboard/ui/js/state.js';
 import { createCard, sortGrid, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+
+import { bootDashboard } from './helpers.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
 
@@ -315,3 +318,22 @@ test('each install agent checkbox is named by a label for it', async (t) => {
         assert.ok(label?.textContent.trim(), `${box.id} has no label`);
     }
 });
+
+for (const [dialogId, openerSelector] of [['history-modal', '.agent-workspace'], ['card-menu-modal', '.menu-icon']]) {
+    test(`a cleared session closes its open ${dialogId} and hands focus to the grid`, async (t) => {
+        const { document, listeners } = await bootDashboard(t, { ping: async () => false });
+        const identity = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project', session_id: 'old' };
+        listeners['agent-update']({ ...identity, state: 'Thinking', details: {} });
+        const opener = agents[agentKey(identity)].querySelector(openerSelector);
+        const focused = [];
+        opener.focus = () => focused.push('opener');
+        document.getElementById('agent-grid').focus = () => focused.push('grid');
+        opener.click();
+        assert.ok(document.getElementById(dialogId).hasAttribute('open'));
+
+        listeners['agent-update']({ ...identity, state: 'Idle', details: { end_reason: 'clear' } });
+
+        assert.ok(!document.getElementById(dialogId).hasAttribute('open'));
+        assert.deepEqual(focused, ['grid']);
+    });
+}

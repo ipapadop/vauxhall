@@ -101,9 +101,10 @@ Required fields cannot be blank, and unknown top-level fields are rejected.
 most 4,096 characters, numbers, booleans, or `null`; `tokens` and `duration`
 must be numbers, not booleans.
 
-`session_id` is opaque. It must stay the same for a whole session and be unique
-among concurrent sessions of the same agent in the same workspace. Generic
-producers should generate a UUID when the session starts.
+`session_id` is opaque. It must stay the same for a whole session, even when
+the session changes `workspace`, and be unique among concurrent sessions of
+the same agent in any workspace: the dashboard shows one card per agent and
+session ID. Generic producers should generate a UUID when the session starts.
 
 The built-in hooks take the session ID from the agent's native session ID, then
 a hash of the transcript path, then the `VAUXHALL_SESSION_ID` environment

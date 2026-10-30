@@ -59,10 +59,6 @@ test('a cleared session removes its card and saves the remaining cards', async (
 
     const oldKey = agentKey({ ...base, session_id: 'old' });
     const card = agents[oldKey];
-    const opener = card.querySelector('.agent-workspace');
-    opener.click();
-    const focused = [];
-    document.getElementById('agent-grid').focus = () => focused.push('grid');
 
     listeners['agent-update']({
         ...base, session_id: 'old', state: 'Idle', details: { status: 'session cleared', end_reason: 'clear' },
@@ -71,8 +67,6 @@ test('a cleared session removes its card and saves the remaining cards', async (
     assert.equal(agents[oldKey], undefined);
     assert.ok(!card.isConnected);
     assert.equal(document.getElementById('agent-grid').children.length, 1);
-    assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
-    assert.deepEqual(focused, ['grid']);
     assert.match(document.getElementById('fleet-summary').textContent, /\b1\b/);
 
     // An end for a session without a card doesn't create one.

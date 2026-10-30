@@ -559,11 +559,14 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     const { agent, workspace, session_id: sessionId } = cardIdentity(card);
     const setText = (id, text) => {
         const element = document.getElementById(id);
-        if (element && element.textContent !== text) element.textContent = text;
+        if (!element || element.textContent === text) return false;
+        element.textContent = text;
+        return true;
     };
     setText('modal-agent-name', agent);
-    setText('modal-agent-meta', `${workspace} · session ${sessionId}`);
-    if (!isSilent) {
+    const pathChanged = setText('modal-agent-meta', `${workspace} · session ${sessionId}`);
+    // A copy outcome describes the path shown when it was copied.
+    if (!isSilent || pathChanged) {
         const copyStatus = document.getElementById('modal-copy-status');
         if (copyStatus) copyStatus.textContent = '';
     }

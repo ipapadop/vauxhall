@@ -264,6 +264,12 @@ test('a live update re-renders and follows the workspace without reopening the m
     // Unchanged header text keeps its node, so a selection in it survives.
     assert.equal(name.firstChild, nameText);
     assert.equal(document.getElementById('modal-agent-meta').textContent, '/home/user/project/models · session session-1');
+    const status = document.getElementById('modal-copy-status');
+    assert.equal(status.textContent, 'Workspace changed to /home/user/project/models');
+    // A later update in the same workspace doesn't repeat the announcement.
+    status.textContent = 'Copied!';
+    openHistoryModal(KEY, agents, true);
+    assert.equal(status.textContent, 'Copied!');
     assert.ok(!document.getElementById('history-modal').hasAttribute('open'));
     assert.deepEqual(rendered(document).map((item) => item.state), ['Acting', 'Error']);
 });

@@ -130,6 +130,19 @@ test('the pane has a named Copy path button, a polite status, and focuses its fi
     assert.equal(document.getElementById('prompt-modal'), null);
 });
 
+test('the open pane announces a live workspace move in its status region, and opening announces nothing', async (t) => {
+    const { document, listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Codex', session_id: 'one', state: 'Acting', details: {} };
+    listeners['agent-update']({ ...base, workspace: '/home/user/project' });
+    const status = document.getElementById('modal-copy-status');
+
+    agents[agentKey(base)].querySelector('.agent-workspace').click();
+    assert.equal(status.textContent, '');
+
+    listeners['agent-update']({ ...base, workspace: '/home/user/project/models' });
+    assert.equal(status.textContent, 'Workspace changed to /home/user/project/models');
+});
+
 /**
  * Fills a grid with two cards that a name sort has to swap.
  * @param {HTMLElement} grid - The agent grid.

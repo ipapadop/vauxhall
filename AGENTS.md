@@ -222,8 +222,9 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   shown are the same entries, as on each 10-second staleness sweep, only
   their durations and bar widths change, so a text selection survives and
   the bars animate; other changes rebuild the rows. The header follows a
-  workspace change, which also clears a **Copy path** outcome, since it
-  described the previous path. A container query puts
+  workspace change and, since the header isn't a live region, the pane's
+  `role="status"` region announces `Workspace changed to <path>` in place of
+  any **Copy path** outcome, which described the previous path. A container query puts
   each row's details on their own line when the pane is under 560 pixels
   wide.
 - **Staleness**: A card with no events for `stale_threshold` seconds (120 by

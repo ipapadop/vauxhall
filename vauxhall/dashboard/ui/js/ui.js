@@ -567,10 +567,11 @@ export function openHistoryModal(agentKey, agents, isSilent = false) {
     };
     setText('modal-agent-name', agent);
     const pathChanged = setText('modal-agent-meta', `${workspace} · session ${sessionId}`);
-    // A copy outcome describes the path shown when it was copied.
+    // A copy outcome describes the path shown when it was copied. A live
+    // move replaces it with an announcement, since the header isn't live.
     if (!isSilent || pathChanged) {
         const copyStatus = document.getElementById('modal-copy-status');
-        if (copyStatus) copyStatus.textContent = '';
+        if (copyStatus) copyStatus.textContent = isSilent ? `Workspace changed to ${workspace}` : '';
     }
 
     const body = document.getElementById('modal-history-body');

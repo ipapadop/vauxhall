@@ -241,7 +241,7 @@ test('a copy that finishes after the pane moved to another card leaves its statu
     assert.equal(document.getElementById('modal-copy-status').textContent, '');
 });
 
-test('a copy outcome is cleared when the session moves to another workspace', async (t) => {
+test('a copy outcome is replaced by an announcement when the session moves to another workspace', async (t) => {
     const { document, listeners } = await bootDashboard(t);
     listeners['agent-update']({ ...BASE, session_id: 'one' });
     agents['["Codex","one"]'].click();
@@ -254,10 +254,10 @@ test('a copy outcome is cleared when the session moves to another workspace', as
     assert.equal(status.textContent, 'Copied!');
 
     listeners['agent-update']({ ...BASE, session_id: 'one', workspace: '/home/user/project/models' });
-    assert.equal(status.textContent, '');
+    assert.equal(status.textContent, 'Workspace changed to /home/user/project/models');
 });
 
-test('a copy that finishes after the session moved to another workspace leaves its status alone', async (t) => {
+test('a copy that finishes after the session moved to another workspace leaves the move announced', async (t) => {
     let finish;
     const { document, listeners } = await bootDashboard(t, {
         copy_to_clipboard: () => new Promise((resolve) => { finish = resolve; }),
@@ -270,7 +270,7 @@ test('a copy that finishes after the session moved to another workspace leaves i
     finish(true);
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.equal(document.getElementById('modal-copy-status').textContent, '');
+    assert.equal(document.getElementById('modal-copy-status').textContent, 'Workspace changed to /home/user/project/models');
 });
 
 test('a copy that finishes after its card was cleared and built again leaves its status alone', async (t) => {

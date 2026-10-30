@@ -31,8 +31,8 @@ session as a card in a grid.
 - **Session-aware cards**: Cards are keyed by agent and session ID, so
   concurrent sessions in one workspace stay separate, and a session that
   changes directory keeps its card, which shows the latest directory. A
-  session ended by `/clear` is removed, since the agent continues under a new
-  session. Up to 100 cards are kept by default; a new session evicts the least
+  session ended by `/clear`, or left for another by Claude Code's `/resume`,
+  is removed, since the agent continues under another session. Up to 100 cards are kept by default; a new session evicts the least
   recently seen card.
 - **Activity log**: Each card shows its last 5 events, including agent messages,
   with `[HH:mm:ss]`

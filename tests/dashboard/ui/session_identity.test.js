@@ -103,6 +103,17 @@ test('a cleared session removes its card and saves the remaining cards', async (
     assert.deepEqual(saves.at(-1).map((entry) => entry.session_id), ['new']);
 });
 
+test('a session left by /resume removes its card', async (t) => {
+    const { listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project', session_id: 'left' };
+    listeners['agent-update']({ ...base, state: 'Thinking', details: {} });
+
+    listeners['agent-update']({ ...base, state: 'Idle', details: { status: 'session switched', end_reason: 'resume' } });
+
+    // A boolean, since a failing assertion would format the whole DOM.
+    assert.equal(agentKey(base) in agents, false);
+});
+
 test('another session end keeps its card', async (t) => {
     const { listeners } = await bootDashboard(t, { ping: async () => false });
     const base = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project', session_id: 'one' };

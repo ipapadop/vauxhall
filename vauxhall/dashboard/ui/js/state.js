@@ -122,13 +122,18 @@ export function historyDurations(history, now = Date.now()) {
     return history.map((entry, index) => Math.max(0, (index === 0 ? now : history[index - 1].at) - entry.at));
 }
 
+// SessionEnd reasons after which the agent continues under another session:
+// `/clear` starts a new one and `/resume` switches to an earlier one.
+const REPLACING_END_REASONS = new Set(['clear', 'resume']);
+
 /**
- * Returns whether an event ends a session the user cleared, as with `/clear`.
+ * Returns whether an event ends a session the user replaced, as with
+ * `/clear` or `/resume`.
  * @param {object} data - The telemetry data.
- * @returns {boolean} Whether the event reports a session ended by clearing.
+ * @returns {boolean} Whether the event reports a session ended by replacing it.
  */
-export function isClearedSession(data) {
-    return data.state === 'Idle' && data.details?.end_reason === 'clear';
+export function isReplacedSession(data) {
+    return data.state === 'Idle' && REPLACING_END_REASONS.has(data.details?.end_reason);
 }
 
 /**

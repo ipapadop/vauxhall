@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isClearedSession, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
+import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isReplacedSession, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
 import { createCard, copyWorkspacePath, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
@@ -297,9 +297,9 @@ async function init() {
                 let card = agents[key];
                 if (card && isLateFinalMessage(card, data)) return;
 
-                // A cleared session continues under a new session ID, so its
-                // card would only linger until it went stale.
-                if (isClearedSession(data)) {
+                // The agent continues a cleared or resumed-away session under
+                // another session ID, so its card would only linger until stale.
+                if (isReplacedSession(data)) {
                     if (!card) return;
                     removeCard(key);
                     refreshSummary();

@@ -69,8 +69,9 @@ The first release, planned as 0.1.0. It is alpha software; see
 
 - A session that changes directory keeps one card, which shows its latest
   workspace, instead of getting a new card for each directory. A Claude Code
-  or Gemini CLI session ended by `/clear` removes its card, since the agent
-  continues under a new session; its `SessionEnd` telemetry now carries the
+  or Gemini CLI session ended by `/clear`, or a Claude Code session left by
+  `/resume`, removes its card, since the agent continues under another
+  session; its `SessionEnd` telemetry now carries the
   documented reason as `end_reason`. A producer's `session_id` must now be
   unique among an agent's concurrent sessions in every workspace, not only
   in one.

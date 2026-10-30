@@ -158,13 +158,14 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   open activity pane's header follows. The dashboard keeps up to
   `max_active_agents` cards (100 by default); a new identity at capacity evicts
   the least recently seen card.
-- **Cleared sessions**: An `Idle` event whose `details.end_reason` is `clear`
-  (`state.isClearedSession`) removes its card instead of updating it, closes
-  any dialog acting on it, and saves the cards; with no card, it creates none.
-  Claude Code and Gemini CLI continue a cleared session under a new session
-  ID, so the old card would only linger until stale. The hooks publish
-  `end_reason` because the `status` text is for display. A later event for
-  the cleared session would create its card again.
+- **Replaced sessions**: An `Idle` event whose `details.end_reason` is
+  `clear` or `resume` (`state.isReplacedSession`) removes its card instead of
+  updating it, closes any dialog acting on it, and saves the cards; with no
+  card, it creates none. Claude Code and Gemini CLI continue a cleared
+  session under a new session ID, and Claude Code's `/resume` switches to
+  another session, so the old card would only linger until stale. The hooks
+  publish `end_reason` because the `status` text is for display. A later
+  event for the replaced session would create its card again.
 - **Environment badge**: Shows `env`. Without it, workspaces starting with
   `/home` or a Windows drive letter (such as `C:\`) are labeled LOCAL, and all
   others REMOTE. The environment belongs to the session, so an event without

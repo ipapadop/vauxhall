@@ -273,6 +273,24 @@ test('a copy that finishes after the session moved to another workspace leaves i
     assert.equal(document.getElementById('modal-copy-status').textContent, '');
 });
 
+test('a copy that finishes after its card was cleared and built again leaves its status alone', async (t) => {
+    let finish;
+    const { document, listeners } = await bootDashboard(t, {
+        copy_to_clipboard: () => new Promise((resolve) => { finish = resolve; }),
+    });
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","one"]'].click();
+    document.getElementById('modal-copy-path').click();
+
+    listeners['agent-update']({ ...BASE, session_id: 'one', state: 'Idle', details: { end_reason: 'clear' } });
+    listeners['agent-update']({ ...BASE, session_id: 'one' });
+    agents['["Codex","one"]'].click();
+    finish(true);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.getElementById('modal-copy-status').textContent, '');
+});
+
 test('a copy the bridge cannot make reports failure', async (t) => {
     const { document, listeners } = await bootDashboard(t, { copy_to_clipboard: undefined });
     listeners['agent-update']({ ...BASE, session_id: 'one' });

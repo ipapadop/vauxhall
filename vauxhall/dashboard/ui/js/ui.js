@@ -178,9 +178,12 @@ export function createCard(data, openPaneCallback, openMenuCallback) {
  */
 function setWorkspace(card, data) {
     const workspace = String(data.workspace ?? '');
-    const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
-    const env = configuredEnv || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
     const envBadge = card.querySelector('.env-badge');
+    // The environment belongs to the session, not the directory: an event
+    // without env keeps the card's, and the path is a guess for the first.
+    const configuredEnv = data.env === 'local' || data.env === 'remote' ? data.env : null;
+    const env = configuredEnv || envBadge.textContent
+        || (workspace.startsWith('/home') || /^[A-Z]:\\/i.test(workspace) ? 'local' : 'remote');
     const workspaceButton = card.querySelector('.agent-workspace');
     // Rewriting unchanged text would drop a selection in it on every event.
     if (workspaceButton.textContent === workspace && envBadge.textContent === env) return;
@@ -272,8 +275,7 @@ function appendDetails(container, data) {
  *   wasn't, and the event's log message.
  */
 export function updateCard(card, data) {
-    // An update that names no workspace keeps the card's current one.
-    if (typeof data.workspace === 'string') setWorkspace(card, data);
+    setWorkspace(card, data);
     const statusBadge = card.querySelector('.status-badge');
     const logArea = card.querySelector('.log-area');
     const metricsArea = card.querySelector('.metric-badges');

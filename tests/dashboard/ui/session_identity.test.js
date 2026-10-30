@@ -44,6 +44,28 @@ test('a session that changes directory keeps one card showing the latest workspa
     );
 });
 
+test('an event without env keeps the env the session reported', async (t) => {
+    const { listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Custom', session_id: 'one', state: 'Acting', details: {} };
+
+    listeners['agent-update']({ ...base, workspace: '/home/user/project', env: 'remote' });
+    listeners['agent-update']({ ...base, workspace: '/home/user/project/sub' });
+
+    const card = agents[agentKey(base)];
+    assert.equal(card.querySelector('.agent-workspace').textContent, '/home/user/project/sub');
+    assert.equal(card.querySelector('.env-badge').textContent, 'remote');
+});
+
+test('a guessed env stays when the session moves outside /home', async (t) => {
+    const { listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Codex', session_id: 'one', state: 'Acting', details: {} };
+
+    listeners['agent-update']({ ...base, workspace: '/home/user/project' });
+    listeners['agent-update']({ ...base, workspace: '/tmp/scratch' });
+
+    assert.equal(agents[agentKey(base)].querySelector('.env-badge').textContent, 'local');
+});
+
 test('a cleared session removes its card and saves the remaining cards', async (t) => {
     const saves = [];
     const { document, listeners } = await bootDashboard(t, {

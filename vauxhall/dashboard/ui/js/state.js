@@ -26,9 +26,12 @@ export function agentKey(data) {
 }
 
 /**
- * Reads the identity a card was built from.
+ * Reads the agent, session, and current workspace a card shows.
+ *
+ * Only agent and session identify the card (`agentKey`); the workspace can
+ * change during a session.
  * @param {HTMLElement} card - The agent card element.
- * @returns {{agent: string, workspace: string, session_id: string}} The identity.
+ * @returns {{agent: string, workspace: string, session_id: string}} The fields.
  */
 export function cardIdentity(card) {
     return {

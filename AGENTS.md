@@ -153,8 +153,8 @@ and the backend pushes the new stale threshold and card limit back to the UI.
 - **Cards**: A card is identified by `agent` and `session_id` (`state.agentKey`),
   so separate sessions get separate cards. `workspace` is the agent's current
   directory, which can change during a session, so it is not part of the
-  identity: each event sets the card's workspace, environment badge, and the
-  accessible names that include the workspace (`ui.setWorkspace`), and an
+  identity: each event sets the card's workspace, any `env` it reports, and
+  the accessible names that include the workspace (`ui.setWorkspace`), and an
   open activity pane's header follows. The dashboard keeps up to
   `max_active_agents` cards (100 by default); a new identity at capacity evicts
   the least recently seen card.
@@ -167,7 +167,8 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   the cleared session would create its card again.
 - **Environment badge**: Shows `env`. Without it, workspaces starting with
   `/home` or a Windows drive letter (such as `C:\`) are labeled LOCAL, and all
-  others REMOTE.
+  others REMOTE. The environment belongs to the session, so an event without
+  `env` keeps the card's badge, and only the first workspace is guessed from.
 - **Metrics**: Positive `tokens` and `duration` values appear as footer badges.
   They reset when an `Acting` event, or a `Thinking` event with a `prompt`,
   starts a new operation.

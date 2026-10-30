@@ -202,8 +202,11 @@ async function init() {
         const { workspace } = cardIdentity(card);
         const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, workspace);
         // The pane may have closed, moved to another card, or shown the
-        // session's next workspace meanwhile.
-        if (historyTarget.key === key && cardIdentity(card).workspace === workspace) status.textContent = outcome;
+        // session's next workspace meanwhile, or the card may have been
+        // removed and built again.
+        if (historyTarget.key === key && agents[key] === card && cardIdentity(card).workspace === workspace) {
+            status.textContent = outcome;
+        }
     });
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
     historyFilter?.addEventListener('change', (e) => {

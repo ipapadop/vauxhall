@@ -80,7 +80,8 @@ Operation values such as `tool`, `cmd`, `prompt`, `message`, `status`, `error`,
 `tokens`, `duration`, and `end_reason` go in `details`. The dashboard keys a
 card by `agent` and `session_id`; `workspace` is the session's current
 directory, and the card shows the latest one. An `Idle` event with
-`end_reason` `clear` removes its session's card. The optional `env` field is top-level.
+`end_reason` `clear` removes its session's card. The optional `env` field is top-level;
+an event without it keeps the `env` its session last reported.
 
 ## Telemetry Schema
 

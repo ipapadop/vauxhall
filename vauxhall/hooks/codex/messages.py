@@ -11,8 +11,8 @@ from typing import Any
 
 from vauxhall.core.files import NOFOLLOW, write_atomically
 from vauxhall.core.logging import get_logger
-from vauxhall.core.telemetry import message_text
 from vauxhall.hooks.scratch import claim, private_directory, remove_old_files
+from vauxhall.hooks.text import message_text
 
 logger = get_logger(__name__)
 

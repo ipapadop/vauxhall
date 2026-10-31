@@ -12,9 +12,9 @@ from typing import Any
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.logging import get_logger
-from vauxhall.core.telemetry import truncate_text
 from vauxhall.hooks.events import EventHandler, Telemetry
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
+from vauxhall.hooks.text import truncate_text
 
 logger = get_logger(__name__)
 

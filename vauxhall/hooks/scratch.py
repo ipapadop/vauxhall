@@ -21,7 +21,8 @@ from typing import Any
 
 from vauxhall.core.files import NOFOLLOW, write_atomically
 from vauxhall.core.logging import get_logger
-from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH, message_text
+from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
+from vauxhall.hooks.text import message_text
 
 logger = get_logger(__name__)
 

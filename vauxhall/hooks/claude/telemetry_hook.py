@@ -6,9 +6,9 @@
 from functools import partial
 from typing import Any
 
-from vauxhall.core.telemetry import message_text
 from vauxhall.hooks import events, runner, scratch
 from vauxhall.hooks.identity import resolve_session_id
+from vauxhall.hooks.text import message_text
 
 _COMMAND_FIELDS = {"Bash": "command", "PowerShell": "command"}
 _SESSION_END_STATUSES = {

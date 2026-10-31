@@ -10,8 +10,8 @@ A handler translates one hook event into a state and its details, or into
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from vauxhall.core.telemetry import message_text
 from vauxhall.hooks.scratch import record_tool_start, tool_use_identity
+from vauxhall.hooks.text import message_text
 
 Telemetry = tuple[str, dict[str, Any]]
 EventHandler = Callable[[dict[str, Any]], Telemetry | None]

@@ -129,12 +129,22 @@ and the backend pushes the new stale threshold and card limit back to the UI.
 
 ## Project Structure
 
-- `vauxhall/core/`: Configuration, logging, and telemetry validation shared by
-  the dashboard and hooks.
-- `vauxhall/dashboard/`: The Pyloid dashboard and its JavaScript UI.
-- `vauxhall/hooks/`: The telemetry client, shared hook helpers, and the Claude
-  Code, Codex, and Gemini CLI hooks and installers. `agents.py` maps agent keys to installers, for the
-  CLI and the dashboard, and detects a workspace's agents.
+- `vauxhall/core/`: Configuration, logging, telemetry validation, and atomic
+  file writes (`files.py`) shared by the dashboard and hooks.
+- `vauxhall/dashboard/`: The Pyloid dashboard. `main.py` starts the process
+  (instance lock, Chromium flags, UI server); `app.py` holds `DashboardApp`,
+  the window and its events. The UI's `app.js` wires the page to modules in
+  `ui/js/`: `fleet.js` adds, updates, and removes cards, `card.js` renders
+  one, `grid.js` filters, sorts, and summarizes them, and `history.js` draws
+  the activity pane.
+- `vauxhall/hooks/`: The telemetry client, the Claude Code, Codex, and Gemini
+  CLI hooks, and their installer. Each agent's `telemetry_hook.py` maps its
+  events to handlers, most of them shared from `events.py`; `scratch.py`
+  keeps state between hook processes, and `runner.py` runs one event. An
+  agent waits for every hook, so importing one loads neither `subprocess`,
+  `paho`, nor the installer (`test_hook_import_leaves_out_slow_modules`).
+  `agents.py` defines each agent's installer, for the CLI and the dashboard,
+  and detects a workspace's agents.
 - `docs/`: User documentation and the dashboard screenshot shown in the README.
 - `scripts/`: The agent simulator and a logging color check.
 - `scripts/release_notes.py`: The release workflow's tag and changelog check.
@@ -154,7 +164,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   so separate sessions get separate cards. `workspace` is the agent's current
   directory, which can change during a session, so it is not part of the
   identity: each event sets the card's workspace, any `env` it reports, and
-  the accessible names that include the workspace (`ui.setWorkspace`), and an
+  the accessible names that include the workspace (`card.setWorkspace`), and an
   open activity pane's header follows. The dashboard keeps up to
   `max_active_agents` cards (100 by default); a new identity at capacity evicts
   the least recently seen card.
@@ -212,7 +222,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   rows). Durations measure arrival at the frontend, since telemetry carries
   no timestamp, so events delivered together, such as the backlog sent when
   the window becomes ready, show near-zero durations. Each row's class
-  (`state-<category>` from `ui.stateCategory`, which also sets the card's
+  (`state-<category>` from `card.stateCategory`, which also sets the card's
   `error`, `waiting`, or `working` class) colors its left border and an
   `aria-hidden` bar; the state label keeps the text color for contrast. A
   bar's width is its duration relative to the longest finished entry shown,
@@ -231,7 +241,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
 - **Staleness**: A card with no events for `stale_threshold` seconds (120 by
   default) turns gray and shows `STALE`. Staleness is checked every 10 seconds.
 - **Copying**: The pane's **Copy path** copies the raw `workspace` value
-  (`ui.copyWorkspacePath`, which returns `Copied!`, or `Copy failed` also
+  (`card.copyWorkspacePath`, which returns `Copied!`, or `Copy failed` also
   when the bridge can't copy) and shows the outcome in its `role="status"`
   region, cleared first so a repeat is announced, and only while the pane
   still shows the card and workspace that were copied. Telemetry is never inserted into HTML markup or
@@ -412,8 +422,10 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   needed beyond the atomic write itself. `DashboardIPC.get_saved_cards()`
   leaves out any card whose agent is in the current `agent_denylist`, the
   same as live telemetry.
-- **Hook install**: `vauxhall.dashboard.hook_install.HookInstallRunner`
-  runs `sys.executable -P -u -X utf8 -m vauxhall.hooks.cli <agents>` with the
+- **Hook install**: `vauxhall.dashboard.hook_install.HookInstallRunner` is
+  the `HookInstallBackend` that `DashboardIPC` calls: it opens the directory
+  picker it is given (Pyloid's `select_directory_dialog`), and it runs
+  `sys.executable -P -u -X utf8 -m vauxhall.hooks.cli <agents>` with the
   workspace as the child's `cwd`, so the CLI runs unchanged and the dashboard
   never calls `os.chdir`, which would change where it reads
   `vauxhall_dashboard.json`. `-P` keeps `-m` from putting the workspace first
@@ -432,7 +444,7 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   can call the bridge. Shutdown terminates a running install, killing it
   after `SHUTDOWN_CLOSE_SECONDS`; the next install recovers its venv.
   `hook_install` imports no Pyloid, so its tests run on Python 3.14.
-- **Single instance**: `main()` holds a `QLockFile` on
+- **Single instance**: `main()` (`vauxhall.dashboard.main`) holds a `QLockFile` on
   `~/.config/vauxhall/dashboard.lock` (`INSTANCE_LOCK_FILE`) before creating
   `Pyloid`, because two dashboards would overwrite each other's view and card
   state. A lock held by a live process makes `main()` log its PID, host, and
@@ -555,7 +567,12 @@ To change configuration from code, use `vauxhall.core.config_store` rather than
 writing JSON directly. `save_user_config` writes only
 `~/.config/vauxhall/<filename>`, validates with the unchanged
 `DashboardConfig.load` or `HookConfig.load`, and replaces the file atomically.
-`write_json_atomically` takes `follow_symlinks`: `save_user_config` and the
+Every atomic replacement goes through `vauxhall.core.files.write_atomically`
+(or its `write_json_atomically` wrapper), which writes a uniquely named
+temporary file and renames it over the target. Hook scratch files pass
+`private` (owner-only, created without following a symlink) and
+`durable=False`, skipping `fsync`: they are disposable, and an agent waits for
+every hook. It takes `follow_symlinks`: `save_user_config` and the
 view and card state pass it, so a symlinked file in `~/.config/vauxhall` has
 its target replaced in the target's directory and the link survives. The hook
 installer doesn't: a cloned repository controls the workspace, and a link

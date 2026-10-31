@@ -7,7 +7,8 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 
 import { updateLastSeen } from '../../../vauxhall/dashboard/ui/js/state.js';
-import { checkStaleness, createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/card.js';
+import { checkStaleness } from '../../../vauxhall/dashboard/ui/js/grid.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
 

@@ -7,7 +7,8 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { createCard, openHistoryModal, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/card.js';
+import { openHistoryModal } from '../../../vauxhall/dashboard/ui/js/history.js';
 
 const ATTACK = '<img class="injected" src="x">';
 

@@ -10,7 +10,8 @@ import { parseHTML } from 'linkedom';
 import { closeDialog, openDialog } from '../../../vauxhall/dashboard/ui/js/dialog.js';
 import { initInstall } from '../../../vauxhall/dashboard/ui/js/install.js';
 import { agentKey, agents } from '../../../vauxhall/dashboard/ui/js/state.js';
-import { createCard, sortGrid, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/card.js';
+import { sortGrid } from '../../../vauxhall/dashboard/ui/js/grid.js';
 
 import { bootDashboard } from './helpers.js';
 

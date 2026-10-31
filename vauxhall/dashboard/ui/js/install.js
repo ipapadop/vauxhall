@@ -9,6 +9,7 @@
  */
 
 import { closeDialog, openDialog } from './dialog.js';
+import { element } from './dom.js';
 
 /**
  * Returns whether an agent starts ticked: found in the directory without hooks.
@@ -68,16 +69,14 @@ export function initInstall(ipc) {
     const renderAgents = (agents) => {
         for (const row of list.querySelectorAll('.install-agent')) row.remove();
         for (const agent of agents) {
-            const row = document.createElement('div');
-            row.className = 'install-agent';
-            const box = document.createElement('input');
+            const row = element('div', 'install-agent');
+            const box = element('input');
             box.type = 'checkbox';
             box.id = `install-agent-${agent.agent}`;
             box.value = agent.agent;
             box.checked = defaultChecked(agent);
-            const label = document.createElement('label');
+            const label = element('label', '', `${agent.name} — ${agentStatus(agent)}`);
             label.setAttribute('for', box.id);
-            label.textContent = `${agent.name} — ${agentStatus(agent)}`;
             row.append(box, label);
             list.append(row);
         }

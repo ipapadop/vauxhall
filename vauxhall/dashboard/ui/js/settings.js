@@ -10,6 +10,7 @@
 
 import { closeDialog, openDialog } from './dialog.js';
 import { saveDenylist } from './denylist.js';
+import { element } from './dom.js';
 import { selectOption } from './preferences.js';
 
 const SECTION_TITLES = { mqtt: 'MQTT', logging: 'Logging', dashboard: 'Dashboard' };
@@ -32,20 +33,6 @@ const inputId = (field) => `setting-${field.section}-${field.name}`;
  * @returns {string} The label text.
  */
 const labelOf = (field) => field.name.replaceAll('_', ' ');
-
-/**
- * Creates an element, optionally with a class and text content.
- * @param {string} tag - The tag name.
- * @param {string} [className] - Class applied to the element.
- * @param {unknown} [text] - Text content, when the element needs one.
- * @returns {HTMLElement} The created element.
- */
-function element(tag, className = '', text = undefined) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = String(text);
-    return node;
-}
 
 /**
  * Shows or hides an element through the hidden attribute.

@@ -9,7 +9,9 @@
  */
 
 import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isReplacedSession, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
-import { createCard, copyWorkspacePath, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
+import { createCard, copyWorkspacePath, updateCard } from './js/card.js';
+import { checkStaleness, filterGrid, renderSummary, sortGrid } from './js/grid.js';
+import { closeHistoryModal, openHistoryModal } from './js/history.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
 import { initInstall } from './js/install.js';

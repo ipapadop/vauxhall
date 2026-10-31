@@ -23,3 +23,28 @@ export async function saveDenylist(ipc, next, changes = {}) {
         update_hooks: false,
     })));
 }
+
+/**
+ * Adds an agent to the saved denylist, logging why when it can't.
+ * @param {object} ipc - The DashboardIPC bridge.
+ * @param {string} agentName - The agent to add.
+ */
+export async function addToDenylist(ipc, agentName) {
+    try {
+        const descriptor = JSON.parse(await ipc.get_settings());
+        if (descriptor.error) {
+            console.error('Failed to update agent denylist:', descriptor.error);
+            return;
+        }
+        if (descriptor.agent_denylist_editable === false) {
+            console.error('Failed to add agent to denylist: a configuration file in the current directory takes precedence.');
+            return;
+        }
+        const denylist = descriptor.agent_denylist ?? [];
+        if (denylist.includes(agentName)) return;
+        const result = await saveDenylist(ipc, [...denylist, agentName]);
+        if (!result.ok) console.error('Failed to add agent to denylist:', result.error);
+    } catch (err) {
+        console.error('Failed to update agent denylist:', err);
+    }
+}

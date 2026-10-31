@@ -5,13 +5,11 @@
 
 import json
 import os
-import shutil
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
-from uuid import uuid4
 
 from vauxhall.core.config import (
     ConfigurationError,
@@ -19,6 +17,7 @@ from vauxhall.core.config import (
     find_config_file,
     load_config_data,
 )
+from vauxhall.core.files import write_json_atomically
 
 
 @dataclass(frozen=True)
@@ -256,34 +255,3 @@ def _validate(config_type: type[Any], data: dict[str, Any], path: Path) -> None:
         except ConfigurationError as error:
             message = str(error).replace(str(candidate.resolve()), str(path))
             raise ConfigurationError(message) from None
-
-
-def write_json_atomically(
-    path: Path, data: dict[str, Any], *, follow_symlinks: bool = False
-) -> None:
-    """Replace a JSON file so readers see either the old or the new content.
-
-    Args:
-        path: The file to replace.
-        data: The data to serialize into it.
-        follow_symlinks: Replace a symlink's target, in the target's
-            directory, and keep the link, instead of replacing the link. Pass
-            it only for paths the user controls, never for a workspace file
-            a cloned repository could point elsewhere.
-    """
-    if follow_symlinks:
-        # Unlike Path.resolve, realpath never raises, even on a symlink loop.
-        path = Path(os.path.realpath(path))
-    temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary_path.open("x", encoding="utf-8") as file:
-            json.dump(data, file, indent=2)
-            file.write("\n")
-            file.flush()
-            os.fsync(file.fileno())
-        if path.exists():
-            shutil.copymode(path, temporary_path)
-        temporary_path.replace(path)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise

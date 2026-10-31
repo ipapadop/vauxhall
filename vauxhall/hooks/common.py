@@ -16,15 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from vauxhall.core.config import ConfigurationError
+from vauxhall.core.files import NOFOLLOW, write_atomically
 from vauxhall.core.logging import get_logger
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
-from vauxhall.hooks.files import (
-    NOFOLLOW,
-    claim,
-    remove_old_files,
-    unique_name,
-    write_atomically,
-)
+from vauxhall.hooks.files import claim, remove_old_files, unique_name
 from vauxhall.hooks.identity import publishable_workspace, resolve_session_id
 
 logger = get_logger(__name__)
@@ -279,7 +274,12 @@ def collect_message_chunk(
             if delta:
                 # Text past the detail limit is cut when published anyway.
                 text = delta[: MAX_DETAIL_STRING_LENGTH + 1]
-                write_atomically(directory / f"{unique_name(prefix)}.chunk", text)
+                write_atomically(
+                    directory / f"{unique_name(prefix)}.chunk",
+                    text,
+                    private=True,
+                    durable=False,
+                )
             return None
         parts: list[str] = []
         length = 0
@@ -490,7 +490,12 @@ def record_tool_start(agent: str, identity: object) -> None:
         # The directory holds only start files, claimed or not, and their
         # temporary copies.
         remove_old_files(directory, "*", _TOOL_START_MAX_AGE_SECONDS, now)
-        write_atomically(directory / f"{unique_name(prefix)}.time", str(now))
+        write_atomically(
+            directory / f"{unique_name(prefix)}.time",
+            str(now),
+            private=True,
+            durable=False,
+        )
 
 
 def claim_tool_duration(agent: str, identity: object) -> float | None:

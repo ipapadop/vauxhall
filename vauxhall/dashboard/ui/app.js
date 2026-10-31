@@ -8,7 +8,7 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
+import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isReplacedSession, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
 import { createCard, copyWorkspacePath, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
 import { closeDialog, openDialog } from './js/dialog.js';
 import { saveDenylist } from './js/denylist.js';
@@ -127,6 +127,11 @@ async function init() {
         if (keys.includes(historyTarget.key)) closeModal();
         if (keys.includes(menuTarget.key)) closeMenu();
     };
+    const removeCard = (key) => {
+        agents[key]?.remove();
+        removeAgent(key);
+        closeDialogsFor([key]);
+    };
 
     // Builds a card whose click and options button act on its key.
     const newCard = (key, data) => createCard(data, (opener) => {
@@ -168,11 +173,7 @@ async function init() {
 
     document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
         for (const [key, card] of Object.entries(agents)) {
-            if (card.classList.contains('stale')) {
-                card.remove();
-                removeAgent(key);
-                closeDialogsFor([key]);
-            }
+            if (card.classList.contains('stale')) removeCard(key);
         }
         refreshSummary();
         scheduleCardSave();
@@ -198,9 +199,14 @@ async function init() {
         if (!card || !status) return;
         // Cleared first, so a repeated outcome is announced again.
         status.textContent = '';
-        const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, cardIdentity(card).workspace);
-        // The pane may have closed, or moved to another card, meanwhile.
-        if (historyTarget.key === key) status.textContent = outcome;
+        const { workspace } = cardIdentity(card);
+        const outcome = await copyWorkspacePath(window.ipc?.DashboardIPC, workspace);
+        // The pane may have closed, moved to another card, or shown the
+        // session's next workspace meanwhile, or the card may have been
+        // removed and built again.
+        if (historyTarget.key === key && agents[key] === card && cardIdentity(card).workspace === workspace) {
+            status.textContent = outcome;
+        }
     });
     document.getElementById('modal-search')?.addEventListener('input', refreshModal);
     historyFilter?.addEventListener('change', (e) => {
@@ -291,6 +297,16 @@ async function init() {
                 let card = agents[key];
                 if (card && isLateFinalMessage(card, data)) return;
 
+                // The agent continues a cleared or resumed-away session under
+                // another session ID, so its card would only linger until stale.
+                if (isReplacedSession(data)) {
+                    if (!card) return;
+                    removeCard(key);
+                    refreshSummary();
+                    scheduleCardSave();
+                    return;
+                }
+
                 if (!card) {
                     closeDialogsFor(ensureAgentCapacity(maxActiveAgents));
                     card = newCard(key, data);
@@ -327,10 +343,7 @@ async function init() {
                 // Denylisted cards go first, so they don't count toward the limit.
                 const denylist = new Set(changed.agent_denylist ?? []);
                 for (const [key, card] of Object.entries(agents)) {
-                    if (!denylist.has(cardIdentity(card).agent)) continue;
-                    card.remove();
-                    removeAgent(key);
-                    closeDialogsFor([key]);
+                    if (denylist.has(cardIdentity(card).agent)) removeCard(key);
                 }
                 closeDialogsFor(evictAgents(maxActiveAgents));
 

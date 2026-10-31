@@ -49,7 +49,7 @@ function setupGrid(t) {
 function addCard({ agent, workspace = `/home/user/${agent}`, state = 'Idle', lastSeen = 0, tokens }) {
     const card = createCard({ agent, workspace, session_id: agent }, () => {});
     card.dataset.lastSeen = String(lastSeen);
-    updateCard(card, { state, details: { status: state, tokens } });
+    updateCard(card, { workspace, state, details: { status: state, tokens } });
     grid.appendChild(card);
     return card;
 }

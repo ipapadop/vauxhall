@@ -8,25 +8,30 @@
  * @description Manages the global state of the dashboard, including agent tracking and history.
  */
 
-export const agents = {}; // JSON [agent, workspace, session_id] -> DOM element
+export const agents = {}; // JSON [agent, session_id] -> DOM element
 
 /**
  * Builds the key that identifies one agent card.
- * @param {object} data - Telemetry data naming the agent, workspace, and session.
+ *
+ * The workspace is left out: it is the agent's current directory, which can
+ * change during a session, and the card follows it.
+ * @param {object} data - Telemetry data naming the agent and session.
  * @returns {string} The card key.
  */
 export function agentKey(data) {
     return JSON.stringify([
         String(data.agent ?? ''),
-        String(data.workspace ?? ''),
         String(data.session_id ?? ''),
     ]);
 }
 
 /**
- * Reads the identity a card was built from.
+ * Reads the agent, session, and current workspace a card shows.
+ *
+ * Only agent and session identify the card (`agentKey`); the workspace can
+ * change during a session.
  * @param {HTMLElement} card - The agent card element.
- * @returns {{agent: string, workspace: string, session_id: string}} The identity.
+ * @returns {{agent: string, workspace: string, session_id: string}} The fields.
  */
 export function cardIdentity(card) {
     return {
@@ -115,6 +120,20 @@ export function updateAgentHistory(card, data, at = Date.now()) {
  */
 export function historyDurations(history, now = Date.now()) {
     return history.map((entry, index) => Math.max(0, (index === 0 ? now : history[index - 1].at) - entry.at));
+}
+
+// SessionEnd reasons after which the agent continues under another session:
+// `/clear` starts a new one and `/resume` switches to an earlier one.
+const REPLACING_END_REASONS = new Set(['clear', 'resume']);
+
+/**
+ * Returns whether an event ends a session the user replaced, as with
+ * `/clear` or `/resume`.
+ * @param {object} data - The telemetry data.
+ * @returns {boolean} Whether the event reports a session ended by replacing it.
+ */
+export function isReplacedSession(data) {
+    return data.state === 'Idle' && REPLACING_END_REASONS.has(data.details?.end_reason);
 }
 
 /**

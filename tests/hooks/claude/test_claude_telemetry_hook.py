@@ -420,11 +420,11 @@ def test_claude_hook_always_outputs_valid_json(stdin: str) -> None:
         ),
         (
             {"hook_event_name": "SessionEnd", "reason": "clear"},
-            {"state": "Idle", "status": "session cleared"},
+            {"state": "Idle", "status": "session cleared", "end_reason": "clear"},
         ),
         (
             {"hook_event_name": "SessionEnd", "reason": "resume"},
-            {"state": "Idle", "status": "session switched"},
+            {"state": "Idle", "status": "session switched", "end_reason": "resume"},
         ),
         (
             {"hook_event_name": "SessionEnd", "reason": "secret"},

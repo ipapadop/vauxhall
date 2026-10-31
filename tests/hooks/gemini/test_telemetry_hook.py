@@ -118,26 +118,27 @@ def test_gemini_after_tool_does_not_publish_response_content(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
-    ("reason", "status"),
+    ("reason", "status", "end_reason"),
     [
-        ("exit", "session exited"),
-        ("clear", "session cleared"),
-        ("logout", "logged out"),
-        ("prompt_input_exit", "input closed"),
-        ("other", "session ended"),
-        (None, "session ended"),
-        (123, "session ended"),
-        ([], "session ended"),
+        ("exit", "session exited", {"end_reason": "exit"}),
+        ("clear", "session cleared", {"end_reason": "clear"}),
+        ("logout", "logged out", {"end_reason": "logout"}),
+        ("prompt_input_exit", "input closed", {"end_reason": "prompt_input_exit"}),
+        ("other", "session ended", {}),
+        (None, "session ended", {}),
+        (123, "session ended", {}),
+        ([], "session ended", {}),
     ],
 )
 def test_gemini_session_end_maps_documented_reasons(
-    reason: object, status: str
+    reason: object, status: str, end_reason: dict[str, str]
 ) -> None:
     """SessionEnd must emit only normalized statuses for known CLI reasons.
 
     Args:
         reason: The case's reason.
         status: The case's status.
+        end_reason: The documented reason published, if any.
     """
     hook_data = {
         "hook_event_name": "SessionEnd",
@@ -159,6 +160,7 @@ def test_gemini_session_end_maps_documented_reasons(
         state="Idle",
         status=status,
         session_id="native:session-123",
+        **end_reason,
     )
 
 

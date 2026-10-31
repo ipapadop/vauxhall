@@ -147,7 +147,8 @@ the port of the dashboard's local UI server. Pick a free one with
 **The hook logs `Skipping telemetry: no stable session identity is
 available`.** The event had no session ID or transcript path. Set
 `VAUXHALL_SESSION_ID` in the agent's environment to a value that is unique per
-session.
+session. A value shared by two sessions of one agent, even in different
+workspaces, merges them into one card.
 
 **The hook command fails with `No such file or directory`.** The workspace
 was moved, or `.vauxhall-venv` was deleted or built with a Python that has

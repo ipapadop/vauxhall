@@ -62,6 +62,7 @@ SHA-256 hash of the full path.
 | `error` | Fixed text: `Tool reported an error` or `API error: <error type>` | Fixed text, or `Bash failed (exit code <n>)` | Fixed text: `Tool reported an error` |
 | `duration` | Tool duration in seconds | Tool duration in seconds | Tool duration in seconds |
 | `tokens` | Not sent | Not sent | Token count reported by the model |
+| `end_reason` | Documented `SessionEnd` reason: `clear`, `resume`, `logout`, or `prompt_input_exit` | Not sent | Documented `SessionEnd` reason: `exit`, `clear`, `logout`, or `prompt_input_exit` |
 
 > [!WARNING]
 > **Gemini CLI publishes the complete input of every tool call** in `args`.

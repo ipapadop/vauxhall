@@ -52,23 +52,26 @@ def _is_valid_card(card: object) -> bool:
 
 
 def clean_cards(data: object) -> list[dict[str, Any]]:
-    """Keep only valid card entries, deduplicated by identity.
+    """Keep only valid card entries, deduplicated by agent and session.
+
+    The workspace is not part of the identity: it is the session's current
+    directory, so the newest entry's workspace is kept.
 
     Args:
         data: Decoded card list, possibly from a hand-edited or outdated file.
 
     Returns:
         list[dict[str, Any]]: The valid entries, newest last-seen kept for a
-            repeated identity, capped to a defensive maximum count.
+            repeated agent and session, capped to a defensive maximum count.
     """
     if not isinstance(data, list):
         return []
 
-    by_identity: dict[tuple[str, str, str], dict[str, Any]] = {}
+    by_identity: dict[tuple[str, str], dict[str, Any]] = {}
     for card in data:
         if not _is_valid_card(card):
             continue
-        identity = (card["agent"], card["workspace"], card["session_id"])
+        identity = (card["agent"], card["session_id"])
         existing = by_identity.get(identity)
         if existing is None or card["last_seen"] >= existing["last_seen"]:
             by_identity[identity] = card

@@ -9,7 +9,10 @@ import { parseHTML } from 'linkedom';
 
 import { closeDialog, openDialog } from '../../../vauxhall/dashboard/ui/js/dialog.js';
 import { initInstall } from '../../../vauxhall/dashboard/ui/js/install.js';
+import { agentKey, agents } from '../../../vauxhall/dashboard/ui/js/state.js';
 import { createCard, sortGrid, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+
+import { bootDashboard } from './helpers.js';
 
 const IDENTITY = { agent: 'Codex', workspace: '/home/user/project', session_id: 'session-1' };
 
@@ -125,6 +128,19 @@ test('the pane has a named Copy path button, a polite status, and focuses its fi
     // The dashboard only monitors: the pane has nowhere to type to the agent.
     assert.equal(pane.querySelector('textarea'), null);
     assert.equal(document.getElementById('prompt-modal'), null);
+});
+
+test('the open pane announces a live workspace move in its status region, and opening announces nothing', async (t) => {
+    const { document, listeners } = await bootDashboard(t, { ping: async () => false });
+    const base = { schema_version: 1, agent: 'Codex', session_id: 'one', state: 'Acting', details: {} };
+    listeners['agent-update']({ ...base, workspace: '/home/user/project' });
+    const status = document.getElementById('modal-copy-status');
+
+    agents[agentKey(base)].querySelector('.agent-workspace').click();
+    assert.equal(status.textContent, '');
+
+    listeners['agent-update']({ ...base, workspace: '/home/user/project/models' });
+    assert.equal(status.textContent, 'Workspace changed to /home/user/project/models');
 });
 
 /**
@@ -315,3 +331,22 @@ test('each install agent checkbox is named by a label for it', async (t) => {
         assert.ok(label?.textContent.trim(), `${box.id} has no label`);
     }
 });
+
+for (const [dialogId, openerSelector] of [['history-modal', '.agent-workspace'], ['card-menu-modal', '.menu-icon']]) {
+    test(`a cleared session closes its open ${dialogId} and hands focus to the grid`, async (t) => {
+        const { document, listeners } = await bootDashboard(t, { ping: async () => false });
+        const identity = { schema_version: 1, agent: 'Claude Code', workspace: '/home/user/project', session_id: 'old' };
+        listeners['agent-update']({ ...identity, state: 'Thinking', details: {} });
+        const opener = agents[agentKey(identity)].querySelector(openerSelector);
+        const focused = [];
+        opener.focus = () => focused.push('opener');
+        document.getElementById('agent-grid').focus = () => focused.push('grid');
+        opener.click();
+        assert.ok(document.getElementById(dialogId).hasAttribute('open'));
+
+        listeners['agent-update']({ ...identity, state: 'Idle', details: { end_reason: 'clear' } });
+
+        assert.ok(!document.getElementById(dialogId).hasAttribute('open'));
+        assert.deepEqual(focused, ['grid']);
+    });
+}

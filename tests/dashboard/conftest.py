@@ -14,8 +14,8 @@ collect_ignore = (
     else [
         "test_card_state.py",
         "test_dashboard_app.py",
-        "test_dashboard_config_logging.py",
         "test_ipc.py",
+        "test_main.py",
         "test_settings_editor.py",
         "test_ui_dispatch.py",
         "test_ui_server.py",

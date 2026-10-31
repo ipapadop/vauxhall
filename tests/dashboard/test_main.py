@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from vauxhall.dashboard.app import (
+from vauxhall.dashboard.main import (
     INSTANCE_LOCK_FILE,
     UI_DIR,
     _lock_dashboard,
@@ -32,15 +32,15 @@ import logging
 from unittest.mock import patch
 
 import vauxhall.core.logging
-import vauxhall.dashboard.app
+import vauxhall.dashboard.main
 
 root = logging.getLogger()
 root.handlers = [logging.NullHandler()]
 root.setLevel(logging.CRITICAL)
 vauxhall.core.logging._LoggingState.setup_done = False
 
-with patch.object(vauxhall.dashboard.app.DashboardApp, "run"):
-    vauxhall.dashboard.app.main()
+with patch.object(vauxhall.dashboard.main.DashboardApp, "run"):
+    vauxhall.dashboard.main.main()
 
 print(root.level == logging.INFO and type(root.handlers[0]) is logging.StreamHandler)
 """
@@ -64,7 +64,7 @@ def test_dashboard_main_sets_safe_chromium_flags_and_keeps_the_users() -> None:
     code = """
 import os
 
-import vauxhall.dashboard.app
+import vauxhall.dashboard.main
 
 print("after import:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
 
@@ -72,8 +72,8 @@ def stop(*_, **__):
     print("at startup:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
     raise SystemExit(0)
 
-vauxhall.dashboard.app.Pyloid = stop
-vauxhall.dashboard.app.main()
+vauxhall.dashboard.main.Pyloid = stop
+vauxhall.dashboard.main.main()
 """
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -116,15 +116,15 @@ def test_dashboard_main_applies_the_graphics_backend(
     code = """
 import os
 
-import vauxhall.dashboard.app
+import vauxhall.dashboard.main
 
 def stop(*_, **__):
     print("rhi:", os.environ.get("QSG_RHI_BACKEND", ""))
     print("flags:", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
     raise SystemExit(0)
 
-vauxhall.dashboard.app.Pyloid = stop
-vauxhall.dashboard.app.main()
+vauxhall.dashboard.main.Pyloid = stop
+vauxhall.dashboard.main.main()
 """
     env = {
         **os.environ,
@@ -158,14 +158,14 @@ def test_dashboard_main_refuses_to_run_beside_another_dashboard(
         isolated_home: The temporary home the dashboard locks under.
     """
     code = """
-import vauxhall.dashboard.app
+import vauxhall.dashboard.main
 
 def stop(*_, **__):
     print("started")
     raise SystemExit(0)
 
-vauxhall.dashboard.app.Pyloid = stop
-vauxhall.dashboard.app.main()
+vauxhall.dashboard.main.Pyloid = stop
+vauxhall.dashboard.main.main()
 """
     path = isolated_home / ".config" / "vauxhall" / INSTANCE_LOCK_FILE
     lock = _lock_dashboard(path)

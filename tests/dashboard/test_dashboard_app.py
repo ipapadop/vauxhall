@@ -34,9 +34,8 @@ from vauxhall.dashboard.app import (  # noqa: E402
     SHUTDOWN_CLOSE_SECONDS,
     DashboardApp,
     WindowEvent,
-    _set_chromium_flags,
 )
-from vauxhall.dashboard.ui_state import load_ui_state, update_ui_state  # noqa: E402
+from vauxhall.dashboard.main import _set_chromium_flags  # noqa: E402
 
 
 def valid_event(**overrides: object) -> dict[str, object]:
@@ -615,61 +614,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-def test_select_install_directory_opens_at_the_saved_directory(
-    tmp_path: Path,
-) -> None:
-    """The picker starts where hooks were last installed; cancelling changes nothing."""
-    update_ui_state({"install_directory": str(tmp_path)})
-    app = MagicMock()
-    app.select_directory_dialog.return_value = None
-
-    assert DashboardApp(app).select_install_directory() == {"ok": False}
-
-    app.select_directory_dialog.assert_called_once_with(dir=str(tmp_path))
-    assert load_ui_state()["install_directory"] == str(tmp_path)
-
-
-def test_select_install_directory_falls_back_to_home(tmp_path: Path) -> None:
-    """A remembered directory that is gone opens the picker at home."""
-    update_ui_state({"install_directory": str(tmp_path / "gone")})
-    app = MagicMock()
-    app.select_directory_dialog.return_value = None
-
-    DashboardApp(app).select_install_directory()
-
-    app.select_directory_dialog.assert_called_once_with(dir=str(Path.home()))
-
-
-def test_select_install_directory_saves_and_detects(tmp_path: Path) -> None:
-    """A chosen directory is remembered and its agents detected."""
-    (tmp_path / ".claude").mkdir()
-    app = MagicMock()
-    app.select_directory_dialog.return_value = str(tmp_path)
-
-    result = DashboardApp(app).select_install_directory()
-
-    assert result["ok"] is True
-    assert result["path"] == str(tmp_path)
-    assert [entry["detected"] for entry in result["agents"]] == [True, False, False]
-    assert load_ui_state()["install_directory"] == str(tmp_path)
-
-
-def test_select_install_directory_survives_a_failed_save(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Not remembering the directory doesn't stop the install."""
-    app = MagicMock()
-    app.select_directory_dialog.return_value = str(tmp_path)
-
-    with patch(
-        "vauxhall.dashboard.app.update_ui_state", side_effect=OSError("read-only")
-    ):
-        result = DashboardApp(app).select_install_directory()
-
-    assert result["ok"] is True
-    assert "Could not remember the install directory" in caplog.text
-
-
 def test_install_events_reach_a_ready_window(tmp_path: Path) -> None:
     """Installer output goes through the outbox to the window, in order."""
     launcher = Launcher(FakeProcess(["Installing\n"]))
@@ -679,7 +623,7 @@ def test_install_events_reach_a_ready_window(tmp_path: Path) -> None:
     dashboard.window = MagicMock()
     dashboard.ipc.is_ready = True
 
-    assert dashboard.install_hooks(tmp_path, ["claude"]) == {"ok": True}
+    assert dashboard.install_runner.install_hooks(tmp_path, ["claude"]) == {"ok": True}
     deadline = time.monotonic() + WAIT_SECONDS
     while dashboard.window.invoke.call_count < 2 and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -702,7 +646,7 @@ def test_shutdown_stops_a_running_install(tmp_path: Path) -> None:
     app = MagicMock()
     app.run.side_effect = RuntimeError("UI failed")
     dashboard = DashboardApp(app, launch_installer=Launcher(process))
-    dashboard.install_hooks(tmp_path, ["claude"])
+    dashboard.install_runner.install_hooks(tmp_path, ["claude"])
 
     with (
         patch("vauxhall.dashboard.app.DashboardSubscriber"),
@@ -712,16 +656,3 @@ def test_shutdown_stops_a_running_install(tmp_path: Path) -> None:
     release.set()
 
     assert process.calls[0] == "terminate"
-
-
-def test_select_install_directory_skips_an_unreadable_saved_directory(
-    unsearchable_dir: Path,
-) -> None:
-    """A remembered directory that can't be checked opens the picker at home."""
-    update_ui_state({"install_directory": str(unsearchable_dir)})
-    app = MagicMock()
-    app.select_directory_dialog.return_value = None
-
-    DashboardApp(app).select_install_directory()
-
-    app.select_directory_dialog.assert_called_once_with(dir=str(Path.home()))

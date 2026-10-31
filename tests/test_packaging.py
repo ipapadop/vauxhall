@@ -367,7 +367,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         for version in SUPPORTED_PYTHON_VERSIONS
     }
     assert entry_points["console_scripts"] == {
-        "vauxhall": "vauxhall.dashboard.app:main",
+        "vauxhall": "vauxhall.dashboard.main:main",
         "vauxhall-hook-install": "vauxhall.hooks.cli:main",
     }
     assert (

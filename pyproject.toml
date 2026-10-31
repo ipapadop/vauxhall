@@ -47,7 +47,7 @@ Changelog = "https://github.com/ipapadop/vauxhall/blob/main/CHANGELOG.md"
 Security = "https://github.com/ipapadop/vauxhall/security/advisories"
 
 [project.scripts]
-vauxhall = "vauxhall.dashboard.app:main"
+vauxhall = "vauxhall.dashboard.main:main"
 vauxhall-hook-install = "vauxhall.hooks.cli:main"
 
 [project.optional-dependencies]

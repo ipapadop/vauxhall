@@ -9,7 +9,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
-from unittest.mock import ANY, MagicMock, call, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -166,15 +166,8 @@ class TestDashboardComponents(unittest.TestCase):
         self.dashboard.window.invoke.assert_not_called()
         assert len(self.dashboard.pending_updates) == 0
 
-    @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
-    def test_run_uses_configured_pyloid_window_settings(
-        self, mock_serve: MagicMock
-    ) -> None:
-        """Dashboard startup passes its supported settings to Pyloid.
-
-        Args:
-            mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
-        """
+    def test_run_uses_configured_pyloid_window_settings(self) -> None:
+        """Dashboard startup passes its supported settings to Pyloid."""
         with (
             patch("vauxhall.dashboard.app.DashboardSubscriber"),
             patch("vauxhall.dashboard.app.settings") as mock_settings,
@@ -183,11 +176,10 @@ class TestDashboardComponents(unittest.TestCase):
             mock_settings.dashboard.width = 1280
             mock_settings.dashboard.height = 720
             mock_settings.dashboard.debug = True
-            mock_settings.dashboard.port = 9090
 
             self.mock_app.run.side_effect = KeyboardInterrupt
             with pytest.raises(KeyboardInterrupt):
-                self.dashboard.run()
+                self.dashboard.run("http://127.0.0.1:9090/index.html")
 
         self.mock_app.create_window.assert_called_once_with(
             title="Configured dashboard",
@@ -196,27 +188,21 @@ class TestDashboardComponents(unittest.TestCase):
             dev_tools=True,
             IPCs=[self.dashboard.ipc],
         )
-        mock_serve.assert_called_once_with(ANY, port=9090)
+        self.dashboard.window.load_url.assert_called_once_with(
+            "http://127.0.0.1:9090/index.html"
+        )
 
-    @patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
-    def test_run_sets_the_shipped_icon_before_the_window_loads(
-        self, mock_serve: MagicMock
-    ) -> None:
-        """Pyloid reads the icon while loading the window, so it must exist first.
-
-        Args:
-            mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
-        """
+    def test_run_sets_the_shipped_icon_before_the_window_loads(self) -> None:
+        """Pyloid reads the icon while loading the window, so it must exist first."""
         with patch("vauxhall.dashboard.app.DashboardSubscriber"):
             self.mock_app.run.side_effect = KeyboardInterrupt
             with pytest.raises(KeyboardInterrupt):
-                self.dashboard.run()
+                self.dashboard.run("http://127.0.0.1:1/index.html")
 
         assert ICON_FILE.is_file()
         self.mock_app.set_icon.assert_called_once_with(str(ICON_FILE))
         called = [name for name, _, _ in self.mock_app.mock_calls]
         assert called.index("set_icon") < called.index("create_window")
-        mock_serve.assert_called_once()
 
     def test_on_telemetry_queuing(self) -> None:
         """Telemetry is queued until the frontend is ready, then flushed."""
@@ -521,13 +507,8 @@ def test_events_run_by_a_nested_event_loop_wait_for_the_outbox() -> None:
     assert deepest == 1
 
 
-@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
-def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None:
-    """MQTT cleanup runs even when the UI event loop exits exceptionally.
-
-    Args:
-        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
-    """
+def test_dashboard_stops_mqtt_when_ui_loop_raises() -> None:
+    """MQTT cleanup runs even when the UI event loop exits exceptionally."""
     app = MagicMock()
     app.run.side_effect = RuntimeError("UI failed")
 
@@ -537,20 +518,14 @@ def test_dashboard_stops_mqtt_when_ui_loop_raises(mock_serve: MagicMock) -> None
         patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type,
         pytest.raises(RuntimeError, match="UI failed"),
     ):
-        dashboard.run()
+        dashboard.run("http://127.0.0.1:1/index.html")
 
-    mock_serve.assert_called_once()
     subscriber_type.return_value.start.assert_called_once_with()
     subscriber_type.return_value.close.assert_called_once_with(dashboard.mqtt_closer)
 
 
-@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
-def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> None:
-    """Status reported while stopping MQTT must not reach the destroyed window.
-
-    Args:
-        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
-    """
+def test_shutdown_status_is_not_sent_to_closed_window() -> None:
+    """Status reported while stopping MQTT must not reach the destroyed window."""
     app = MagicMock()
     dashboard = DashboardApp(app, queue_to_ui=run_now)
 
@@ -570,9 +545,8 @@ def test_shutdown_status_is_not_sent_to_closed_window(mock_serve: MagicMock) -> 
             subscriber_type.call_args.args[1]("Disconnected. Retrying...")
         )
         with pytest.raises(SystemExit):
-            dashboard.run()
+            dashboard.run("http://127.0.0.1:1/index.html")
 
-    mock_serve.assert_called_once()
     subscriber_type.return_value.close.assert_called_once_with(dashboard.mqtt_closer)
     app.create_window.return_value.invoke.assert_not_called()
     assert dashboard.last_status == "Disconnected. Retrying..."
@@ -596,11 +570,10 @@ def test_shutdown_waits_briefly_for_mqtt_to_close(
     dashboard.mqtt_closer.finish.return_value = closed_in_time
 
     with (
-        patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost"),
         patch("vauxhall.dashboard.app.DashboardSubscriber"),
         pytest.raises(SystemExit),
     ):
-        dashboard.run()
+        dashboard.run("http://127.0.0.1:1/index.html")
 
     dashboard.mqtt_closer.finish.assert_called_once_with(SHUTDOWN_CLOSE_SECONDS)
     warned = "Exiting before the MQTT connection finished closing" in caplog.text
@@ -718,14 +691,10 @@ def test_install_events_reach_a_ready_window(tmp_path: Path) -> None:
     assert launcher.launches[0][1]["cwd"] == tmp_path
 
 
-@patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost")
-def test_shutdown_stops_a_running_install(
-    mock_serve: MagicMock, tmp_path: Path
-) -> None:
+def test_shutdown_stops_a_running_install(tmp_path: Path) -> None:
     """Closing the dashboard terminates an install still running.
 
     Args:
-        mock_serve: Mock replacing ``vauxhall.dashboard.app.pyloid_serve``.
         tmp_path: Workspace for the install.
     """
     release = threading.Event()
@@ -739,10 +708,9 @@ def test_shutdown_stops_a_running_install(
         patch("vauxhall.dashboard.app.DashboardSubscriber"),
         pytest.raises(RuntimeError, match="UI failed"),
     ):
-        dashboard.run()
+        dashboard.run("http://127.0.0.1:1/index.html")
     release.set()
 
-    mock_serve.assert_called_once()
     assert process.calls[0] == "terminate"
 
 

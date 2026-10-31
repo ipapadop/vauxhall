@@ -1509,6 +1509,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dashboard = [
+    { name = "aiohttp", marker = "python_full_version < '3.14'" },
     { name = "pyloid", marker = "python_full_version < '3.14'" },
 ]
 
@@ -1541,6 +1542,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", marker = "python_full_version < '3.14' and extra == 'dashboard'", specifier = ">=3.9" },
     { name = "paho-mqtt", specifier = ">=2.0.0" },
     { name = "pyloid", marker = "python_full_version < '3.14' and extra == 'dashboard'", specifier = ">=0.27.2" },
 ]

@@ -230,3 +230,12 @@ The first release, planned as 0.1.0. It is alpha software; see
   with a warning, and the duration left out. One you own that others can
   reach, such as one an earlier version created, is made owner-only, and
   entries other accounts put in it are removed.
+- The dashboard serves its UI itself and stops with an error when
+  `dashboard.port` is taken. Before, it logged nothing useful and loaded
+  whatever page another program served on that port, which, on a shared
+  machine, could be another account's page with access to the dashboard's
+  bridge.
+- The dashboard's page sets a content security policy that allows only its
+  own scripts, styles, and images, and no inline code.
+- The dashboard opens only `http` and `https` links in the browser; before,
+  any page script could ask it to open any URL, such as a `file:` one.

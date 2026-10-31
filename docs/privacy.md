@@ -30,7 +30,8 @@ The broker is the access control:
 - On a shared machine, other local accounts can connect to a loopback broker
   too.
 
-The dashboard's own UI server listens only on `127.0.0.1`.
+The dashboard's own UI server listens only on `127.0.0.1`, and the dashboard
+exits rather than load its page from a port another program holds.
 
 ## What every event contains
 

@@ -11,10 +11,10 @@
 </head>
 <body>
     <header>
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 15px;">
+        <div class="toolbar">
+            <div class="brand">
                 <a href="https://github.com/ipapadop/vauxhall" id="logo-link" target="_blank" title="View on GitHub">
-                    <img src="logo.svg" alt="Vauxhall Logo" style="height: 40px; width: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">
+                    <img src="logo.svg" alt="Vauxhall Logo" class="brand-logo">
                 </a>
                 <div>
                     <h1>Vauxhall Agent Dashboard</h1>
@@ -56,15 +56,15 @@
     <dialog id="history-modal" class="modal" aria-labelledby="modal-agent-name">
         <div class="modal-content">
             <div class="modal-header">
-                <div style="display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0;">
+                <div class="modal-title-block">
                     <h2 id="modal-agent-name">Agent Activity</h2>
                     <div class="modal-agent-meta-row">
                         <span id="modal-agent-meta" class="modal-agent-meta"></span>
                         <button type="button" id="modal-copy-path" class="secondary-btn">Copy path</button>
                         <span id="modal-copy-status" class="modal-copy-status" role="status" aria-live="polite"></span>
                     </div>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="modal-search" autofocus placeholder="Filter history logs..." class="search-bar" style="flex: 1; min-width: 0;" aria-label="Filter history entries">
+                    <div class="modal-filters">
+                        <input type="text" id="modal-search" autofocus placeholder="Filter history logs..." class="search-bar" aria-label="Filter history entries">
                         <select id="modal-state-filter" class="secondary-btn" aria-label="Filter history by state">
                             <option value="ALL">All States</option>
                             <option value="Acting">Acting</option>

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
@@ -106,4 +107,24 @@ test('history details are rendered without creating markup', () => {
     assert.equal(Boolean(history.querySelector('.injected')), false);
     assert.equal(history.querySelector('.history-state').textContent, ATTACK);
     assert.match(history.textContent, new RegExp(ATTACK));
+});
+
+// The content security policy allows no inline styles or scripts, so markup
+// that uses them would render unstyled or not run.
+test('the page uses no inline styles, scripts, or event handler attributes', () => {
+    const html = readFileSync(new URL('../../../vauxhall/dashboard/ui/index.html', import.meta.url), 'utf8');
+    const { document } = parseHTML(html);
+
+    assert.deepEqual([...document.querySelectorAll('[style]')].map((element) => element.outerHTML), []);
+    assert.deepEqual([...document.querySelectorAll('script:not([src])')].map((element) => element.outerHTML), []);
+    const handlers = [...document.querySelectorAll('*')].flatMap((element) =>
+        element.getAttributeNames().filter((name) => name.startsWith('on')));
+    assert.deepEqual(handlers, []);
+});
+
+test('the card template uses no inline styles', () => {
+    setupPage();
+    const card = createCard({ agent: 'codex', workspace: '/home/user/project', session_id: 's1' }, () => {});
+
+    assert.deepEqual([...card.querySelectorAll('[style]')].map((element) => element.outerHTML), []);
 });

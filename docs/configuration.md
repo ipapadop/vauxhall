@@ -109,7 +109,9 @@ to you and ignores this setting. See
 | `VAUXHALL_SESSION_ID` | Hooks | Session ID to use when the agent's hook event has neither a session ID nor a transcript path. Without any of the three, the hook skips the event. Set it per session, not once in a shell profile: sessions of one agent that share it share one card, even in different workspaces. |
 
 `dashboard.port` is the port of the dashboard's own UI server, which listens
-only on `127.0.0.1`. It is unrelated to the MQTT port.
+only on `127.0.0.1`. It is unrelated to the MQTT port. If another program
+holds the port, the dashboard logs an error and exits rather than load that
+program's page.
 
 ### Saving configuration from code
 

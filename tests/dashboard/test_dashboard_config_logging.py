@@ -3,18 +3,30 @@
 
 """Tests for the dashboard entry point."""
 
+import logging
 import os
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
-from vauxhall.dashboard.app import INSTANCE_LOCK_FILE, _lock_dashboard
+from vauxhall.dashboard.app import (
+    INSTANCE_LOCK_FILE,
+    UI_DIR,
+    _lock_dashboard,
+    _serve_ui,
+)
 
 
-def test_dashboard_main_initializes_configured_logging() -> None:
-    """The dashboard entry point must initialize logging before it runs."""
+def test_dashboard_main_initializes_configured_logging(free_port: int) -> None:
+    """The dashboard entry point must initialize logging before it runs.
+
+    Args:
+        free_port: A free port for the UI server.
+    """
     code = """
 import logging
 from unittest.mock import patch
@@ -37,7 +49,11 @@ print(root.level == logging.INFO and type(root.handlers[0]) is logging.StreamHan
         capture_output=True,
         text=True,
         check=True,
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        env={
+            **os.environ,
+            "QT_QPA_PLATFORM": "offscreen",
+            "VAUXHALL_DASHBOARD_PORT": str(free_port),
+        },
     )
 
     assert result.stdout.splitlines()[-1] == "True"
@@ -213,3 +229,34 @@ def test_lock_dashboard_runs_unlocked_when_the_lock_cant_be_created(
 
     assert not lock.isLocked()
     assert "a second dashboard would not be refused" in caplog.text
+
+
+def test_serve_ui_serves_the_shipped_page() -> None:
+    """The server's URL loads the packaged index.html."""
+    server = _serve_ui(0)
+    try:
+        port = urlsplit(server.url).port
+        url = f"http://127.0.0.1:{port}/index.html"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            body = response.read()
+    finally:
+        server.close(1.0)
+
+    assert body == (UI_DIR / "index.html").read_bytes()
+
+
+def test_serve_ui_exits_when_another_program_holds_the_port(
+    listening_port: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A taken port stops startup instead of loading that program's page.
+
+    Args:
+        listening_port: A port another socket listens on.
+        caplog: Captures the error.
+    """
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exited:
+        _serve_ui(listening_port)
+
+    assert exited.value.code == 1
+    assert f"127.0.0.1:{listening_port}" in caplog.text
+    assert "dashboard.port" in caplog.text

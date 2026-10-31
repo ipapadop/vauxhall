@@ -4,6 +4,7 @@
 """Shared test fixtures."""
 
 import os
+import socket
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -97,3 +98,28 @@ def unsearchable_dir(tmp_path: Path) -> Iterator[Path]:
     parent.chmod(0)
     yield inner
     parent.chmod(0o700)
+
+
+@pytest.fixture
+def free_port() -> int:
+    """Return a loopback port that is free when asked.
+
+    Returns:
+        The port number.
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@pytest.fixture
+def listening_port() -> Iterator[int]:
+    """Hold a loopback port with a listening socket, as another program would.
+
+    Yields:
+        The held port.
+    """
+    with socket.socket() as other:
+        other.bind(("127.0.0.1", 0))
+        other.listen()
+        yield other.getsockname()[1]

@@ -9,6 +9,7 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from pyloid.ipc import Bridge, PyloidIPC
 
@@ -120,6 +121,9 @@ class HookInstallBackend(Protocol):
 
 class DashboardIPC(PyloidIPC):
     """IPC Bridge for communication between Python and the web frontend."""
+
+    # Opens a URL in the system's default browser; tests replace it.
+    open_browser: Callable[[str], object] = staticmethod(webbrowser.open)
 
     def __init__(
         self,
@@ -320,7 +324,10 @@ class DashboardIPC(PyloidIPC):
 
     @Bridge(str, result=bool)
     def open_url(self, url: str) -> bool:
-        """Open a URL in the system's default browser.
+        """Open an http or https URL in the system's default browser.
+
+        Any page script can call the bridge, so other schemes, such as
+        ``file:``, are refused, and the refused value is not logged.
 
         Args:
             url: The URL to open.
@@ -328,9 +335,19 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: True if successful, False otherwise.
         """
+        # urlsplit drops control characters and leading spaces, so refuse them
+        # rather than open a string other than the one checked.
+        parts = urlsplit(url)
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.netloc
+            or any(char.isspace() or not char.isprintable() for char in url)
+        ):
+            logger.warning("Refused to open a URL that isn't http or https")
+            return False
         try:
             logger.info("Opening URL in system browser: %s", url)
-            webbrowser.open(url)
+            self.open_browser(url)
         except Exception:
             logger.exception("Failed to open URL")
             return False

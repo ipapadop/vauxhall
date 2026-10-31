@@ -11,7 +11,6 @@ import os
 import re
 import shlex
 import shutil
-import socket
 import subprocess
 import sys
 import tarfile
@@ -87,17 +86,6 @@ def _venv_script(venv_dir: Path, name: str) -> Path:
     if os.name == "nt":
         return venv_dir / "Scripts" / f"{name}.exe"
     return venv_dir / "bin" / name
-
-
-def _free_port() -> int:
-    """Return a port that is free when asked.
-
-    Returns:
-        The port number.
-    """
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
 
 
 def _serves_ui(dashboard: subprocess.Popen[str], port: int) -> bool:
@@ -554,11 +542,14 @@ def test_wheel_installer_is_independent_of_source_checkout(
 
 
 @pytest.mark.packaged
-def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
+def test_packaged_dashboard_starts_and_serves_its_ui(
+    tmp_path: Path, free_port: int
+) -> None:
     """The installed dashboard must start and serve its UI on a desktop OS.
 
     Args:
         tmp_path: Pytest temporary directory.
+        free_port: A free loopback port for the UI.
     """
     wheel_path = _build_wheel(tmp_path / "wheel")
     dashboard_venv = tmp_path / "dashboard-venv"
@@ -581,7 +572,7 @@ def test_packaged_dashboard_starts_and_serves_its_ui(tmp_path: Path) -> None:
         text=True,
     )
 
-    port = _free_port()
+    port = free_port
     home = tmp_path / "home"
     home.mkdir()
     environment = os.environ.copy()

@@ -10,7 +10,9 @@ from unittest.mock import patch
 import pytest
 
 from vauxhall.hooks import installation
-from vauxhall.hooks.codex import install as installer
+from vauxhall.hooks.agents import INSTALLERS
+
+installer = INSTALLERS["codex"]
 
 
 @pytest.mark.parametrize(
@@ -30,7 +32,7 @@ def test_install_describes_hooks_file_without_replacing_description(
         existing_config: Configuration already in the file.
         description: The case's description.
     """
-    hooks_file = tmp_path / installer.SETTINGS_PATH
+    hooks_file = tmp_path / installer.settings_path
     if existing_config is not None:
         hooks_file.parent.mkdir()
         hooks_file.write_text(json.dumps(existing_config))
@@ -39,6 +41,6 @@ def test_install_describes_hooks_file_without_replacing_description(
         patch.object(Path, "cwd", return_value=tmp_path),
         patch.object(installation, "setup_venv", return_value=Path("/venv/bin/python")),
     ):
-        installation.install_hooks([installer.INSTALLER])
+        installation.install_hooks([installer])
 
     assert json.loads(hooks_file.read_text())["description"] == description

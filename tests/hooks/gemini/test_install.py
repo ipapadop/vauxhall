@@ -8,7 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from vauxhall.hooks import installation
-from vauxhall.hooks.gemini import install as installer
+from vauxhall.hooks.agents import INSTALLERS
+
+installer = INSTALLERS["gemini"]
 
 # Installation makes the interpreter path absolute, so a stubbed one is already
 # absolute in the host's own flavour.
@@ -29,8 +31,8 @@ def _install(workspace: Path) -> dict:
         patch.object(installation, "setup_venv", return_value=Path(VENV_PYTHON)),
         patch.object(installation.os, "name", "posix"),
     ):
-        installation.install_hooks([installer.INSTALLER])
-    return json.loads((workspace / installer.SETTINGS_PATH).read_text())
+        installation.install_hooks([installer])
+    return json.loads((workspace / installer.settings_path).read_text())
 
 
 def test_purge_removes_only_generated_vauxhall_handlers() -> None:
@@ -66,9 +68,7 @@ def test_purge_removes_only_generated_vauxhall_handlers() -> None:
         }
     }
 
-    installation.purge_hook_handlers(
-        settings, installer.INSTALLER.owns, installer._HOOK_OPTION_KEYS
-    )
+    installation.purge_hook_handlers(settings, installer.owns, installer.option_keys)
 
     assert settings == {
         "hooks": {
@@ -85,7 +85,7 @@ def test_reinstall_keeps_hook_options(tmp_path: Path) -> None:
     Args:
         tmp_path: Pytest temporary directory.
     """
-    settings_file = tmp_path / installer.SETTINGS_PATH
+    settings_file = tmp_path / installer.settings_path
     settings_file.parent.mkdir()
     options = {"enabled": True, "disabled": ["other-hook"], "notifications": False}
     settings_file.write_text(json.dumps({"hooks": options}))

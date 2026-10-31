@@ -14,28 +14,21 @@ import sys
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from types import ModuleType
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from vauxhall.hooks import installation
-from vauxhall.hooks.claude import install as claude_install
-from vauxhall.hooks.codex import install as codex_install
-from vauxhall.hooks.gemini import install as gemini_install
+from vauxhall.hooks.agents import INSTALLERS
 
 PREFIX = installation.WINDOWS_ENCODED_COMMAND_PREFIX
 MODULE = "vauxhall.hooks.codex.telemetry_hook"
 # Installation makes the interpreter path absolute, so a stubbed one is already
 # absolute in the host's own flavour and the expected command stays exact.
 VENV_PYTHON = str(Path("/venv/bin/python").absolute())
-INSTALLERS = pytest.mark.parametrize(
+EACH_INSTALLER = pytest.mark.parametrize(
     "installer",
-    [
-        pytest.param(claude_install, id="claude"),
-        pytest.param(codex_install, id="codex"),
-        pytest.param(gemini_install, id="gemini"),
-    ],
+    [pytest.param(INSTALLERS[agent], id=agent) for agent in INSTALLERS],
 )
 
 
@@ -80,21 +73,21 @@ def _handlers(settings: dict, event: str) -> list[dict]:
     ]
 
 
-def _settings_file(installer: ModuleType, workspace: Path) -> Path:
+def _settings_file(installer: installation.HookInstaller, workspace: Path) -> Path:
     """Return the settings file an installer writes in a workspace.
 
     Args:
-        installer: Installer module whose settings path is used.
+        installer: Installer whose settings path is used.
         workspace: Workspace the installer writes into.
 
     Returns:
         The path of the settings file.
     """
-    return workspace / installer.SETTINGS_PATH
+    return workspace / installer.settings_path
 
 
 def _install(
-    installer: ModuleType,
+    installer: installation.HookInstaller,
     workspace: Path,
     venv_python: str = VENV_PYTHON,
     os_name: str = "posix",
@@ -102,7 +95,7 @@ def _install(
     """Run an installer in a workspace with a stubbed hook environment.
 
     Args:
-        installer: Installer module to run.
+        installer: Installer to run.
         workspace: Workspace the installer writes into.
         venv_python: Python executable the generated command runs.
         os_name: Value ``os.name`` is stubbed with.
@@ -112,7 +105,7 @@ def _install(
         patch.object(installation, "setup_venv", return_value=Path(venv_python)),
         patch.object(installation.os, "name", os_name),
     ):
-        installation.install_hooks([installer.INSTALLER])
+        installation.install_hooks([installer])
 
 
 def test_hook_command_quotes_posix_metacharacters() -> None:
@@ -289,14 +282,14 @@ def test_install_replaces_a_symlinked_workspace_settings_file(
     outside = tmp_path / "outside.json"
     outside.write_text("{}")
     workspace = tmp_path / "workspace"
-    settings_file = _settings_file(claude_install, workspace)
+    settings_file = _settings_file(INSTALLERS["claude"], workspace)
     settings_file.parent.mkdir(parents=True)
     try:
         settings_file.symlink_to(outside)
     except OSError:
         pytest.skip("creating symlinks needs a privilege on this platform")
 
-    _install(claude_install, workspace)
+    _install(INSTALLERS["claude"], workspace)
 
     assert outside.read_text() == "{}"
     assert not settings_file.is_symlink()
@@ -323,12 +316,12 @@ def test_install_backs_up_a_file_it_creates_as_empty(tmp_path: Path) -> None:
     Args:
         tmp_path: Pytest temporary directory.
     """
-    settings_file = _settings_file(claude_install, tmp_path)
+    settings_file = _settings_file(INSTALLERS["claude"], tmp_path)
     backup = settings_file.with_suffix(".json.bak")
 
-    _install(claude_install, tmp_path)
+    _install(INSTALLERS["claude"], tmp_path)
     assert settings_file.exists()
-    _install(claude_install, tmp_path)
+    _install(INSTALLERS["claude"], tmp_path)
 
     assert json.loads(backup.read_text()) == {}
 
@@ -607,14 +600,14 @@ def test_installer_names_the_failed_command_and_changes_nothing(
         tmp_path: Pytest temporary directory.
         capsys: Pytest output capture fixture.
     """
-    settings_file = _settings_file(claude_install, tmp_path)
+    settings_file = _settings_file(INSTALLERS["claude"], tmp_path)
 
     with (
         patch.object(Path, "cwd", return_value=tmp_path),
         patch.object(installation.subprocess, "run", _fake_run(pip_fails=True)),
         pytest.raises(SystemExit) as exit_info,
     ):
-        installation.install_hooks([claude_install.INSTALLER])
+        installation.install_hooks([INSTALLERS["claude"]])
 
     output = capsys.readouterr().out
     assert exit_info.value.code == 1
@@ -642,7 +635,7 @@ def test_installer_reports_a_venv_it_cannot_move_aside(
         patch.object(Path, "rename", side_effect=PermissionError("in use")),
         pytest.raises(SystemExit) as exit_info,
     ):
-        installation.install_hooks([claude_install.INSTALLER])
+        installation.install_hooks([INSTALLERS["claude"]])
 
     output = capsys.readouterr().out
     assert exit_info.value.code == 1
@@ -651,48 +644,52 @@ def test_installer_reports_a_venv_it_cannot_move_aside(
     assert (tmp_path / ".vauxhall-venv").is_dir()
 
 
-@INSTALLERS
-def test_installer_registers_exactly_the_handled_events(installer: ModuleType) -> None:
+@EACH_INSTALLER
+def test_installer_registers_exactly_the_handled_events(
+    installer: installation.HookInstaller,
+) -> None:
     """The installer registers every event its hook handles, and no others.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
     """
-    hook = importlib.import_module(installer.HOOK_MODULE)
+    hook = importlib.import_module(installer.module)
 
-    assert set(installer.HANDLERS) == set(hook.HANDLERS)
+    assert set(installer.handlers) == set(hook.HANDLERS)
 
 
-@INSTALLERS
-def test_install_registers_every_handler(installer: ModuleType, tmp_path: Path) -> None:
+@EACH_INSTALLER
+def test_install_registers_every_handler(
+    installer: installation.HookInstaller, tmp_path: Path
+) -> None:
     """Installation must register each handler in a catch-all group.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
     """
     _install(installer, tmp_path)
 
     settings = json.loads(_settings_file(installer, tmp_path).read_text())
-    assert set(settings["hooks"]) == set(installer.HANDLERS)
-    for event, fields in installer.HANDLERS.items():
+    assert set(settings["hooks"]) == set(installer.handlers)
+    for event, fields in installer.handlers.items():
         handler = {
             "type": "command",
-            "command": shlex.join([VENV_PYTHON, "-P", "-m", installer.HOOK_MODULE]),
+            "command": shlex.join([VENV_PYTHON, "-P", "-m", installer.module]),
             **fields,
         }
         assert settings["hooks"][event] == [{"matcher": "*", "hooks": [handler]}]
 
 
-@INSTALLERS
+@EACH_INSTALLER
 @pytest.mark.parametrize("existing_content", ["{", "[]", '// comment\n{"a": 1}'])
 def test_install_preserves_and_rejects_invalid_existing_settings(
-    installer: ModuleType, tmp_path: Path, existing_content: str
+    installer: installation.HookInstaller, tmp_path: Path, existing_content: str
 ) -> None:
     """Invalid existing settings must be backed up and left unchanged.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
         existing_content: Raw content already in the file.
     """
@@ -705,7 +702,7 @@ def test_install_preserves_and_rejects_invalid_existing_settings(
         patch.object(installation, "setup_venv") as setup_venv,
         pytest.raises(SystemExit) as exit_info,
     ):
-        installation.install_hooks([installer.INSTALLER])
+        installation.install_hooks([installer])
 
     assert exit_info.value.code == 1
     assert settings_file.read_text() == existing_content
@@ -713,7 +710,7 @@ def test_install_preserves_and_rejects_invalid_existing_settings(
     setup_venv.assert_not_called()
 
 
-@INSTALLERS
+@EACH_INSTALLER
 @pytest.mark.parametrize(
     "existing_settings",
     [
@@ -726,12 +723,12 @@ def test_install_preserves_and_rejects_invalid_existing_settings(
     ],
 )
 def test_install_rejects_invalid_nested_settings(
-    installer: ModuleType, tmp_path: Path, existing_settings: dict
+    installer: installation.HookInstaller, tmp_path: Path, existing_settings: dict
 ) -> None:
     """Invalid nested structures must be rejected before environment setup.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
         existing_settings: Settings already in the file.
     """
@@ -745,20 +742,20 @@ def test_install_rejects_invalid_nested_settings(
         patch.object(installation, "setup_venv") as setup_venv,
         pytest.raises(SystemExit),
     ):
-        installation.install_hooks([installer.INSTALLER])
+        installation.install_hooks([installer])
 
     assert settings_file.read_text() == original
     setup_venv.assert_not_called()
 
 
-@INSTALLERS
+@EACH_INSTALLER
 def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
-    installer: ModuleType, tmp_path: Path
+    installer: installation.HookInstaller, tmp_path: Path
 ) -> None:
     """Repeated installation must converge and keep user settings and hooks.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
     """
     settings_file = _settings_file(installer, tmp_path)
@@ -767,7 +764,7 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
         "matcher": "custom",
         "hooks": [
             {"type": "command", "command": "python lint.py"},
-            {"type": "command", "command": f"echo -m {installer.HOOK_MODULE}"},
+            {"type": "command", "command": f"echo -m {installer.module}"},
         ],
     }
     original = {"theme": "dark", "hooks": {"CustomEvent": [user_group]}}
@@ -782,13 +779,13 @@ def test_reinstall_is_idempotent_and_preserves_unrelated_settings(
     settings = json.loads(first)
     assert settings["theme"] == "dark"
     assert settings["hooks"]["CustomEvent"] == [user_group]
-    for event in installer.HANDLERS:
+    for event in installer.handlers:
         commands = [
             shlex.split(handler["command"])
             for handler in _handlers(settings, event)
-            if installation.is_hook_handler(handler, installer.HOOK_MODULE)
+            if installation.is_hook_handler(handler, installer.module)
         ]
-        assert commands == [[venv_python, "-P", "-m", installer.HOOK_MODULE]]
+        assert commands == [[venv_python, "-P", "-m", installer.module]]
     assert not list(settings_file.parent.glob("*.tmp"))
     assert json.loads(settings_file.with_suffix(".json.bak").read_text()) == original
 
@@ -818,14 +815,14 @@ def test_hook_command_never_runs_the_workspace_package(tmp_path: Path) -> None:
     assert "decoy" not in result.stdout
 
 
-@INSTALLERS
+@EACH_INSTALLER
 def test_windows_reinstall_replaces_only_vauxhall_handlers(
-    installer: ModuleType, tmp_path: Path
+    installer: installation.HookInstaller, tmp_path: Path
 ) -> None:
     """Repeated Windows installation must replace only generated handlers.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
     """
     settings_file = _settings_file(installer, tmp_path)
@@ -834,7 +831,7 @@ def test_windows_reinstall_replaces_only_vauxhall_handlers(
         "type": "command",
         "command": _encode("& 'C:/custom/python.exe' -m custom.telemetry"),
     }
-    first_event = next(iter(installer.HANDLERS))
+    first_event = next(iter(installer.handlers))
     settings_file.write_text(
         json.dumps(
             {"hooks": {first_event: [{"matcher": "*", "hooks": [custom_handler]}]}}
@@ -846,22 +843,22 @@ def test_windows_reinstall_replaces_only_vauxhall_handlers(
     _install(installer, tmp_path, venv_python, os_name="nt")
 
     settings = json.loads(settings_file.read_text())
-    for event in installer.HANDLERS:
+    for event in installer.handlers:
         scripts = [
             _decode(handler["command"]) for handler in _handlers(settings, event)
         ]
-        assert sum(installer.HOOK_MODULE in script for script in scripts) == 1
+        assert sum(installer.module in script for script in scripts) == 1
     assert _handlers(settings, first_event)[0] == custom_handler
 
 
-@INSTALLERS
+@EACH_INSTALLER
 def test_failed_write_leaves_existing_settings_unchanged(
-    installer: ModuleType, tmp_path: Path
+    installer: installation.HookInstaller, tmp_path: Path
 ) -> None:
     """A failure while replacing settings must not truncate the original file.
 
     Args:
-        installer: The installer module under test.
+        installer: The installer under test.
         tmp_path: Pytest temporary directory.
     """
     settings_file = _settings_file(installer, tmp_path)

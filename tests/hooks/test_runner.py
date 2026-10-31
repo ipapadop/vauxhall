@@ -246,6 +246,28 @@ def test_hook_answers_input_it_cannot_use(hook: str, stdin: str) -> None:
 
 
 @pytest.mark.parametrize("hook", HOOKS)
+def test_hook_import_leaves_out_slow_modules(hook: str) -> None:
+    """An agent waits for every hook, so importing one loads no slow module.
+
+    The installer and the MQTT client are imported only when needed.
+
+    Args:
+        hook: The hook module.
+    """
+    slow = ["subprocess", "paho", "vauxhall.hooks.installation"]
+    script = f"import sys, {hook}; print([m for m in {slow!r} if m in sys.modules])"
+
+    completed = subprocess.run(
+        [sys.executable, "-P", "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert completed.stdout == "[]\n"
+
+
+@pytest.mark.parametrize("hook", HOOKS)
 def test_hook_keeps_debug_logs_off_stdout(hook: str) -> None:
     """Debug logging goes to stderr, so stdout stays a valid hook response.
 

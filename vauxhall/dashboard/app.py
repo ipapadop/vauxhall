@@ -1,34 +1,28 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Main entry point for the Vauxhall Dashboard application."""
+"""The dashboard's window, telemetry dispatch, and settings."""
 
 import logging
-import os
 import subprocess
-import sys
 from collections import deque
-from collections.abc import Callable, MutableMapping
-from contextlib import suppress
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 from pyloid import Pyloid
-from PySide6.QtCore import QLockFile, QObject, Qt, Signal, Slot
+from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from vauxhall.core.config import ConfigurationError
 from vauxhall.core.config_store import (
     check_user_config,
     save_user_config,
-    user_config_path,
 )
-from vauxhall.core.logging import get_logger, setup_logging
+from vauxhall.core.logging import get_logger
 from vauxhall.core.telemetry import telemetry_validation_error
-from vauxhall.dashboard import USER_CHROMIUM_FLAGS
 from vauxhall.dashboard.config import DashboardConfig
 from vauxhall.dashboard.config import dashboard_settings as settings
-from vauxhall.dashboard.graphics import set_graphics_backend
 from vauxhall.dashboard.hook_install import HookInstallRunner
 from vauxhall.dashboard.ipc import DashboardIPC
 from vauxhall.dashboard.mqtt_client import DashboardSubscriber, SubscriberCloser
@@ -40,15 +34,12 @@ from vauxhall.dashboard.settings_editor import (
     error_field,
     hook_changes_for,
 )
-from vauxhall.dashboard.ui_server import UIServer
 from vauxhall.dashboard.ui_state import (
-    INSTALL_DIRECTORY_KEY,
     load_ui_state,
     update_ui_state,
     visible_position,
     window_geometry,
 )
-from vauxhall.hooks.agents import detect_agents
 from vauxhall.hooks.config import HookConfig
 
 logger = get_logger(__name__)
@@ -58,8 +49,6 @@ ICON_FILE = UI_DIR / "icon.png"
 # At exit, long enough for a connected client to send its DISCONNECT; a client
 # still inside a connect attempt has nothing to close cleanly.
 SHUTDOWN_CLOSE_SECONDS = 1.0
-# Held while a dashboard runs: two would overwrite each other's saved state.
-INSTANCE_LOCK_FILE = "dashboard.lock"
 
 WindowEvent = Callable[[str, object], None]
 
@@ -140,14 +129,18 @@ class DashboardApp:
         # alone reads and writes readiness, the pending updates, the last
         # status, and the outbox, so they need no lock.
         self._post = queue_to_ui(self._dispatch)
+        self.install_runner = HookInstallRunner(
+            self._post,
+            select_directory=app.select_directory_dialog,
+            launch=launch_installer,
+        )
         self.ipc = DashboardIPC(
             on_ready_callback=self._on_frontend_ready,
             on_save_settings=self.save_settings,
             on_notify=self._notify,
             on_copy=self._copy,
-            hook_install=self,
+            hook_install=self.install_runner,
         )
-        self.install_runner = HookInstallRunner(self._post, launch=launch_installer)
         self.pending_updates: deque[dict[str, Any]] = deque(
             maxlen=settings.dashboard.pending_update_limit
         )
@@ -312,41 +305,6 @@ class DashboardApp:
         """
         self._subscriber_generation += 1
         return partial(self.on_status, generation=self._subscriber_generation)
-
-    def select_install_directory(self) -> dict[str, Any]:
-        """Ask for a directory to install hooks into and detect its agents.
-
-        Runs on the UI thread, like the other view-state writes. The picker
-        opens at the last chosen directory, or at home once that is gone.
-
-        Returns:
-            ``ok`` with the chosen ``path`` and its ``agents``, or ``ok``
-            false alone when cancelled.
-        """
-        last = load_ui_state().get(INSTALL_DIRECTORY_KEY)
-        # Unlike Path.is_dir before Python 3.14, it is False on a
-        # PermissionError, so an unreadable directory can't block the picker.
-        start = last if last and os.path.isdir(last) else str(Path.home())  # noqa: PTH112
-        chosen = self.app.select_directory_dialog(dir=start)
-        if not chosen:
-            return {"ok": False}
-        try:
-            update_ui_state({INSTALL_DIRECTORY_KEY: chosen})
-        except OSError:
-            logger.exception("Could not remember the install directory")
-        return {"ok": True, "path": chosen, "agents": detect_agents(Path(chosen))}
-
-    def install_hooks(self, directory: Path, agents: list[str]) -> dict[str, Any]:
-        """Start installing some agents' hooks into a directory.
-
-        Args:
-            directory: The checked directory.
-            agents: Known, distinct agent keys.
-
-        Returns:
-            ``ok``, or ``ok`` false and an ``error``.
-        """
-        return self.install_runner.start(directory, agents)
 
     def save_settings(
         self, changes: dict[str, dict[str, object]], *, update_hooks: bool = False
@@ -525,134 +483,3 @@ class DashboardApp:
             if not self.mqtt_closer.finish(SHUTDOWN_CLOSE_SECONDS):
                 logger.warning("Exiting before the MQTT connection finished closing")
             logger.info("Vauxhall Dashboard shutting down...")
-
-
-def _use_utf8_output() -> None:
-    """Keep non-ASCII output from killing whoever writes it.
-
-    The UI server prints a banner containing emoji. Windows consoles default to
-    a code page that cannot represent them, and the resulting UnicodeEncodeError
-    stops the server before it serves anything.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        if stream is not None:
-            with suppress(AttributeError, OSError, ValueError):
-                stream.reconfigure(  # pyright: ignore[reportAttributeAccessIssue]
-                    encoding="utf-8", errors="replace"
-                )
-
-
-# Pyloid turns off certificate checks for every page the window loads. The UI
-# is served over plain HTTP, so they serve no purpose here.
-_INSECURE_PYLOID_FLAGS = frozenset(
-    {"--ignore-certificate-errors", "--allow-insecure-localhost"}
-)
-
-
-def _set_chromium_flags(
-    environ: MutableMapping[str, str] = os.environ,
-    user_flags: str = USER_CHROMIUM_FLAGS,
-) -> None:
-    """Drop Pyloid's certificate overrides and append the user's flags.
-
-    Qt reads the variable when the application starts, so this must run
-    before ``Pyloid``. The user's flags are kept as given.
-
-    Args:
-        environ: The environment to update.
-        user_flags: The flags the user set before Pyloid's import.
-    """
-    pyloid_flags = environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "").split()
-    flags = [flag for flag in pyloid_flags if flag not in _INSECURE_PYLOID_FLAGS]
-    environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join([*flags, user_flags]).strip()
-
-
-def _lock_dashboard(path: Path) -> QLockFile:
-    """Lock ``path`` for this dashboard, refusing to run beside another one.
-
-    A lock whose process has exited is taken over. When the lock can't be
-    created at all, the dashboard runs without it rather than not at all.
-
-    Args:
-        path: The lock file.
-
-    Returns:
-        The lock, held until it is unlocked or the process exits.
-
-    Raises:
-        SystemExit: Another live process holds the lock.
-    """
-    with suppress(OSError):
-        path.parent.mkdir(parents=True, exist_ok=True)
-    lock = QLockFile(str(path))
-    lock.setStaleLockTime(0)
-    if lock.tryLock(0):
-        return lock
-    if lock.error() == QLockFile.LockError.LockFailedError:
-        pid, host, _ = lock.getLockInfo()
-        logger.error(
-            "Another Vauxhall Dashboard is already running (process %s on %s); "
-            "if it isn't, delete %s",
-            pid,
-            host or "unknown host",
-            path,
-        )
-        raise SystemExit(1)
-    logger.warning(
-        "Could not create %s (%s); a second dashboard would not be refused",
-        path,
-        lock.error().name,
-    )
-    return lock
-
-
-def _serve_ui(port: int) -> UIServer:
-    """Serve the UI on ``port``, refusing to run when the port is taken.
-
-    Loading the page from a port another program holds would hand that
-    program's page the dashboard's bridge.
-
-    Args:
-        port: The configured UI port.
-
-    Returns:
-        The running server.
-
-    Raises:
-        SystemExit: The port can't be bound.
-    """
-    try:
-        server = UIServer(UI_DIR, port)
-    except OSError as error:
-        logger.exception(
-            "Could not serve the dashboard UI on 127.0.0.1:%s; another program "
-            "may be using the port. Set dashboard.port to a free port",
-            port,
-        )
-        raise SystemExit(1) from error
-    logger.info("Serving UI from %s at %s", UI_DIR, server.url)
-    return server
-
-
-def main() -> None:
-    """Run the Vauxhall Dashboard application."""
-    _use_utf8_output()
-    _set_chromium_flags()
-    setup_logging(level=settings.logging.level)
-    lock = _lock_dashboard(user_config_path(INSTANCE_LOCK_FILE))
-    logger.info("Starting Vauxhall Dashboard...")
-    set_graphics_backend(settings.dashboard.graphics_backend)
-
-    app = Pyloid(app_name="Vauxhall Dashboard")
-    try:
-        ui_server = _serve_ui(settings.dashboard.port)
-        try:
-            DashboardApp(app).run(ui_server.url)
-        finally:
-            ui_server.close(SHUTDOWN_CLOSE_SECONDS)
-    finally:
-        lock.unlock()
-
-
-if __name__ == "__main__":
-    main()

@@ -6,7 +6,7 @@
 from functools import partial
 from typing import Any
 
-from vauxhall.hooks import common
+from vauxhall.hooks import events, runner, scratch
 from vauxhall.hooks.codex.messages import new_messages
 
 _COMMAND_FIELDS = {"Bash": "command"}
@@ -23,7 +23,7 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     """
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
-    if common.is_cancelled(response):
+    if events.is_cancelled(response):
         return "Idle", "cancelled", None
     exit_code = response.get("exit_code")
     has_exit_code = isinstance(exit_code, int) and not isinstance(exit_code, bool)
@@ -36,7 +36,7 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     return "Thinking", "result unavailable", None
 
 
-def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_post_tool(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate a Codex PostToolUse event.
 
     Args:
@@ -45,37 +45,37 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     Returns:
         The state for the response, with the tool details and duration.
     """
-    duration = common.claim_tool_use_duration("codex", input_data)
-    return common.tool_result_telemetry(
+    duration = scratch.claim_tool_use_duration("codex", input_data)
+    return events.tool_result_telemetry(
         input_data, _classify_tool_response(input_data.get("tool_response")), duration
     )
 
 
-HANDLERS: dict[str, common.EventHandler] = {
-    "SessionStart": common.session_start_telemetry,
-    "UserPromptSubmit": common.prompt_submit_telemetry,
+HANDLERS: dict[str, events.EventHandler] = {
+    "SessionStart": events.session_start_telemetry,
+    "UserPromptSubmit": events.prompt_submit_telemetry,
     "PreToolUse": partial(
-        common.pre_tool_telemetry,
+        events.pre_tool_telemetry,
         agent="codex",
         question_tool="request_user_input",
         command_fields=_COMMAND_FIELDS,
     ),
-    "PermissionRequest": common.permission_request_telemetry,
+    "PermissionRequest": events.permission_request_telemetry,
     "PostToolUse": _handle_post_tool,
-    "SubagentStart": common.subagent_start_telemetry,
-    "PreCompact": common.pre_compact_telemetry,
-    "PostCompact": common.post_compact_telemetry,
-    "Stop": common.stop_telemetry,
+    "SubagentStart": events.subagent_start_telemetry,
+    "PreCompact": events.pre_compact_telemetry,
+    "PostCompact": events.post_compact_telemetry,
+    "Stop": events.stop_telemetry,
     "Interrupt": lambda _: ("Idle", {"status": "interrupted"}),
     # Codex currently reports only the "other" reason.
-    "SessionEnd": partial(common.session_end_telemetry, statuses={}),
+    "SessionEnd": partial(events.session_end_telemetry, statuses={}),
 }
 
 
 def main() -> None:
     """Process one Codex hook event without disrupting its protocol."""
-    common.run_hook(
-        lambda input_data: common.publish_telemetry(
+    runner.run_hook(
+        lambda input_data: runner.publish_telemetry(
             input_data, "Codex", HANDLERS, messages=new_messages(input_data)
         )
     )

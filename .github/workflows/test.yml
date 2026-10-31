@@ -124,7 +124,7 @@ jobs:
           from importlib.resources import files
           import vauxhall.hooks.client, vauxhall.hooks.codex.telemetry_hook
           ui = files('vauxhall.dashboard') / 'ui'
-          for asset in ('index.html', 'app.js', 'style.css', 'js/ui.js'):
+          for asset in ('index.html', 'app.js', 'style.css', 'js/card.js'):
               assert (ui / asset).is_file(), asset
           "
 

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from vauxhall.core.config import load_config_data
-from vauxhall.core.config_store import user_config_path, write_json_atomically
+from vauxhall.core.config_store import user_config_path
+from vauxhall.core.files import write_json_atomically
 from vauxhall.core.logging import get_logger
 from vauxhall.dashboard.config import UIConfig
 

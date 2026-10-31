@@ -8,10 +8,13 @@
  * @description Main entry point for the Vauxhall Dashboard frontend.
  */
 
-import { agentKey, agents, cardIdentity, updateAgentHistory, updateLastSeen, clearAgents, removeAgent, ensureAgentCapacity, evictAgents, isReplacedSession, isHidden, isLateFinalMessage, setHidden, snapshotAgents } from './js/state.js';
-import { createCard, copyWorkspacePath, updateCard, filterGrid, sortGrid, checkStaleness, openHistoryModal, closeHistoryModal, renderSummary } from './js/ui.js';
+import { agents, cardIdentity, setHidden, snapshotAgents } from './js/state.js';
+import { copyWorkspacePath } from './js/card.js';
+import { checkStaleness, filterGrid, renderSummary, sortGrid } from './js/grid.js';
+import { closeHistoryModal, openHistoryModal } from './js/history.js';
 import { closeDialog, openDialog } from './js/dialog.js';
-import { saveDenylist } from './js/denylist.js';
+import { addToDenylist } from './js/denylist.js';
+import { createFleet } from './js/fleet.js';
 import { initInstall } from './js/install.js';
 import { initIPC } from './js/ipc.js';
 import { initSettings } from './js/settings.js';
@@ -101,24 +104,7 @@ async function init() {
         const card = agents[menuTarget.key];
         const agentName = card && cardIdentity(card).agent;
         closeMenu();
-        if (!agentName || !window.ipc?.DashboardIPC) return;
-        try {
-            const descriptor = JSON.parse(await window.ipc.DashboardIPC.get_settings());
-            if (descriptor.error) {
-                console.error('Failed to update agent denylist:', descriptor.error);
-                return;
-            }
-            if (descriptor.agent_denylist_editable === false) {
-                console.error('Failed to add agent to denylist: a configuration file in the current directory takes precedence.');
-                return;
-            }
-            const denylist = descriptor.agent_denylist ?? [];
-            if (denylist.includes(agentName)) return;
-            const result = await saveDenylist(window.ipc.DashboardIPC, [...denylist, agentName]);
-            if (!result.ok) console.error('Failed to add agent to denylist:', result.error);
-        } catch (err) {
-            console.error('Failed to update agent denylist:', err);
-        }
+        if (agentName && window.ipc?.DashboardIPC) await addToDenylist(window.ipc.DashboardIPC, agentName);
     });
 
     // Closes the dialogs acting on any of the given cards, which are leaving
@@ -127,21 +113,18 @@ async function init() {
         if (keys.includes(historyTarget.key)) closeModal();
         if (keys.includes(menuTarget.key)) closeMenu();
     };
-    const removeCard = (key) => {
-        agents[key]?.remove();
-        removeAgent(key);
-        closeDialogsFor([key]);
-    };
-
-    // Builds a card whose click and options button act on its key.
-    const newCard = (key, data) => createCard(data, (opener) => {
-        historyTarget.key = key;
-        historyTarget.opener = opener;
-        openHistoryModal(key, agents);
-    }, (opener) => {
-        menuTarget.key = key;
-        menuTarget.opener = opener;
-        openDialog(cardMenuModal);
+    const fleet = createFleet(grid, {
+        openPane: (key, opener) => {
+            historyTarget.key = key;
+            historyTarget.opener = opener;
+            openHistoryModal(key, agents);
+        },
+        openMenu: (key, opener) => {
+            menuTarget.key = key;
+            menuTarget.opener = opener;
+            openDialog(cardMenuModal);
+        },
+        onRemoved: closeDialogsFor,
     });
 
     // Persists card identity and last known state (never prompt, message,
@@ -164,17 +147,14 @@ async function init() {
     let restoreCancelled = false;
 
     document.getElementById('clear-btn')?.addEventListener('click', () => {
-        grid.innerHTML = '';
-        clearAgents();
+        fleet.clear();
         restoreCancelled = true;
         refreshSummary();
         scheduleCardSave();
     });
 
     document.getElementById('clear-stale-btn')?.addEventListener('click', () => {
-        for (const [key, card] of Object.entries(agents)) {
-            if (card.classList.contains('stale')) removeCard(key);
-        }
+        fleet.removeStale();
         refreshSummary();
         scheduleCardSave();
     });
@@ -261,27 +241,14 @@ async function init() {
 
         // Restore card shells from the previous run before live telemetry
         // starts, so an incoming event for a restored session updates it in
-        // place instead of creating a duplicate card. Capped and sorted by
-        // last-seen before any DOM work, so a saved list larger than the
-        // configured limit doesn't build cards only to evict them.
+        // place instead of creating a duplicate card.
         if (window.ipc?.DashboardIPC?.get_saved_cards) {
             try {
                 const saved = JSON.parse(await window.ipc.DashboardIPC.get_saved_cards());
                 // A Clear click while the call above was in flight already
                 // emptied the grid; don't let this response undo it.
                 if (!restoreCancelled) {
-                    const shells = (Array.isArray(saved) ? saved : [])
-                        .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0))
-                        .slice(0, Math.max(maxActiveAgents, 0));
-                    for (const shell of shells) {
-                        const key = agentKey(shell);
-                        if (agents[key]) continue;
-                        const card = newCard(key, shell);
-                        updateCard(card, shell);
-                        card.dataset.lastSeen = String(shell.last_seen || 0);
-                        agents[key] = card;
-                        grid.appendChild(card);
-                    }
+                    fleet.restore(saved, maxActiveAgents);
                     checkStaleness(agents, staleThresholdMs);
                     if (grid.children.length) sortGrid(sortSelect?.value, grid, attentionFirstToggle?.checked);
                     refreshSummary();
@@ -293,39 +260,19 @@ async function init() {
 
         initIPC({
             onAgentUpdate: (data) => {
-                const key = agentKey(data);
-                let card = agents[key];
-                if (card && isLateFinalMessage(card, data)) return;
-
-                // The agent continues a cleared or resumed-away session under
-                // another session ID, so its card would only linger until stale.
-                if (isReplacedSession(data)) {
-                    if (!card) return;
-                    removeCard(key);
+                const update = fleet.apply(data, maxActiveAgents);
+                if (!update) return;
+                if (update.removed) {
                     refreshSummary();
                     scheduleCardSave();
                     return;
                 }
-
-                if (!card) {
-                    closeDialogsFor(ensureAgentCapacity(maxActiveAgents));
-                    card = newCard(key, data);
-                    agents[key] = card;
-                    grid.appendChild(card);
-                } else if (isHidden(card)) {
-                    // A hidden card reappears on its next event.
-                    setHidden(card, false);
-                }
-
-                updateAgentHistory(card, data);
-                updateLastSeen(card);
-                const { enteredAttention, message } = updateCard(card, data);
-                if (enteredAttention && notifyToggle?.checked) {
-                    window.ipc?.DashboardIPC?.notify(`${data.agent || 'Agent'} needs attention`, message);
+                if (update.enteredAttention && notifyToggle?.checked) {
+                    window.ipc?.DashboardIPC?.notify(`${data.agent || 'Agent'} needs attention`, update.message);
                 }
 
                 // Push live updates to the history modal if it's viewing this agent
-                if (historyTarget.key === key) openHistoryModal(key, agents, true);
+                if (historyTarget.key === update.key) openHistoryModal(update.key, agents, true);
 
                 // Re-apply filter and sort to keep view consistent
                 if (searchInput?.value) filterGrid(searchInput.value.toLowerCase(), agents);
@@ -340,12 +287,7 @@ async function init() {
                 staleThresholdMs = changed.stale_threshold * 1000;
                 maxActiveAgents = changed.max_active_agents;
 
-                // Denylisted cards go first, so they don't count toward the limit.
-                const denylist = new Set(changed.agent_denylist ?? []);
-                for (const [key, card] of Object.entries(agents)) {
-                    if (denylist.has(cardIdentity(card).agent)) removeCard(key);
-                }
-                closeDialogsFor(evictAgents(maxActiveAgents));
+                fleet.applySettings(changed.agent_denylist ?? [], maxActiveAgents);
 
                 checkStaleness(agents, staleThresholdMs);
                 refreshSummary();

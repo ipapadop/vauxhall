@@ -9,9 +9,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vauxhall.core.files import NOFOLLOW, write_atomically
 from vauxhall.core.logging import get_logger
-from vauxhall.hooks.common import message_text, private_directory
-from vauxhall.hooks.files import NOFOLLOW, claim, remove_old_files, write_atomically
+from vauxhall.hooks.scratch import claim, private_directory, remove_old_files
+from vauxhall.hooks.text import message_text
 
 logger = get_logger(__name__)
 
@@ -143,7 +144,12 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
         transcript = Path(transcript_path)
         cursor = _cursor_path(session_id, transcript_path)
         if input_data.get("hook_event_name") == "UserPromptSubmit":
-            write_atomically(cursor, str(transcript.stat().st_size))
+            write_atomically(
+                cursor,
+                str(transcript.stat().st_size),
+                private=True,
+                durable=False,
+            )
             # Cursors are named by a bare hash; only leftovers have a suffix.
             remove_old_files(cursor.parent, "*.*", _LEFTOVER_MAX_AGE_SECONDS)
             return []
@@ -167,7 +173,7 @@ def new_messages(input_data: dict[str, Any]) -> list[str]:
             messages, next_offset = _read_from_cursor(
                 claimed, transcript, size, turn_id
             )
-            write_atomically(cursor, str(next_offset))
+            write_atomically(cursor, str(next_offset), private=True, durable=False)
         except BaseException:
             claimed.replace(cursor)
             raise

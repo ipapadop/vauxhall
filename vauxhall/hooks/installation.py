@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from vauxhall import __version__
-from vauxhall.core.config_store import write_json_atomically
+from vauxhall.core.files import write_json_atomically
 
 WINDOWS_ENCODED_COMMAND_PREFIX = (
     "powershell.exe -NoProfile -NonInteractive -EncodedCommand "

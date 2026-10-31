@@ -6,8 +6,9 @@
 from functools import partial
 from typing import Any
 
-from vauxhall.hooks import common
+from vauxhall.hooks import events, runner, scratch
 from vauxhall.hooks.identity import resolve_session_id
+from vauxhall.hooks.text import message_text
 
 _COMMAND_FIELDS = {"Bash": "command", "PowerShell": "command"}
 _SESSION_END_STATUSES = {
@@ -67,14 +68,14 @@ def _tool_duration(input_data: dict[str, Any]) -> float | None:
         The duration in seconds, or ``None`` when unknown.
     """
     # Claimed even when Claude Code reports a duration, to remove the start record.
-    measured = common.claim_tool_use_duration("claude", input_data)
+    measured = scratch.claim_tool_use_duration("claude", input_data)
     duration_ms = input_data.get("duration_ms")
     if isinstance(duration_ms, int | float) and not isinstance(duration_ms, bool):
         return round(duration_ms / 1000, 1)
     return measured
 
 
-def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_post_tool(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate a Claude Code PostToolUse event, which follows tool success.
 
     Args:
@@ -86,15 +87,15 @@ def _handle_post_tool(input_data: dict[str, Any]) -> common.Telemetry:
     """
     response = input_data.get("tool_response")
     interrupted = isinstance(response, dict) and (
-        response.get("interrupted") is True or common.is_cancelled(response)
+        response.get("interrupted") is True or events.is_cancelled(response)
     )
     outcome = (
         ("Idle", "cancelled", None) if interrupted else ("Thinking", "completed", None)
     )
-    return common.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
+    return events.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
 
 
-def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_post_tool_failure(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate a Claude Code PostToolUseFailure event.
 
     Args:
@@ -108,10 +109,10 @@ def _handle_post_tool_failure(input_data: dict[str, Any]) -> common.Telemetry:
         outcome = ("Idle", "cancelled", None)
     else:
         outcome = ("Error", "failed", "Tool reported an error")
-    return common.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
+    return events.tool_result_telemetry(input_data, outcome, _tool_duration(input_data))
 
 
-def _handle_permission_denied(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_permission_denied(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate PermissionDenied, sent when auto mode refuses a tool call.
 
     The model receives the denial and continues, so the state is thinking. The
@@ -125,15 +126,15 @@ def _handle_permission_denied(input_data: dict[str, Any]) -> common.Telemetry:
         The thinking state and a status naming the denied tool.
     """
     # Remove the start record; the tool never ran, so report no duration.
-    common.claim_tool_use_duration("claude", input_data)
-    tool = common.tool_details(input_data, {}).get("tool")
+    scratch.claim_tool_use_duration("claude", input_data)
+    tool = events.tool_details(input_data, {}).get("tool")
     status = f"Denied by auto mode: {tool}" if tool else "Denied by auto mode"
     return "Thinking", {"status": status}
 
 
 def _waiting_telemetry(
     input_data: dict[str, Any], default_prompt: str
-) -> common.Telemetry:
+) -> events.Telemetry:
     """Build a waiting state that shows the event's message when it has one.
 
     Args:
@@ -143,11 +144,11 @@ def _waiting_telemetry(
     Returns:
         The waiting state and the prompt to show.
     """
-    prompt = common.message_text(input_data.get("message")) or default_prompt
+    prompt = message_text(input_data.get("message")) or default_prompt
     return "Waiting for Input", {"prompt": prompt}
 
 
-def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
+def _handle_notification(input_data: dict[str, Any]) -> events.Telemetry | None:
     """Map waiting and usage-limit notifications to a state; ignore others.
 
     Args:
@@ -170,7 +171,7 @@ def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
     return _waiting_telemetry(input_data, default_prompt)
 
 
-def _handle_elicitation_result(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_elicitation_result(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate the user's answer to an MCP elicitation; the tool call resumes.
 
     Args:
@@ -185,7 +186,7 @@ def _handle_elicitation_result(input_data: dict[str, Any]) -> common.Telemetry:
     return "Acting", {"status": status or "Input sent"}
 
 
-def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_stop_failure(input_data: dict[str, Any]) -> events.Telemetry:
     """Translate StopFailure, publishing only the documented error type.
 
     Args:
@@ -200,7 +201,7 @@ def _handle_stop_failure(input_data: dict[str, Any]) -> common.Telemetry:
     return "Error", {"status": "failed", "error": f"API error: {error}"}
 
 
-def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | None:
+def _handle_message_display(input_data: dict[str, Any]) -> events.Telemetry | None:
     """Publish an assistant message when its displayed text is complete.
 
     Args:
@@ -211,13 +212,13 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
         that does not end one, an event without a message identity, or an
         event fired inside a subagent.
     """
-    if common.is_subagent_event(input_data):
+    if events.is_subagent_event(input_data):
         return None
     session_id = resolve_session_id(input_data)
     message_id = input_data.get("message_id")
     if session_id is None or not isinstance(message_id, str) or not message_id:
         return None
-    message = common.collect_message_chunk(
+    message = scratch.collect_message_chunk(
         "claude",
         [input_data.get("cwd"), session_id, message_id],
         input_data.get("delta"),
@@ -226,16 +227,16 @@ def _handle_message_display(input_data: dict[str, Any]) -> common.Telemetry | No
     return ("Thinking", {"message": message}) if message else None
 
 
-HANDLERS: dict[str, common.EventHandler] = {
-    "SessionStart": common.session_start_telemetry,
-    "UserPromptSubmit": common.prompt_submit_telemetry,
+HANDLERS: dict[str, events.EventHandler] = {
+    "SessionStart": events.session_start_telemetry,
+    "UserPromptSubmit": events.prompt_submit_telemetry,
     "PreToolUse": partial(
-        common.pre_tool_telemetry,
+        events.pre_tool_telemetry,
         agent="claude",
         question_tool="AskUserQuestion",
         command_fields=_COMMAND_FIELDS,
     ),
-    "PermissionRequest": common.permission_request_telemetry,
+    "PermissionRequest": events.permission_request_telemetry,
     "PermissionDenied": _handle_permission_denied,
     "PostToolUse": _handle_post_tool,
     "PostToolUseFailure": _handle_post_tool_failure,
@@ -244,19 +245,19 @@ HANDLERS: dict[str, common.EventHandler] = {
     "Elicitation": partial(_waiting_telemetry, default_prompt="Input requested"),
     "ElicitationResult": _handle_elicitation_result,
     "MessageDisplay": _handle_message_display,
-    "SubagentStart": common.subagent_start_telemetry,
-    "PreCompact": common.pre_compact_telemetry,
-    "PostCompact": common.post_compact_telemetry,
-    "Stop": common.stop_telemetry,
+    "SubagentStart": events.subagent_start_telemetry,
+    "PreCompact": events.pre_compact_telemetry,
+    "PostCompact": events.post_compact_telemetry,
+    "Stop": events.stop_telemetry,
     "StopFailure": _handle_stop_failure,
-    "SessionEnd": partial(common.session_end_telemetry, statuses=_SESSION_END_STATUSES),
+    "SessionEnd": partial(events.session_end_telemetry, statuses=_SESSION_END_STATUSES),
 }
 
 
 def main() -> None:
     """Process one Claude Code hook event without disrupting its protocol."""
-    common.run_hook(
-        partial(common.publish_telemetry, agent="Claude Code", handlers=HANDLERS)
+    runner.run_hook(
+        partial(runner.publish_telemetry, agent="Claude Code", handlers=HANDLERS)
     )
 
 

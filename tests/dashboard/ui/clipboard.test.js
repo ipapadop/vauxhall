@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 
 import { cardIdentity } from '../../../vauxhall/dashboard/ui/js/state.js';
-import { copyWorkspacePath, createCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { copyWorkspacePath, createCard } from '../../../vauxhall/dashboard/ui/js/card.js';
 
 let copied = [];
 

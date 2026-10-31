@@ -140,7 +140,9 @@ def test_codex_publishes_new_interim_messages_from_transcript(tmp_path: Path) ->
         },
     ]
 
-    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(
+        "vauxhall.hooks.scratch.tempfile.gettempdir", return_value=str(tmp_path)
+    ):
         _run({**base, "hook_event_name": "UserPromptSubmit", "prompt": "Go"})
         with transcript.open("a", encoding="utf-8") as output:
             output.writelines(json.dumps(record) + "\n" for record in records)
@@ -440,9 +442,9 @@ def test_codex_post_tool_use_reports_duration(tmp_path: Path) -> None:
 
     with (
         record_published() as published,
-        patch("vauxhall.hooks.common.time.time") as current_time,
+        patch("vauxhall.hooks.scratch.time.time") as current_time,
         patch(
-            "vauxhall.hooks.common.tempfile.gettempdir",
+            "vauxhall.hooks.scratch.tempfile.gettempdir",
             return_value=str(tmp_path),
         ),
         patch("sys.stdout", new=StringIO()),

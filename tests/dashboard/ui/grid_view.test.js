@@ -6,7 +6,8 @@ import { test } from 'node:test';
 
 import { parseHTML } from 'linkedom';
 
-import { createCard, filterGrid, renderSummary, sortGrid, summarizeAgents, updateCard } from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/card.js';
+import { filterGrid, renderSummary, sortGrid, summarizeAgents } from '../../../vauxhall/dashboard/ui/js/grid.js';
 
 import { cardOrder } from './helpers.js';
 

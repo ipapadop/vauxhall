@@ -13,7 +13,7 @@ from functools import partial
 from typing import Any
 
 from vauxhall.core.telemetry import MAX_DETAIL_STRING_LENGTH
-from vauxhall.hooks import common
+from vauxhall.hooks import events, runner, scratch
 from vauxhall.hooks.identity import resolve_session_id
 
 # Finish reasons that do not end a streamed model response.
@@ -64,14 +64,14 @@ def _classify_tool_response(response: object) -> tuple[str, str, str | None]:
     """
     if not isinstance(response, dict):
         return "Thinking", "result unavailable", None
-    if common.is_cancelled(response):
+    if events.is_cancelled(response):
         return "Idle", "cancelled", None
     if response.get("error") is not None:
         return "Error", "failed", "Tool reported an error"
     return "Thinking", "completed", None
 
 
-def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
+def _handle_notification(input_data: dict[str, Any]) -> events.Telemetry | None:
     """Map a ToolPermission notification to a waiting state; ignore others.
 
     Args:
@@ -92,7 +92,7 @@ def _handle_notification(input_data: dict[str, Any]) -> common.Telemetry | None:
     return "Waiting for Input", details
 
 
-def _handle_before_tool(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_before_tool(input_data: dict[str, Any]) -> events.Telemetry:
     """Record a tool's start time and map BeforeTool to a state and details.
 
     Args:
@@ -102,20 +102,20 @@ def _handle_before_tool(input_data: dict[str, Any]) -> common.Telemetry:
         The waiting state for a question tool, otherwise the acting state and
         the tool details.
     """
-    common.record_tool_start("gemini", _tool_call_identity(input_data))
+    scratch.record_tool_start("gemini", _tool_call_identity(input_data))
     tool_input = input_data.get("tool_input", {})
     if input_data.get("tool_name") == "ask_user":
-        return "Waiting for Input", {"prompt": common.question_prompt(tool_input)}
+        return "Waiting for Input", {"prompt": events.question_prompt(tool_input)}
     details: dict[str, Any] = {"cmd": ""}
     args = json.dumps(tool_input)
     # Truncating would publish the start of a large input, such as a file's
     # contents; leave it out instead.
     if len(args) <= MAX_DETAIL_STRING_LENGTH:
         details["args"] = args
-    return "Acting", {**details, **common.tool_details(input_data, _COMMAND_FIELDS)}
+    return "Acting", {**details, **events.tool_details(input_data, _COMMAND_FIELDS)}
 
 
-def _handle_after_tool(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_after_tool(input_data: dict[str, Any]) -> events.Telemetry:
     """Map an AfterTool outcome and its duration to a state and details.
 
     Args:
@@ -124,13 +124,13 @@ def _handle_after_tool(input_data: dict[str, Any]) -> common.Telemetry:
     Returns:
         The state for the response, with the tool details and duration.
     """
-    duration = common.claim_tool_duration("gemini", _tool_call_identity(input_data))
-    return common.tool_result_telemetry(
+    duration = scratch.claim_tool_duration("gemini", _tool_call_identity(input_data))
+    return events.tool_result_telemetry(
         input_data, _classify_tool_response(input_data.get("tool_response")), duration
     )
 
 
-def _handle_pre_compress(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_pre_compress(input_data: dict[str, Any]) -> events.Telemetry:
     """Manual compression runs at the prompt; automatic compression is mid-turn.
 
     Args:
@@ -181,7 +181,7 @@ def _is_final_model_response(llm_response: object) -> bool:
     )
 
 
-def _handle_after_model(input_data: dict[str, Any]) -> common.Telemetry | None:
+def _handle_after_model(input_data: dict[str, Any]) -> events.Telemetry | None:
     """Map the final AfterModel chunk to a thinking state with its token count.
 
     Gemini CLI fires AfterModel for every streamed chunk, so only the chunk that
@@ -207,7 +207,7 @@ def _handle_after_model(input_data: dict[str, Any]) -> common.Telemetry | None:
     final = _is_final_model_response(llm_response)
     session_id = resolve_session_id(input_data)
     message = (
-        common.collect_message_chunk(
+        scratch.collect_message_chunk(
             "gemini", [input_data.get("cwd"), session_id], delta, final=final
         )
         if session_id is not None and (delta or final)
@@ -224,7 +224,7 @@ def _handle_after_model(input_data: dict[str, Any]) -> common.Telemetry | None:
     return "Thinking", details
 
 
-def _handle_before_agent(input_data: dict[str, Any]) -> common.Telemetry:
+def _handle_before_agent(input_data: dict[str, Any]) -> events.Telemetry:
     """Discard unfinished model text before reporting a new user prompt.
 
     Args:
@@ -235,27 +235,27 @@ def _handle_before_agent(input_data: dict[str, Any]) -> common.Telemetry:
     """
     session_id = resolve_session_id(input_data)
     if session_id is not None:
-        common.discard_message_chunks("gemini", [input_data.get("cwd"), session_id])
-    return common.prompt_submit_telemetry(input_data)
+        scratch.discard_message_chunks("gemini", [input_data.get("cwd"), session_id])
+    return events.prompt_submit_telemetry(input_data)
 
 
-HANDLERS: dict[str, common.EventHandler] = {
-    "SessionStart": common.session_start_telemetry,
+HANDLERS: dict[str, events.EventHandler] = {
+    "SessionStart": events.session_start_telemetry,
     "BeforeAgent": _handle_before_agent,
-    "AfterAgent": common.ready_telemetry,
+    "AfterAgent": events.ready_telemetry,
     "AfterModel": _handle_after_model,
     "BeforeTool": _handle_before_tool,
     "AfterTool": _handle_after_tool,
     "Notification": _handle_notification,
     "PreCompress": _handle_pre_compress,
-    "SessionEnd": partial(common.session_end_telemetry, statuses=_SESSION_END_STATUSES),
+    "SessionEnd": partial(events.session_end_telemetry, statuses=_SESSION_END_STATUSES),
 }
 
 
 def main() -> None:
     """Process a hook event without disrupting the Gemini CLI protocol."""
-    common.run_hook(
-        partial(common.publish_telemetry, agent="Gemini", handlers=HANDLERS)
+    runner.run_hook(
+        partial(runner.publish_telemetry, agent="Gemini", handlers=HANDLERS)
     )
 
 

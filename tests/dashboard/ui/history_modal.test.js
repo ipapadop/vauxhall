@@ -7,9 +7,8 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 
 import { historyDurations, updateAgentHistory } from '../../../vauxhall/dashboard/ui/js/state.js';
-import {
-    closeHistoryModal, copyWorkspacePath, createCard, formatDuration, openHistoryModal, updateCard,
-} from '../../../vauxhall/dashboard/ui/js/ui.js';
+import { copyWorkspacePath, createCard, updateCard } from '../../../vauxhall/dashboard/ui/js/card.js';
+import { closeHistoryModal, formatDuration, openHistoryModal } from '../../../vauxhall/dashboard/ui/js/history.js';
 
 import { selectOption } from './helpers.js';
 

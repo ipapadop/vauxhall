@@ -1,15 +1,23 @@
 # SPDX-FileCopyrightText: 2026 Yiannis Papadopoulos <2738325+ipapadop@users.noreply.github.com>
 # SPDX-License-Identifier: MIT
 
-"""Run the hook installer for a workspace and stream its output."""
+"""Pick a workspace, run the hook installer in it, and stream its output."""
 
 import logging
+import os
 import subprocess
 import sys
 import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
+
+from vauxhall.dashboard.ui_state import (
+    INSTALL_DIRECTORY_KEY,
+    load_ui_state,
+    update_ui_state,
+)
+from vauxhall.hooks.agents import detect_agents
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +36,8 @@ class HookInstallRunner:
     def __init__(
         self,
         post: Callable[[str, object], None],
+        *,
+        select_directory: Callable[..., str | None],
         launch: Callable[..., Any] = subprocess.Popen,
     ) -> None:
         """Initialize the runner.
@@ -35,9 +45,12 @@ class HookInstallRunner:
         Args:
             post: Posts a window event without waiting; called from the
                 reader thread.
+            select_directory: Opens a directory picker at its ``dir``
+                argument and returns the choice, or ``None`` when cancelled.
             launch: Starts the child, with ``subprocess.Popen``'s arguments.
         """
         self._post = post
+        self._select_directory = select_directory
         self._launch = launch
         self._lock = threading.Lock()
         self._process: Any = None
@@ -48,11 +61,34 @@ class HookInstallRunner:
         with self._lock:
             return self._process is not None
 
-    def start(self, workspace: Path, agents: Sequence[str]) -> dict[str, Any]:
+    def select_install_directory(self) -> dict[str, Any]:
+        """Ask for a directory to install hooks into and detect its agents.
+
+        Runs on the UI thread, like the other view-state writes. The picker
+        opens at the last chosen directory, or at home once that is gone.
+
+        Returns:
+            ``ok`` with the chosen ``path`` and its ``agents``, or ``ok``
+            false alone when cancelled.
+        """
+        last = load_ui_state().get(INSTALL_DIRECTORY_KEY)
+        # Unlike Path.is_dir before Python 3.14, it is False on a
+        # PermissionError, so an unreadable directory can't block the picker.
+        start = last if last and os.path.isdir(last) else str(Path.home())  # noqa: PTH112
+        chosen = self._select_directory(dir=start)
+        if not chosen:
+            return {"ok": False}
+        try:
+            update_ui_state({INSTALL_DIRECTORY_KEY: chosen})
+        except OSError:
+            logger.exception("Could not remember the install directory")
+        return {"ok": True, "path": chosen, "agents": detect_agents(Path(chosen))}
+
+    def install_hooks(self, directory: Path, agents: Sequence[str]) -> dict[str, Any]:
         """Start installing the hooks of some agents into a workspace.
 
         Args:
-            workspace: The workspace directory.
+            directory: The workspace directory.
             agents: Agent keys the installer CLI accepts.
 
         Returns:
@@ -79,7 +115,7 @@ class HookInstallRunner:
                         "vauxhall.hooks.cli",
                         *agents,
                     ],
-                    cwd=workspace,
+                    cwd=directory,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

@@ -7,15 +7,78 @@ import json
 import os
 from pathlib import Path
 
-from vauxhall.hooks.claude import install as claude
-from vauxhall.hooks.codex import install as codex
-from vauxhall.hooks.gemini import install as gemini
+from vauxhall.hooks.claude import telemetry_hook as claude_hook
+from vauxhall.hooks.codex import telemetry_hook as codex_hook
+from vauxhall.hooks.gemini import telemetry_hook as gemini_hook
 from vauxhall.hooks.installation import HookInstaller, validate_hook_settings
 
+_GEMINI_HANDLERS = {
+    "BeforeAgent": {
+        "name": "vauxhall-thinking",
+        "description": "Vauxhall telemetry for Gemini thinking state",
+    },
+    "AfterAgent": {
+        "name": "vauxhall-idle",
+        "description": "Vauxhall telemetry for Gemini idle state",
+    },
+    "SessionEnd": {
+        "name": "vauxhall-session-end",
+        "description": "Vauxhall telemetry for Gemini session end",
+    },
+    "BeforeTool": {
+        "name": "vauxhall-acting",
+        "description": "Vauxhall telemetry for Gemini tool execution",
+    },
+    "AfterTool": {
+        "name": "vauxhall-done",
+        "description": "Vauxhall telemetry for Gemini tool completion",
+    },
+    "AfterModel": {
+        "name": "vauxhall-model",
+        "description": "Vauxhall telemetry for Gemini model completion",
+    },
+    "Notification": {
+        "name": "vauxhall-waiting",
+        "description": "Vauxhall telemetry for Gemini waiting for input",
+    },
+    "SessionStart": {
+        "name": "vauxhall-session-start",
+        "description": "Vauxhall telemetry for Gemini session start",
+    },
+    "PreCompress": {
+        "name": "vauxhall-compress",
+        "description": "Vauxhall telemetry for Gemini context compression",
+    },
+}
+
 INSTALLERS: dict[str, HookInstaller] = {
-    "claude": claude.INSTALLER,
-    "codex": codex.INSTALLER,
-    "gemini": gemini.INSTALLER,
+    "claude": HookInstaller(
+        agent="Claude Code",
+        module=claude_hook.__name__,
+        settings_path=Path(".claude") / "settings.local.json",
+        handlers={event: {"timeout": 3} for event in claude_hook.HANDLERS},
+        next_step="Restart Claude Code, or review the new hooks with /hooks.",
+    ),
+    "codex": HookInstaller(
+        agent="Codex",
+        module=codex_hook.__name__,
+        settings_path=Path(".codex") / "hooks.json",
+        handlers={
+            event: {"statusMessage": "Sending Vauxhall telemetry", "timeout": 3}
+            for event in codex_hook.HANDLERS
+        },
+        defaults={"description": "Vauxhall telemetry hooks for Codex."},
+        next_step="Review and trust the hooks with /hooks in Codex.",
+    ),
+    "gemini": HookInstaller(
+        agent="Gemini",
+        module=gemini_hook.__name__,
+        settings_path=Path(".gemini") / "settings.json",
+        handlers=_GEMINI_HANDLERS,
+        # Hook-system options that older Gemini CLI releases keep beside events.
+        option_keys=frozenset({"enabled", "disabled", "notifications"}),
+        next_step="You can now monitor this workspace in the Vauxhall Dashboard.",
+    ),
 }
 
 

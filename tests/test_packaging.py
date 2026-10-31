@@ -143,19 +143,20 @@ def test_wheel_contains_runtime_files(tmp_path: Path) -> None:
         "vauxhall/dashboard/ui/app.js",
         "vauxhall/dashboard/ui/icon.png",
         "vauxhall/dashboard/ui/index.html",
+        "vauxhall/dashboard/ui/js/card.js",
         "vauxhall/dashboard/ui/js/dialog.js",
+        "vauxhall/dashboard/ui/js/dom.js",
+        "vauxhall/dashboard/ui/js/grid.js",
+        "vauxhall/dashboard/ui/js/history.js",
         "vauxhall/dashboard/ui/js/ipc.js",
         "vauxhall/dashboard/ui/js/state.js",
-        "vauxhall/dashboard/ui/js/ui.js",
         "vauxhall/dashboard/ui/logo.svg",
         "vauxhall/dashboard/ui/style.css",
         "vauxhall/core/telemetry.py",
         "vauxhall/hooks/identity.py",
         "vauxhall/hooks/claude/__init__.py",
-        "vauxhall/hooks/claude/install.py",
         "vauxhall/hooks/claude/telemetry_hook.py",
         "vauxhall/hooks/codex/__init__.py",
-        "vauxhall/hooks/codex/install.py",
         "vauxhall/hooks/codex/messages.py",
         "vauxhall/hooks/codex/telemetry_hook.py",
     } <= packaged_files
@@ -369,7 +370,7 @@ def test_wheel_exposes_complete_package_metadata(tmp_path: Path) -> None:
         for version in SUPPORTED_PYTHON_VERSIONS
     }
     assert entry_points["console_scripts"] == {
-        "vauxhall": "vauxhall.dashboard.app:main",
+        "vauxhall": "vauxhall.dashboard.main:main",
         "vauxhall-hook-install": "vauxhall.hooks.cli:main",
     }
     assert (

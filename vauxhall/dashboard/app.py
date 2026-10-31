@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from pyloid import Pyloid
-from pyloid.serve import pyloid_serve
 from PySide6.QtCore import QLockFile, QObject, Qt, Signal, Slot
 
 from vauxhall.core.config import ConfigurationError
@@ -41,6 +40,7 @@ from vauxhall.dashboard.settings_editor import (
     error_field,
     hook_changes_for,
 )
+from vauxhall.dashboard.ui_server import UIServer
 from vauxhall.dashboard.ui_state import (
     INSTALL_DIRECTORY_KEY,
     load_ui_state,
@@ -499,18 +499,19 @@ class DashboardApp:
         except Exception:
             logger.exception("Could not save the dashboard window state")
 
-    def run(self) -> None:
-        """Run the application."""
+    def run(self, ui_url: str) -> None:
+        """Run the application.
+
+        Args:
+            ui_url: The URL of the served UI page for the window to load.
+        """
         saved_window = self._create_window()
 
         self.mqtt = DashboardSubscriber(self.on_telemetry, self._status_callback())
         try:
             self.mqtt.start()
 
-            url = pyloid_serve(str(UI_DIR), port=settings.dashboard.port)
-            logger.info("Serving UI from %s at %s", UI_DIR, url)
-
-            self.window.load_url(url)
+            self.window.load_url(ui_url)
             self.window.show_and_focus()
             if saved_window.get("maximized"):
                 self.window.maximize()
@@ -605,6 +606,34 @@ def _lock_dashboard(path: Path) -> QLockFile:
     return lock
 
 
+def _serve_ui(port: int) -> UIServer:
+    """Serve the UI on ``port``, refusing to run when the port is taken.
+
+    Loading the page from a port another program holds would hand that
+    program's page the dashboard's bridge.
+
+    Args:
+        port: The configured UI port.
+
+    Returns:
+        The running server.
+
+    Raises:
+        SystemExit: The port can't be bound.
+    """
+    try:
+        server = UIServer(UI_DIR, port)
+    except OSError as error:
+        logger.exception(
+            "Could not serve the dashboard UI on 127.0.0.1:%s; another program "
+            "may be using the port. Set dashboard.port to a free port",
+            port,
+        )
+        raise SystemExit(1) from error
+    logger.info("Serving UI from %s at %s", UI_DIR, server.url)
+    return server
+
+
 def main() -> None:
     """Run the Vauxhall Dashboard application."""
     _use_utf8_output()
@@ -615,9 +644,12 @@ def main() -> None:
     set_graphics_backend(settings.dashboard.graphics_backend)
 
     app = Pyloid(app_name="Vauxhall Dashboard")
-    dashboard = DashboardApp(app)
     try:
-        dashboard.run()
+        ui_server = _serve_ui(settings.dashboard.port)
+        try:
+            DashboardApp(app).run(ui_server.url)
+        finally:
+            ui_server.close(SHUTDOWN_CLOSE_SECONDS)
     finally:
         lock.unlock()
 

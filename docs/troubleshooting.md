@@ -128,9 +128,10 @@ saved view and cards. Switch to the running one. If the process the message
 names isn't a dashboard, as after a crash on another host sharing the home
 directory, delete the `dashboard.lock` the message names.
 
-**The dashboard fails to start and port 8080 is busy.** `dashboard.port` is
-the port of the dashboard's local UI server. Pick a free one with
-`VAUXHALL_DASHBOARD_PORT=8181 vauxhall`.
+**The dashboard exits with `Could not serve the dashboard UI on 127.0.0.1:8080`.**
+Another program holds `dashboard.port`, the port of the dashboard's local UI
+server. The dashboard refuses to load a page from a port it doesn't hold. Pick
+a free one with `VAUXHALL_DASHBOARD_PORT=8181 vauxhall`.
 
 ## Hooks
 

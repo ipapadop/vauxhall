@@ -316,11 +316,10 @@ def run_dashboard(app: MagicMock) -> MagicMock:
     """
     app.run.side_effect = SystemExit(0)
     with (
-        patch("vauxhall.dashboard.app.pyloid_serve", return_value="http://localhost"),
         patch("vauxhall.dashboard.app.DashboardSubscriber") as subscriber_type,
         pytest.raises(SystemExit),
     ):
-        DashboardApp(app).run()
+        DashboardApp(app).run("http://127.0.0.1:1/index.html")
     return subscriber_type
 
 

@@ -238,3 +238,56 @@ def test_detect_agents_rejects_an_unreadable_directory(unsearchable_dir: Path) -
 
     assert result["ok"] is False
     assert result["error"].startswith("Not a directory")
+
+
+@pytest.mark.parametrize(
+    "url", ["https://github.com/ipapadop/vauxhall", "http://example.com/a?b=c"]
+)
+def test_ipc_open_url_opens_web_urls(url: str) -> None:
+    """An http or https URL is handed to the browser."""
+    opened: list[str] = []
+    ipc = DashboardIPC()
+    ipc.open_browser = opened.append
+
+    assert ipc.open_url(url) is True
+    assert opened == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "ssh://host",
+        "/home/user/project",
+        "https:relative",
+        "",
+    ],
+)
+def test_ipc_open_url_refuses_other_urls_without_logging_them(
+    url: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Any page script can call the bridge, so only web URLs are opened."""
+    opened: list[str] = []
+    ipc = DashboardIPC()
+    ipc.open_browser = opened.append
+
+    with caplog.at_level(logging.DEBUG):
+        assert ipc.open_url(url) is False
+
+    assert opened == []
+    assert "Refused to open a URL" in caplog.text
+    assert not url or url not in caplog.text
+
+
+def test_ipc_open_url_reports_a_browser_failure() -> None:
+    """A browser that can't be started yields False instead of raising."""
+
+    def fail(_url: str) -> None:
+        message = "no browser"
+        raise OSError(message)
+
+    ipc = DashboardIPC()
+    ipc.open_browser = fail
+
+    assert ipc.open_url("https://github.com/ipapadop/vauxhall") is False

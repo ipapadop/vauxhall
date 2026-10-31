@@ -6,7 +6,8 @@
 import importlib.util
 
 # The dashboard extra installs no Pyloid on Python 3.14, where only the hooks
-# are supported, so the modules that import it (or PySide6) are left out there.
+# are supported, so the modules that import it (or PySide6, or aiohttp) are
+# left out there.
 collect_ignore = (
     []
     if importlib.util.find_spec("pyloid")
@@ -17,6 +18,7 @@ collect_ignore = (
         "test_ipc.py",
         "test_settings_editor.py",
         "test_ui_dispatch.py",
+        "test_ui_server.py",
         "test_ui_state.py",
     ]
 )

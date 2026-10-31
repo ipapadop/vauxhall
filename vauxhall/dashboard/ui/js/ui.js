@@ -123,7 +123,7 @@ export function createCard(data, openPaneCallback, openMenuCallback) {
     card.innerHTML = `
         <div class="agent-header">
             <div class="agent-info">
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="agent-title">
                     <span class="env-badge" title="Execution environment"></span>
                     <div class="agent-name" title="Agent name"></div>
                 </div>

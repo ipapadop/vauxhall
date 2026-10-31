@@ -52,6 +52,7 @@ vauxhall-hook-install = "vauxhall.hooks.cli:main"
 
 [project.optional-dependencies]
 dashboard = [
+    "aiohttp>=3.9; python_version < '3.14'",
     "pyloid>=0.27.2; python_version < '3.14'",
 ]
 hooks = []

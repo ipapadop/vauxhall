@@ -357,7 +357,7 @@ def test_tool_durations_are_isolated_by_session_and_tool(tmp_path: Path) -> None
         record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
         patch(
-            "vauxhall.hooks.common.time.time",
+            "vauxhall.hooks.scratch.time.time",
             side_effect=[1000.0, 1001.0, 1002.0, 1003.0, 1005.0, 1008.0],
         ),
     ):
@@ -434,7 +434,7 @@ def test_tool_durations_are_isolated_by_tool_input(
         record_published() as published,
         patch("sys.stdout", new=io.StringIO()),
         patch(
-            "vauxhall.hooks.common.time.time",
+            "vauxhall.hooks.scratch.time.time",
             side_effect=[1000.0, 1004.0, 1005.0, 1010.0],
         ),
     ):
@@ -528,7 +528,9 @@ def test_gemini_publishes_model_text_before_turn_ends(tmp_path: Path) -> None:
         },
     }
 
-    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(
+        "vauxhall.hooks.scratch.tempfile.gettempdir", return_value=str(tmp_path)
+    ):
         published = _run(first, last)
 
     published.assert_called_once_with(
@@ -562,7 +564,9 @@ def test_gemini_new_prompt_discards_unfinished_model_text(tmp_path: Path) -> Non
         },
     }
 
-    with patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(
+        "vauxhall.hooks.scratch.tempfile.gettempdir", return_value=str(tmp_path)
+    ):
         published = _run(abandoned, prompt, reply)
 
     prompted, replied = (call.kwargs for call in published.call_args_list)
@@ -577,7 +581,7 @@ def test_gemini_prompt_without_session_identity_discards_and_publishes_nothing()
     """Without a session identity there is no chunk file to clear and no telemetry."""
     prompt = {"hook_event_name": "BeforeAgent", "cwd": "/workspace", "prompt": "Hi"}
 
-    with patch("vauxhall.hooks.common.discard_message_chunks") as discard:
+    with patch("vauxhall.hooks.scratch.discard_message_chunks") as discard:
         published = _run(prompt)
 
     discard.assert_not_called()
@@ -690,9 +694,9 @@ def test_identical_concurrent_tool_calls_each_report_a_duration(tmp_path: Path) 
     }
 
     with (
-        patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch("vauxhall.hooks.scratch.tempfile.gettempdir", return_value=str(tmp_path)),
         patch(
-            "vauxhall.hooks.common.time.time",
+            "vauxhall.hooks.scratch.time.time",
             side_effect=[1000.0, 1002.0, 1005.0, 1009.0],
         ),
     ):
@@ -728,8 +732,8 @@ def test_unfinished_tool_call_does_not_inflate_later_duration(tmp_path: Path) ->
     after = {**before, "hook_event_name": "AfterTool", "tool_response": {}}
 
     with (
-        patch("vauxhall.hooks.common.tempfile.gettempdir", return_value=str(tmp_path)),
-        patch("vauxhall.hooks.common.time.time", side_effect=[1000.0, 2000.0, 2003.0]),
+        patch("vauxhall.hooks.scratch.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch("vauxhall.hooks.scratch.time.time", side_effect=[1000.0, 2000.0, 2003.0]),
     ):
         published = _run(before, before, after)
 

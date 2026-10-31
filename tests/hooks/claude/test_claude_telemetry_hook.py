@@ -17,7 +17,7 @@ from tests.hooks.recording import record_published
 from vauxhall.hooks.claude.telemetry_hook import main
 
 HOOK = "vauxhall.hooks.claude.telemetry_hook"
-COMMON = "vauxhall.hooks.common"
+SCRATCH = "vauxhall.hooks.scratch"
 BASE = {"session_id": "session-123", "cwd": "/workspace"}
 
 
@@ -53,7 +53,7 @@ def test_claude_publishes_displayed_message_during_turn(tmp_path: Path) -> None:
     }
     last = {**first, "index": 1, "delta": "through it.", "final": True}
 
-    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)):
         published = _run(first, last)
 
     published.assert_called_once_with(
@@ -86,7 +86,7 @@ def test_claude_messages_in_two_workspaces_do_not_share_one_file(
     there = {**display, "cwd": "/workspace/b", "delta": "from b"}
     here_ends = {**here, "delta": "", "final": True}
 
-    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)):
         published = _run(here, there, here_ends)
 
     published.assert_called_once_with(
@@ -442,7 +442,7 @@ def test_claude_events_publish_dashboard_states(
         hook_data: The case's hook event.
         expected: The result the case expects.
     """
-    with patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)):
+    with patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)):
         published = _run({**BASE, **hook_data})
 
     published.assert_called_once_with(
@@ -511,8 +511,8 @@ def test_claude_concurrent_tool_durations_use_tool_use_ids(tmp_path: Path) -> No
         }
 
     with (
-        patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
-        patch(f"{COMMON}.time.time", side_effect=[1000.0, 1001.0, 1003.0, 1007.0]),
+        patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{SCRATCH}.time.time", side_effect=[1000.0, 1001.0, 1003.0, 1007.0]),
     ):
         published = _run(
             event("PreToolUse", "toolu_a"),
@@ -546,8 +546,8 @@ def test_claude_failed_tool_reports_duration(tmp_path: Path) -> None:
     after = {**before, "hook_event_name": "PostToolUseFailure", "error": "exit 1"}
 
     with (
-        patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
-        patch(f"{COMMON}.time.time", side_effect=[1000.0, 1002.5]),
+        patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{SCRATCH}.time.time", side_effect=[1000.0, 1002.5]),
     ):
         published = _run(before, after)
 
@@ -575,8 +575,8 @@ def test_claude_prefers_reported_tool_duration(tmp_path: Path) -> None:
     }
 
     with (
-        patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
-        patch(f"{COMMON}.time.time", side_effect=[1000.0, 2000.0]),
+        patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{SCRATCH}.time.time", side_effect=[1000.0, 2000.0]),
     ):
         published = _run(before, after)
 
@@ -602,8 +602,8 @@ def test_claude_denied_tool_removes_start_without_duration(tmp_path: Path) -> No
     denied = {**before, "hook_event_name": "PermissionDenied", "reason": "[Rule]"}
 
     with (
-        patch(f"{COMMON}.tempfile.gettempdir", return_value=str(tmp_path)),
-        patch(f"{COMMON}.time.time", side_effect=[1000.0, 1002.5]),
+        patch(f"{SCRATCH}.tempfile.gettempdir", return_value=str(tmp_path)),
+        patch(f"{SCRATCH}.time.time", side_effect=[1000.0, 1002.5]),
     ):
         published = _run(before, denied)
 

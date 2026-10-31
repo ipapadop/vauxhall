@@ -22,7 +22,11 @@ from vauxhall.dashboard.app import (
 
 
 def test_dashboard_main_initializes_configured_logging(free_port: int) -> None:
-    """The dashboard entry point must initialize logging before it runs."""
+    """The dashboard entry point must initialize logging before it runs.
+
+    Args:
+        free_port: A free port for the UI server.
+    """
     code = """
 import logging
 from unittest.mock import patch
@@ -244,7 +248,12 @@ def test_serve_ui_serves_the_shipped_page() -> None:
 def test_serve_ui_exits_when_another_program_holds_the_port(
     listening_port: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A taken port stops startup instead of loading that program's page."""
+    """A taken port stops startup instead of loading that program's page.
+
+    Args:
+        listening_port: A port another socket listens on.
+        caplog: Captures the error.
+    """
     with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exited:
         _serve_ui(listening_port)
 

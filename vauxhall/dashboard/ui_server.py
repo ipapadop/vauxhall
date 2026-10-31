@@ -19,6 +19,9 @@ CONTENT_SECURITY_POLICY = (
     "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
 )
 
+# Time for the loop to stop once cleanup ends or is cancelled.
+_STOP_GRACE_SECONDS = 0.1
+
 # Fixed rather than guessed: on Windows the registry can map .js to
 # text/plain, which stops a module script from loading.
 _CONTENT_TYPES = {
@@ -34,9 +37,10 @@ def _bind(port: int) -> socket.socket:
     """Bind a listening socket on ``127.0.0.1:port`` that no one else holds.
 
     Windows lets a second socket bind a port held with ``SO_REUSEADDR``, so
-    the port is held exclusively there. Elsewhere ``SO_REUSEADDR`` only lets a
-    restart bind past connections in ``TIME_WAIT``; a listening socket still
-    makes the bind fail.
+    the port is held exclusively there. On Linux ``SO_REUSEADDR`` only lets a
+    restart bind past connections in ``TIME_WAIT``; on macOS and the BSDs it
+    would also bind beside another program listening on ``*:port``, so it is
+    left off there.
 
     Args:
         port: The port, or 0 for one the system picks.
@@ -51,7 +55,7 @@ def _bind(port: int) -> socket.socket:
     try:
         if sys.platform == "win32":
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        else:
+        elif sys.platform.startswith("linux"):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", port))
         sock.listen()
@@ -116,13 +120,13 @@ class UIServer:
             web.HTTPNotFound: The path is outside the directory, not a file,
                 or not of a served type.
         """
-        path = (self._root / (request.match_info["path"] or "index.html")).resolve()
+        try:
+            path = (self._root / (request.match_info["path"] or "index.html")).resolve()
+            found = path.is_relative_to(self._root) and path.is_file()
+        except (OSError, ValueError) as error:  # ValueError: an encoded NUL
+            raise web.HTTPNotFound from error
         content_type = _CONTENT_TYPES.get(path.suffix)
-        if (
-            not path.is_relative_to(self._root)
-            or not path.is_file()
-            or not content_type
-        ):
+        if not found or not content_type:
             raise web.HTTPNotFound
         return web.FileResponse(path, headers={"Content-Type": content_type})
 
@@ -132,23 +136,40 @@ class UIServer:
         Args:
             timeout: Seconds to wait for the server to stop.
         """
+        asyncio.run_coroutine_threadsafe(self._stop(timeout), self._loop)
+        self._thread.join(timeout + _STOP_GRACE_SECONDS)
+        if self._thread.is_alive():
+            logger.warning("The UI server didn't stop within %s seconds", timeout)
+        else:
+            self._loop.close()
+
+    async def _stop(self, seconds: float) -> None:
+        """Clean up the server within ``seconds``, then stop the loop.
+
+        A request still in flight at the timeout is cancelled, as
+        ``asyncio.run`` does on exit, so no task outlives the loop.
+
+        Args:
+            seconds: Time to allow the cleanup.
+        """
         try:
-            asyncio.run_coroutine_threadsafe(self._runner.cleanup(), self._loop).result(
-                timeout
-            )
+            await asyncio.wait_for(self._runner.cleanup(), seconds)
         except Exception:
             logger.exception("Could not stop the UI server cleanly")
-        self._loop.call_soon_threadsafe(self._loop.stop)
-        self._thread.join(timeout)
-        if not self._thread.is_alive():
-            self._loop.close()
+        finally:
+            others = asyncio.all_tasks() - {asyncio.current_task()}
+            for task in others:
+                task.cancel()
+            await asyncio.gather(*others, return_exceptions=True)
+            asyncio.get_running_loop().stop()
 
 
 async def _add_policy(_request: web.Request, response: web.StreamResponse) -> None:
-    """Add the content security policy to every response.
+    """Add the content security policy, and no-cache so edits load, to responses.
 
     Args:
         _request: The request being answered.
         response: The response about to be sent.
     """
     response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+    response.headers["Cache-Control"] = "no-cache"

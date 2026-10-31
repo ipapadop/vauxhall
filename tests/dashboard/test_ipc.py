@@ -244,7 +244,11 @@ def test_detect_agents_rejects_an_unreadable_directory(unsearchable_dir: Path) -
     "url", ["https://github.com/ipapadop/vauxhall", "http://example.com/a?b=c"]
 )
 def test_ipc_open_url_opens_web_urls(url: str) -> None:
-    """An http or https URL is handed to the browser."""
+    """An http or https URL is handed to the browser.
+
+    Args:
+        url: The URL to open.
+    """
     opened: list[str] = []
     ipc = DashboardIPC()
     ipc.open_browser = opened.append
@@ -262,12 +266,22 @@ def test_ipc_open_url_opens_web_urls(url: str) -> None:
         "/home/user/project",
         "https:relative",
         "",
+        "\x01http://host/x",
+        "ht\ntp://host",
+        " https://host",
+        "https://host/a b",
+        "https://host/\x7f",
     ],
 )
 def test_ipc_open_url_refuses_other_urls_without_logging_them(
     url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Any page script can call the bridge, so only web URLs are opened."""
+    """Any page script can call the bridge, so only web URLs are opened.
+
+    Args:
+        url: The URL to refuse.
+        caplog: Captures the warning.
+    """
     opened: list[str] = []
     ipc = DashboardIPC()
     ipc.open_browser = opened.append

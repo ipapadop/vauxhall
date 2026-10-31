@@ -335,8 +335,14 @@ class DashboardIPC(PyloidIPC):
         Returns:
             bool: True if successful, False otherwise.
         """
+        # urlsplit drops control characters and leading spaces, so refuse them
+        # rather than open a string other than the one checked.
         parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.netloc:
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.netloc
+            or any(char.isspace() or not char.isprintable() for char in url)
+        ):
             logger.warning("Refused to open a URL that isn't http or https")
             return False
         try:

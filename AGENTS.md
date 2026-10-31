@@ -493,16 +493,19 @@ and the backend pushes the new stale threshold and card limit back to the UI.
   constructor binds the socket, so `main()` (`_serve_ui`) logs and exits
   with status 1 when the port is taken, before the window loads a page that
   another program, possibly another account, serves there. On Windows the
-  port is held exclusively (`_bind`). Only `.html`, `.js`, `.css`, `.svg`,
+  port is held exclusively, and only Linux sets `SO_REUSEADDR`, because on
+  macOS it would bind beside a program listening on `*:port` (`_bind`). Only `.html`, `.js`, `.css`, `.svg`,
   and `.png` files inside `ui/` are served, with fixed content types. Every
-  response carries `CONTENT_SECURITY_POLICY`: only the page's own scripts,
+  response carries `Cache-Control: no-cache`, so edited modules load, and
+  `CONTENT_SECURITY_POLICY`: only the page's own scripts,
   styles, and images, and no inline code, so markup takes no `style`
   attribute and no inline script or handler (`ui_security.test.js`). Setting `element.style` from script is allowed.
   Pyloid injects its bridge with `runJavaScript`, which the policy doesn't
   govern. Navigation away from the page isn't blocked: that needs
   `QWebEnginePage.acceptNavigationRequest`, which Pyloid doesn't expose.
 - **Opening links**: `DashboardIPC.open_url` opens only `http` and `https`
-  URLs with a host, through its `open_browser` attribute (`webbrowser.open`;
+  URLs with a host and no whitespace or control characters, which `urlsplit`
+  drops before checking, through its `open_browser` attribute (`webbrowser.open`;
   tests replace it), because any page script can call the bridge. A refused
   URL is logged without its value.
 - **Clipboard**: `DashboardIPC.copy_to_clipboard` calls the `on_copy`

@@ -99,7 +99,7 @@ EOF
   only on machines you don't share, or where you trust every account.
 - The same applies to the broker's loopback port on the dashboard machine.
 - The dashboard labels workspaces under `/home` as LOCAL even when they are on
-  a remote machine; hooks don't set the `env` field.
+  a remote machine; built-in agent hooks do not set the `env` field.
 
 ## Networked brokers
 

@@ -26,26 +26,25 @@ session as a card in a grid.
 
 ## Features
 
-- **Live state**: Cards are color-coded by state: Acting, Thinking, Waiting for
-  Input, Input Required, Error, or Idle.
+- **Live state**: Cards indicate their current state through color: green for
+  Acting and Thinking, amber for Waiting for Input (and Input Required), red
+  for Error, and unaccented for Idle.
 - **Session-aware cards**: Cards are keyed by agent and session ID, so
-  concurrent sessions in one workspace stay separate, and a session that
-  changes directory keeps its card, which shows the latest directory. A
-  session ended by `/clear`, or left for another by Claude Code's `/resume`,
-  is removed, since the agent continues under another session. Up to 100 cards are kept by default; a new session evicts the least
-  recently seen card.
+  concurrent sessions in one workspace stay separate. A session that changes
+  directory keeps its card, which updates to show the latest path. A session
+  ended by `/clear`, or left for another by Claude Code's `/resume`, is removed,
+  because the agent continues under another session ID. The dashboard keeps up to
+  100 cards by default, evicting the least recently seen card at capacity.
 - **Activity log**: Each card shows its last 5 events, including agent messages,
-  with `[HH:mm:ss]`
-  timestamps, token and duration badges for the latest operation, and a LOCAL
-  or REMOTE badge.
-- **Activity pane**: Clicking a card grows it into a resizable pane with a
-  timeline of its last 20 events. Each event has a bar colored by state
-  (blue Thinking, green Acting, amber Waiting, red Error, gray Idle) and as
-  long as the time spent in that state, which for the newest event keeps
-  counting; a duration the tool reported is shown beside it. Durations are
-  measured when events reach the dashboard, so events that arrive together,
-  such as those sent before the window opened, show as instant. The pane
-  updates live, can be filtered, and pauses auto-scroll while you hover.
+  with `[HH:mm:ss]` timestamps, token and duration badges for the latest
+  operation, and a LOCAL or REMOTE badge.
+- **Activity pane**: Clicking a card opens a resizable pane with a timeline of
+  its last 20 events. Each event has a bar colored by state (blue Thinking,
+  green Acting, amber Waiting, red Error, gray Idle) sized by time spent in that
+  state. For the newest event, the timer counts live alongside any duration
+  reported by the tool. Durations measure frontend arrival time, so events
+  delivered together appear instantaneous. The pane updates live, supports
+  filtering by state and text, and pauses auto-scroll while hovered.
 - **Search and sort**: Filter cards by agent name or workspace path, and sort by
   name, recent activity, status, or latest token count. An **Attention first**
   checkbox ranks cards in an error or waiting state before the rest, on top
@@ -61,18 +60,18 @@ session as a card in a grid.
 - **Copy workspace**: The activity pane's **Copy path** button copies the
   card's raw workspace path. The workspace path on each card is a button that
   opens the pane, so it works from the keyboard.
-- **Per-agent menu**: A card's ⋮ button can hide that card until its agent's
-  next event, or add the agent to a denylist saved in the dashboard
-  configuration; a denylisted agent's telemetry is dropped and no card for it
-  is shown, until it's removed from the settings dialog.
+- **Per-agent menu**: A card's ⋮ button can hide that card until its next
+  event, or add the agent to a denylist saved in the dashboard configuration.
+  The dashboard drops telemetry for denylisted agents and removes their
+  cards until they are removed from settings.
 - **Install hooks**: **Install Hooks…** picks a local workspace, shows which
   agents it uses and which already have hooks, and installs or reinstalls
   the ones you tick; see [Installing agent hooks](#installing-agent-hooks).
 - **Keyboard and screen reader support**: Every control is a real button or a
-  labeled form control, the activity pane and settings dialog are native dialogs that
-  close on Escape and return focus to the control that opened them, the
+  labeled form control. The activity pane and settings dialog are native dialogs
+  that close on Escape and return focus to the control that opened them. The
   connection line is a live region, focus is always visible, and card movement
-  and the pane's opening animation stop when the system asks for reduced
+  and the pane's opening animation stop when the system requests reduced
   motion.
 - **Settings**: The ⚙️ button opens a settings dialog that saves to
   `~/.config/vauxhall/`, applies most changes without a restart, and can also
@@ -84,9 +83,9 @@ session as a card in a grid.
   report prompts, assistant messages, tool activity, permission waits, tool
   outcomes (completed, failed, cancelled, or result unavailable), and idle
   state. Tool results are never published. Text fields are limited to 4,096
-  characters per event; longer text, such as a long prompt or command, ends
-  with an ellipsis, and a longer workspace path keeps its start and end and a
-  hash.
+  characters per event; longer text ends with an ellipsis, except Gemini CLI's
+  `args` object, which is omitted when oversized. Workspace paths over 4,096
+  characters preserve their start, end, and a SHA-256 hash.
 - **Safe handling**: Telemetry is validated and size-limited, rendered as text,
   and never turned into shell commands. Hooks always return valid protocol JSON,
   even when telemetry fails.
@@ -258,7 +257,8 @@ with an error. Reinstalling replaces only Vauxhall's own handlers and writes
 each file atomically, preserving unrelated settings and hooks. For Claude Code
 the installer writes `.claude/settings.local.json`; restart Claude Code or open
 `/hooks` to apply the hooks. For Codex, open `/hooks` after installing to
-review and trust the new project hooks.
+review and trust the new project hooks. For Gemini CLI, trust the workspace folder
+when prompted so Gemini runs the hooks.
 
 Run the installer again to enable assistant messages in existing workspaces.
 Claude Code and Gemini CLI report completed messages during a turn. Codex
@@ -359,8 +359,9 @@ Report vulnerabilities through the repository's
   `result unavailable`, and its interim messages are best effort; Gemini CLI
   can't tell identical overlapping tool calls apart, so their durations may
   be swapped. See [docs/integrations.md](docs/integrations.md).
-- **LOCAL/REMOTE badge**: hooks don't send `env`, so the badge is guessed from
-  the workspace path, and remote workspaces under `/home` show LOCAL.
+- **LOCAL/REMOTE badge**: built-in hooks don't send `env`, so the badge is
+  inferred from the workspace path, and remote workspaces under `/home` show
+  LOCAL.
 - **Card content isn't stored**: a card's activity log and history are lost
   when the dashboard exits; only its identity and last known state persist
   across restarts, never prompt, message, command, error, token, or history

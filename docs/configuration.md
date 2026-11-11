@@ -45,7 +45,7 @@ which overrides the default. See `vauxhall_dashboard.json.example` and
 | --- | --- | --- | --- | --- |
 | `mqtt` | `host` | `VAUXHALL_MQTT_HOST` | `localhost` | Non-empty string |
 | `mqtt` | `port` | `VAUXHALL_MQTT_PORT` | `1883` | Integer 1–65535 |
-| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535; at least 1 with `tls`. Hooks always use 1 (see [integrations.md](integrations.md#python-client)) |
+| `mqtt` | `keepalive` | `VAUXHALL_MQTT_KEEPALIVE` | `60` | Integer 0–65535; at least 1 with `tls`. Hooks always use 1 (see [integrations.md](integrations.md#python-client)). |
 | `mqtt` | `tls` | `VAUXHALL_MQTT_TLS` | `false` | Boolean |
 | `mqtt` | `ca_certs` | `VAUXHALL_MQTT_CA_CERTS` | empty (system trust store) | Absolute path of a readable file; needs `tls` |
 | `mqtt` | `username` | `VAUXHALL_MQTT_USERNAME` | empty (none) | String |
@@ -157,15 +157,14 @@ right away. When the broker's `host`, `port`, `keepalive`, `tls`, or `ca_certs` 
 dialog differ from the ones the hooks use, including after a reset,
 **Also update hooks configuration** saves the differing values to
 `~/.config/vauxhall/vauxhall_hooks.json`, even if the dashboard's own values
-are unchanged. The user name, password file, and client certificate are never
-copied, because the dashboard and the hooks should use different broker
-identities. Both files are validated
-before either is written, the hooks file without the dashboard's environment
-variables, so a dashboard that gets `tls` from `VAUXHALL_MQTT_TLS` can't
-write `ca_certs` to a hooks file that doesn't also set `tls`. This doesn't
-affect hooks that get `VAUXHALL_MQTT_*` environment variables or run on
-another machine. The option is unavailable, with the reason shown, when the
-hooks file is malformed or invalid on its own.
+are unchanged. The user name, password file, and client certificate are never copied,
+because the dashboard and the hooks should use different broker identities. Both
+files are validated before either is written. The hooks file is validated
+without the dashboard's environment variables, so a dashboard that gets `tls`
+from `VAUXHALL_MQTT_TLS` cannot write `ca_certs` to a hooks file that lacks
+`tls`. This restriction does not affect hooks that receive `VAUXHALL_MQTT_*`
+variables or run on another host. The option is disabled, with the reason
+shown, when the hooks file is malformed or invalid on its own.
 
 ### Denylisted agents
 
@@ -208,10 +207,10 @@ logged and treated as empty.
 Separately, `~/.config/vauxhall/dashboard_cards.json` keeps each card's
 identity (agent and session ID) with its latest workspace, last known state,
 env, and last-seen time, so the grid is redrawn on the next start; a restored card shows no
-activity log until its agent reports again. Saved half a second after a card
-is added, updated, or removed, or right away when the dashboard closes.
-**Clear** and **Clear Stale** remove the matching cards from this file too.
-No prompt, message, command, error, token, or history content is ever
+activity log until its agent reports again. The dashboard saves this file 500 ms
+after a card is added, updated, or removed, or immediately when the dashboard
+closes. **Clear** and **Clear Stale** remove the matching cards from this file
+too. No prompt, message, command, error, token, or history content is ever
 written here; see [privacy.md](privacy.md#retention).
 
 ## Files Vauxhall writes

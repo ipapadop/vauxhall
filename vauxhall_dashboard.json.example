@@ -20,6 +20,8 @@
     "stale_threshold": 120,
     "pending_update_limit": 500,
     "max_active_agents": 100,
-    "max_payload_bytes": 65536
+    "max_payload_bytes": 65536,
+    "agent_denylist": [],
+    "graphics_backend": "auto"
   }
 }

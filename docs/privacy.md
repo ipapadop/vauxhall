@@ -42,7 +42,8 @@ exits rather than load its page from a port another program holds.
 | `session_id` | The agent's own session ID, or a SHA-256 hash of its transcript path; an ID over 256 characters is replaced by its SHA-256 hash |
 | `state` | One of the [supported states](integrations.md#supported-states) |
 
-The MQTT topic, `vauxhall/agents/<agent>/activity`, carries the agent name.
+The MQTT topic, `vauxhall/agents/<agent>/activity` (lowercased), carries the
+agent name.
 
 ## What each integration publishes
 
@@ -137,9 +138,9 @@ prompt and command capture. Today you can:
 The hooks keep short-lived files in owner-only directories in the system
 temporary directory, named `vauxhall-<agent>-<uid>`,
 `vauxhall-messages-<agent>-<uid>`, and `vauxhall-codex-cursors-<uid>`
-(without the `-<uid>` suffix on Windows). A directory with that name that
-another account owns is not used; one you own that others can reach is made
-owner-only, and entries other accounts put in it are removed:
+(without the `-<uid>` suffix on Windows). A directory with that name owned by
+another account is rejected. If you own the directory but others can access it,
+Vauxhall restricts its permissions to owner-only and removes any foreign entries:
 
 - Tool start times, under hashed names, deleted when the tool finishes, or
   after 24 hours if it never does.

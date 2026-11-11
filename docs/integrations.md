@@ -51,13 +51,14 @@ publish([{**session, "state": "Idle"}])
 Each event is the [telemetry schema](#telemetry-schema) without
 `schema_version`, which `publish()` adds. It publishes the events at QoS 1
 over one connection and waits up to one second in total for the broker's
-acknowledgments. Connecting and the TLS handshake each take at most about a
-second too: it connects with a 1-second keepalive whatever `mqtt.keepalive`
-says, because paho times the TLS handshake with the keepalive rather than
-the connection timeout, and the connection lasts only about a second. It returns `True` only when every event is valid and
-acknowledged; an invalid event is skipped, and validation, connection, and
-publish failures return `False` instead of raising. Without an `MQTTConfig`,
-it uses the [hooks' broker settings](configuration.md). Importing the client or
+acknowledgments. Connecting and the TLS handshake each take at most about one
+second. The client connects with a 1-second keepalive regardless of
+`mqtt.keepalive`, because paho times the TLS handshake with the keepalive
+rather than the connection timeout. The entire connection lasts only about one
+second. It returns `True` only when every event is valid and acknowledged; an
+invalid event is skipped, and validation, connection, and publish failures
+return `False` instead of raising. Without an `MQTTConfig`, it uses the
+[hooks' broker settings](configuration.md). Importing the client or
 configuration modules does not change the host application's logging; the
 dashboard and hook entry points configure logging when they run.
 
